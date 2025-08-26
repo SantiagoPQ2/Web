@@ -1,7 +1,7 @@
 // Configuración de la aplicación
 export const CONFIG = {
   // URL del archivo Excel en GitHub (CAMBIAR POR TU URL)
-  EXCEL_FILE_URL: 'https://github.com/tu-usuario/tu-repositorio/blob/main/datos-clientes.xlsx',
+  EXCEL_FILE_URL: 'https://github.com/SantiagoPQ2/Web/blob/main/CSV.xlsx',
   
   // Configuración de la aplicación
   APP_NAME: 'Consulta de Clientes Excel',
