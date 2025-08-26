@@ -116,10 +116,10 @@ Error técnico: ${lastError?.message || 'No se pudo conectar'}`);
       throw new Error('El archivo Excel está vacío');
     }
 
-    // Verificar que tenga exactamente 4 columnas
+    // Verificar que tenga al menos 4 columnas
     const firstRow = jsonData[0];
-    if (!firstRow || firstRow.length !== 4) {
-      throw new Error('El archivo debe tener exactamente 4 columnas (A, B, C, D)');
+    if (!firstRow || firstRow.length < 4) {
+      throw new Error('El archivo debe tener al menos 4 columnas (A, B, C, D). Se usarán solo las primeras 4 columnas.');
     }
 
     // Procesar datos (saltear encabezados si existen)

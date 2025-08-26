@@ -11,9 +11,9 @@ Una aplicación web moderna que permite consultar datos de clientes cargando aut
 - ✅ Manejo robusto de errores
 - ✅ Optimizado para rendimiento
 
-## 📋 Requisitos del Archivo Excel
+## 📋 Estructura del Archivo Excel
 
-El archivo Excel debe tener exactamente **4 columnas**:
+El archivo Excel debe tener **al menos 4 columnas** (se usarán solo las primeras 4):
 
 - **Columna A**: Número de cliente (campo clave para búsquedas)
 - **Columna B**: Información que se muestra tal como aparece
@@ -22,11 +22,13 @@ El archivo Excel debe tener exactamente **4 columnas**:
 
 ### Ejemplo de estructura:
 ```
-| A (Número) | B (Info)        | C (Detalles)           | D (Datos)        |
+| A (Número) | B (Info)        | C (Detalles)           | D (Datos)        | E... | F... |
 |------------|-----------------|------------------------|------------------|
-| 12345      | Cliente VIP     | item1, item2, item3    | dato1, dato2     |
-| 67890      | Cliente Regular | servicio1, servicio2   | info1, info2     |
+| 12345      | Cliente VIP     | item1, item2, item3    | dato1, dato2     | ... | ... |
+| 67890      | Cliente Regular | servicio1, servicio2   | info1, info2     | ... | ... |
 ```
+
+**Nota:** Si tu archivo tiene más de 4 columnas, la aplicación solo utilizará las primeras 4 (A, B, C, D) e ignorará el resto.
 
 ## 🛠️ Configuración
 
