@@ -35,22 +35,10 @@ function App() {
                 <h1 className="text-xl font-bold text-gray-900">
                   {CONFIG.APP_NAME}
                 </h1>
-                <p className="text-sm text-gray-500">
-                  Bot VaFood
-                </p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center text-sm text-gray-600">
-                <Github className="h-4 w-4 mr-1" />
-                <span>GitHub</span>
-              </div>
-              <div className="flex items-center text-sm text-gray-600">
-                <Globe className="h-4 w-4 mr-1" />
-                <span>v{CONFIG.VERSION}</span>
-              </div>
-            </div>
+           
           </div>
         </div>
       </header>
