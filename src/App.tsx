@@ -74,28 +74,7 @@ function App() {
         {/* Contenido principal cuando los datos están cargados */}
         {data && !loading && !error && (
           <div className="space-y-6">
-            {/* Estadísticas de datos cargados */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="bg-green-100 rounded-full p-2 mr-3">
-                    <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Datos cargados correctamente
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {Object.keys(data).length} clientes disponibles para consulta
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
-                  ✓ Conectado
-                </div>
-              </div>
-            </div>
-
+            
             {/* Caja de búsqueda */}
             <div className="bg-white rounded-lg shadow-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
