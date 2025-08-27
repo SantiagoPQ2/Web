@@ -36,7 +36,7 @@ function App() {
                   {CONFIG.APP_NAME}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  Consulta de datos desde Excel
+                  Bot VaFood
                 </p>
               </div>
             </div>
