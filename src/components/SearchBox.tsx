@@ -42,7 +42,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           disabled={disabled}
           className={`
             block w-full pl-10 pr-12 py-3 text-base border border-gray-300 rounded-lg 
-            focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+            focus:ring-2 focus:ring-red-500 focus:border-red-500
             disabled:bg-gray-100 disabled:cursor-not-allowed
             transition-all duration-200
           `}
@@ -52,7 +52,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({
           <button
             type="button"
             onClick={handleClear}
-            className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-red-600 transition-colors duration-200"
+            className="absolute inset-y-0 right-0 pr-3 flex items-center hover:text-red-700 transition-colors duration-200"
           >
             <X className="h-5 w-5 text-gray-400" />
           </button>
@@ -63,8 +63,8 @@ const SearchBox: React.FC<SearchBoxProps> = ({
         type="submit"
         disabled={disabled || !value.trim()}
         className={`
-          w-full mt-4 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg
-          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+          w-full mt-4 px-6 py-3 bg-red-700 text-white font-medium rounded-lg
+          hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
           disabled:bg-gray-400 disabled:cursor-not-allowed
           transition-all duration-200
         `}

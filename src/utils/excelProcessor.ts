@@ -4,12 +4,17 @@ import { CONFIG } from '../config/constants';
 
 /**
  * Procesa el contenido de las columnas C y D convirtiendo comas a saltos de línea
+ * y agregando guiones al inicio de cada línea para mejor legibilidad
  * @param content - Contenido original con comas
  * @returns Contenido con saltos de línea
  */
 export const processColumnContent = (content: string): string => {
   if (!content || typeof content !== 'string') return '';
-  return content.split(',').map(item => item.trim()).join('\n');
+  return content.split(',')
+    .map(item => item.trim())
+    .filter(item => item.length > 0)
+    .map(item => `- ${item}`)
+    .join('\n');
 };
 
 /**

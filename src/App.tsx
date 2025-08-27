@@ -128,10 +128,10 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="text-center text-sm text-gray-600">
             <p>
-              Aplicación de consulta de datos Excel - Desplegado en Netlify
+              VaFood - Sistema de consulta de clientes - Desplegado en Netlify
             </p>
             <p className="mt-1">
-              Datos cargados automáticamente desde GitHub
+              Consulte situación y promociones de clientes
             </p>
           </div>
         </div>

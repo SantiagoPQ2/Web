@@ -1,0 +1,41 @@
+{
+  "name": "VaFood",
+  "short_name": "VaFood",
+  "description": "Aplicación de consulta de datos de clientes VaFood",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#991b1b",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "es",
+  "categories": ["food", "business", "productivity"],
+  "icons": [
+    {
+      "src": "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=192&h=192&fit=crop",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=512&h=512&fit=crop",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Buscar Cliente",
+      "short_name": "Buscar",
+      "description": "Buscar información de cliente",
+      "url": "/?action=search",
+      "icons": [
+        {
+          "src": "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=192&h=192&fit=crop",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

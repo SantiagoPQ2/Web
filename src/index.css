@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Variables CSS personalizadas para VaFood */
+:root {
+  --vafood-primary: #991b1b;
+  --vafood-primary-light: #dc2626;
+  --vafood-primary-dark: #7f1d1d;
+  --vafood-accent: #fef2f2;
+}
+
 /* Animaciones personalizadas */
 @keyframes fadeIn {
   from {
@@ -37,8 +45,31 @@
 /* Estilos para estados de focus mejorados */
 button:focus-visible,
 input:focus-visible {
-  outline: 2px solid theme('colors.blue.500');
+  outline: 2px solid var(--vafood-primary);
   outline-offset: 2px;
+}
+
+/* Estilos específicos para VaFood */
+.vafood-gradient {
+  background: linear-gradient(135deg, var(--vafood-primary) 0%, var(--vafood-primary-light) 100%);
+}
+
+.vafood-shadow {
+  box-shadow: 0 4px 6px -1px rgba(153, 27, 27, 0.1), 0 2px 4px -1px rgba(153, 27, 27, 0.06);
+}
+
+/* Mejoras para PWA */
+@media (display-mode: standalone) {
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  
+  /* Ocultar scrollbar en modo standalone */
+  ::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+  }
 }
 
 /* Estilos responsivos para móviles */

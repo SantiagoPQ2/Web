@@ -23,12 +23,12 @@ const ClientResult: React.FC<ClientResultProps> = ({ cliente }) => {
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 animate-fadeIn">
       {/* Encabezado con número de cliente */}
       <div className="flex items-center mb-6">
-        <div className="bg-blue-100 rounded-full p-2 mr-3">
-          <User className="h-6 w-6 text-blue-600" />
+        <div className="bg-red-100 rounded-full p-2 mr-3">
+          <User className="h-6 w-6 text-red-700" />
         </div>
         <div>
           <h2 className="text-xl font-bold text-gray-800">Cliente Encontrado</h2>
-          <p className="text-blue-600 font-medium">N° {cliente.numero}</p>
+          <p className="text-red-700 font-medium">N° {cliente.numero}</p>
         </div>
       </div>
 
@@ -46,10 +46,10 @@ const ClientResult: React.FC<ClientResultProps> = ({ cliente }) => {
         </div>
 
         {/* Columna C */}
-        <div className="bg-green-50 rounded-lg p-4">
+        <div className="bg-red-50 rounded-lg p-4">
           <div className="flex items-center mb-2">
-            <List className="h-5 w-5 text-green-600 mr-2" />
-            <h3 className="font-semibold text-gray-800">Detalles Categoría C</h3>
+            <List className="h-5 w-5 text-red-700 mr-2" />
+            <h3 className="font-semibold text-gray-800">Situación</h3>
           </div>
           <div className="text-gray-700 leading-relaxed whitespace-pre-line">
             {formatContent(cliente.columnaC)}
@@ -57,10 +57,10 @@ const ClientResult: React.FC<ClientResultProps> = ({ cliente }) => {
         </div>
 
         {/* Columna D */}
-        <div className="bg-blue-50 rounded-lg p-4">
+        <div className="bg-red-100 rounded-lg p-4">
           <div className="flex items-center mb-2">
-            <FileText className="h-5 w-5 text-blue-600 mr-2" />
-            <h3 className="font-semibold text-gray-800">Detalles Categoría D</h3>
+            <FileText className="h-5 w-5 text-red-800 mr-2" />
+            <h3 className="font-semibold text-gray-800">Promos</h3>
           </div>
           <div className="text-gray-700 leading-relaxed whitespace-pre-line">
             {formatContent(cliente.columnaD)}

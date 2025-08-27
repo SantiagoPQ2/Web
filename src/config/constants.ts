@@ -4,7 +4,7 @@ export const CONFIG = {
   EXCEL_FILE_URL: 'https://raw.githubusercontent.com/SantiagoPQ2/Web/main/CSV.xlsx',
   
   // Configuración de la aplicación
-  APP_NAME: 'Consulta de Clientes Excel',
+  APP_NAME: 'VaFood',
   VERSION: '1.0.0',
   
   // Mensajes de la aplicación
