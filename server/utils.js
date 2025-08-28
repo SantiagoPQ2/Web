@@ -3,7 +3,7 @@ const path = require('path');
 
 // --- Configuración de Google Sheets ---
 const SPREADSHEET_ID = '1_9rPIkCMcjJKfhFZTJRwgqXKQaPsICpV6UewPk-GLT0';
-const SHEET_NAME = 'bonificaciones'; // Nombre de la hoja específica
+const SHEET_NAME = 'Bonificaciones'; // Nombre de la hoja específica
 
 // --- Autenticación global ---
 const auth = new google.auth.GoogleAuth({
