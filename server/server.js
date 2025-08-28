@@ -1,9 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+require('dotenv').config();
 
-// Importar funciones de Google Sheets (asumiendo que tienes utils.js)
-// const { appendToSheet, getAllRejections } = require('./utils');
+// Importar funciones de Google Sheets
+const { 
+  appendToSheet, 
+  getAllRejections, 
+  testConnection,
+  initializeSheet 
+} = require('./utils');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +32,9 @@ app.use(express.urlencoded({ extended: true }));
 // Middleware de logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+  }
   next();
 });
 
@@ -74,30 +83,21 @@ app.post('/api/rechazos', validateRechazosData, async (req, res) => {
     const { values } = req.body;
     const [cliente, motivo, fecha] = values;
     
-    console.log('Recibiendo datos de rechazo:', { cliente, motivo, fecha });
+    console.log('📝 Recibiendo datos de rechazo:', { cliente, motivo, fecha });
     
-    // Aquí llamarías a tu función de Google Sheets
-    // const result = await appendToSheet(values);
+    // Llamar a la función de Google Sheets
+    const result = await appendToSheet(values);
     
-    // Por ahora, simularemos una respuesta exitosa
-    // Descomenta la línea de arriba cuando tengas utils.js configurado
-    
-    // Simulación de guardado exitoso
-    console.log('Datos guardados exitosamente en Google Sheets');
+    console.log('✅ Datos guardados exitosamente en Google Sheets');
     
     res.status(200).json({
       success: true,
       message: 'Registro guardado correctamente',
-      data: {
-        cliente,
-        motivo,
-        fecha,
-        timestamp: new Date().toISOString()
-      }
+      data: result.data
     });
     
   } catch (error) {
-    console.error('Error al guardar en Google Sheets:', error);
+    console.error('❌ Error al guardar en Google Sheets:', error);
     
     res.status(500).json({
       success: false,
@@ -110,13 +110,10 @@ app.post('/api/rechazos', validateRechazosData, async (req, res) => {
 // Endpoint para obtener todos los rechazos (opcional)
 app.get('/api/rechazos', async (req, res) => {
   try {
-    // const rejections = await getAllRejections();
+    console.log('📊 Obteniendo todos los rechazos...');
+    const rejections = await getAllRejections();
     
-    // Simulación de datos
-    const rejections = [
-      { cliente: 'Cliente 1', motivo: 'Motivo 1', fecha: '2024-01-15' },
-      { cliente: 'Cliente 2', motivo: 'Motivo 2', fecha: '2024-01-16' }
-    ];
+    console.log(`✅ Obtenidos ${rejections.length} registros`);
     
     res.status(200).json({
       success: true,
@@ -124,11 +121,56 @@ app.get('/api/rechazos', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error al obtener rechazos:', error);
+    console.error('❌ Error al obtener rechazos:', error);
     
     res.status(500).json({
       success: false,
       error: 'Error al obtener los datos'
+    });
+  }
+});
+
+// Endpoint de prueba de conexión con Google Sheets
+app.get('/api/test-connection', async (req, res) => {
+  try {
+    console.log('🔍 Probando conexión con Google Sheets...');
+    const result = await testConnection();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Conexión exitosa con Google Sheets',
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('❌ Error al probar conexión:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Error al conectar con Google Sheets',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Endpoint para inicializar la hoja
+app.post('/api/initialize', async (req, res) => {
+  try {
+    console.log('🚀 Inicializando hoja de Google Sheets...');
+    const result = await initializeSheet();
+    
+    res.status(200).json({
+      success: true,
+      message: result.message
+    });
+    
+  } catch (error) {
+    console.error('❌ Error al inicializar hoja:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: 'Error al inicializar la hoja',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -163,13 +205,26 @@ app.use((error, req, res, next) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Servidor ejecutándose en puerto ${PORT}`);
   console.log(`📝 Endpoints disponibles:`);
   console.log(`   POST /api/rechazos - Guardar rechazo`);
   console.log(`   GET  /api/rechazos - Obtener rechazos`);
+  console.log(`   GET  /api/test-connection - Probar conexión`);
+  console.log(`   POST /api/initialize - Inicializar hoja`);
   console.log(`   GET  /api/health   - Estado del servidor`);
   console.log(`🌐 CORS configurado para: https://vafoodbot.netlify.app`);
+  
+  // Probar conexión al iniciar
+  try {
+    console.log('\n🔍 Probando conexión inicial con Google Sheets...');
+    await testConnection();
+    await initializeSheet();
+    console.log('✅ Servidor listo y conectado a Google Sheets\n');
+  } catch (error) {
+    console.error('⚠️  Advertencia: Error al conectar con Google Sheets:', error.message);
+    console.log('🔧 El servidor seguirá funcionando, pero revisa la configuración\n');
+  }
 });
 
 module.exports = app;
