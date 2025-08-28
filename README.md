@@ -1,15 +1,33 @@
 # Aplicación de Consulta de Datos Excel
 
-Una aplicación web moderna que permite consultar datos de clientes cargando automáticamente un archivo Excel desde GitHub.
+Una aplicación web moderna que permite consultar datos de clientes cargando automáticamente un archivo Excel desde GitHub, con funcionalidad adicional para registrar rechazos en Google Sheets.
 
 ## 🚀 Características
 
 - ✅ Carga automática de archivos Excel desde GitHub
 - ✅ Búsqueda en tiempo real por número de cliente
 - ✅ Procesamiento automático de texto (conversión de comas a saltos de línea)
+- ✅ Sistema de navegación con React Router
+- ✅ Formulario Drive para registrar rechazos en Google Sheets
+- ✅ Backend API con Express.js
 - ✅ Interfaz responsive y moderna
 - ✅ Manejo robusto de errores
 - ✅ Optimizado para rendimiento
+
+## 📱 Navegación
+
+La aplicación cuenta con dos páginas principales:
+
+### 🔍 Buscar Cliente (/)
+- Funcionalidad original de búsqueda de clientes
+- Carga automática de datos desde Excel en GitHub
+- Visualización formateada de información del cliente
+
+### 💾 Drive (/drive)
+- Formulario para registrar rechazos
+- Integración directa con Google Sheets
+- Validación de campos en tiempo real
+- Confirmación de envío exitoso
 
 ## 📋 Estructura del Archivo Excel
 
@@ -56,6 +74,46 @@ export const CONFIG = {
 };
 ```
 
+## 🔧 Configuración del Backend
+
+### 1. Configurar Google Sheets API
+
+1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
+2. Crea un nuevo proyecto o selecciona uno existente
+3. Habilita la API de Google Sheets
+4. Crea credenciales de cuenta de servicio
+5. Descarga el archivo JSON de credenciales
+6. Comparte tu Google Sheet con el email de la cuenta de servicio
+
+### 2. Configurar variables de entorno
+
+Crea un archivo `.env` en la carpeta `server/`:
+
+```env
+GOOGLE_SPREADSHEET_ID=tu-id-de-spreadsheet
+GOOGLE_SERVICE_ACCOUNT_EMAIL=tu-cuenta-de-servicio@proyecto.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nTu clave privada aquí\n-----END PRIVATE KEY-----\n"
+PORT=3001
+NODE_ENV=production
+```
+
+### 3. Instalar dependencias del servidor
+
+```bash
+cd server
+npm install
+```
+
+### 4. Ejecutar el servidor
+
+```bash
+# Desarrollo
+npm run dev
+
+# Producción
+npm start
+```
+
 ## 📦 Instalación y Desarrollo
 
 ### Requisitos previos
@@ -75,6 +133,38 @@ npm install
 
 # Ejecutar en modo desarrollo
 npm run dev
+```
+
+### Estructura del proyecto actualizada
+```
+src/
+├── pages/              # Páginas de la aplicación
+│   ├── SearchPage.tsx  # Página de búsqueda de clientes
+│   └── Drive.tsx       # Página de registro de rechazos
+├── components/         # Componentes React reutilizables
+│   ├── Navigation.tsx  # Componente de navegación
+│   ├── LoadingSpinner.tsx
+│   ├── ErrorMessage.tsx
+│   ├── SearchBox.tsx
+│   ├── ClientResult.tsx
+│   └── EmptyState.tsx
+├── hooks/              # Hooks personalizados
+│   └── useExcelData.ts
+├── utils/              # Utilidades y funciones helper
+│   └── excelProcessor.ts
+├── types/              # Definiciones de tipos TypeScript
+│   └── index.ts
+├── config/             # Configuración de la aplicación
+│   └── constants.ts
+├── App.tsx             # Componente principal con routing
+├── main.tsx           # Punto de entrada
+└── index.css          # Estilos globales
+
+server/                 # Backend API
+├── server.js          # Servidor Express
+├── utils.js           # Funciones de Google Sheets
+├── package.json       # Dependencias del servidor
+└── .env.example       # Ejemplo de variables de entorno
 ```
 
 ## 🌐 Deployment en Netlify
@@ -106,6 +196,16 @@ Si tu archivo Excel está en un repositorio privado:
 2. Agrega las variables necesarias para autenticación con GitHub
 3. Modifica el código para usar tokens de acceso si es necesario
 
+### Deployment del Backend
+
+Para el backend, puedes usar servicios como:
+- **Heroku**: Para deployment automático
+- **Railway**: Alternativa moderna a Heroku
+- **Vercel**: Para funciones serverless
+- **DigitalOcean App Platform**: Para aplicaciones containerizadas
+
+Asegúrate de configurar las variables de entorno en tu plataforma de deployment.
+
 ## 🔧 Personalización
 
 ### Cambiar colores y estilos
@@ -136,6 +236,22 @@ MESSAGES: {
 }
 ```
 
+### Configurar nuevas rutas
+
+Para agregar nuevas páginas:
+
+1. Crea el componente en `src/pages/`
+2. Agrega la ruta en `src/App.tsx`
+3. Actualiza el menú de navegación en `src/components/Navigation.tsx`
+
+### Personalizar el formulario Drive
+
+En `src/pages/Drive.tsx` puedes:
+- Agregar nuevos campos al formulario
+- Modificar las validaciones
+- Cambiar el endpoint de la API
+- Personalizar los mensajes de éxito/error
+
 ## 🧪 Testing
 
 Para ejecutar tests (si los implementas):
@@ -143,6 +259,40 @@ Para ejecutar tests (si los implementas):
 ```bash
 npm run test
 ```
+
+## 🔌 API Endpoints
+
+El backend expone los siguientes endpoints:
+
+### POST /api/rechazos
+Registra un nuevo rechazo en Google Sheets
+
+**Body:**
+```json
+{
+  "values": ["cliente", "motivo", "fecha"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Registro guardado correctamente",
+  "data": {
+    "cliente": "Cliente ejemplo",
+    "motivo": "Motivo ejemplo",
+    "fecha": "2024-01-15",
+    "timestamp": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+### GET /api/rechazos
+Obtiene todos los rechazos registrados
+
+### GET /api/health
+Endpoint de salud del servidor
 
 ## 📄 Estructura del Proyecto
 
@@ -166,6 +316,14 @@ src/
 ├── main.tsx           # Punto de entrada
 └── index.css          # Estilos globales
 ```
+
+## 🔒 Seguridad
+
+- **CORS configurado** solo para https://vafoodbot.netlify.app
+- **Validación de datos** en el backend
+- **Variables de entorno** para credenciales sensibles
+- **Archivo google.json** excluido del control de versiones
+- **Manejo de errores** sin exposición de información sensible
 
 ## 🐛 Solución de Problemas
 
@@ -191,12 +349,29 @@ src/
 - Para archivos muy grandes (>1000 filas), considera implementar paginación
 - Usa lazy loading si tienes muchas imágenes o contenido pesado
 
+### Problemas con Google Sheets
+
+1. **Error de autenticación**
+   - Verifica que las credenciales estén correctas
+   - Asegúrate de que la cuenta de servicio tenga acceso al Sheet
+
+2. **Error de permisos**
+   - Comparte el Google Sheet con el email de la cuenta de servicio
+   - Otorga permisos de editor
+
+3. **Error de conexión con el backend**
+   - Verifica que el servidor esté ejecutándose
+   - Revisa la configuración de CORS
+   - Comprueba las variables de entorno
+
 ## 📝 Notas Técnicas
 
 - **Formato soportado**: .xlsx (Excel 2007+)
 - **Tamaño máximo recomendado**: 5MB
 - **Navegadores soportados**: Chrome, Firefox, Safari, Edge (versiones modernas)
-- **Librerías principales**: React, TypeScript, SheetJS, Tailwind CSS
+- **Librerías principales**: React, TypeScript, React Router, SheetJS, Tailwind CSS, Express.js
+- **Base de datos**: Google Sheets (para rechazos)
+- **API**: RESTful con Express.js
 
 ## 📞 Soporte
 
