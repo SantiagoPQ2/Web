@@ -46,12 +46,10 @@ const Drive: React.FC = () => {
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
-    // Limpiar error del campo cuando el usuario empiece a escribir
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
     
-    // Limpiar mensaje anterior
     if (message) {
       setMessage(null);
     }
@@ -68,13 +66,13 @@ const Drive: React.FC = () => {
     setMessage(null);
 
     try {
-      const response = await fetch('/api/rechazos', {
+      const response = await fetch('/.netlify/functions/rechazos', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          values: [formData.cliente, formData.motivo, formData.fecha]
+          cliente: formData.cliente,
+          motivo: formData.motivo,
+          fecha: formData.fecha
         }),
       });
 
@@ -82,11 +80,10 @@ const Drive: React.FC = () => {
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
+      await response.json();
       
       setMessage({ type: 'success', text: '✅ Registro enviado correctamente' });
       
-      // Limpiar formulario después del éxito
       setFormData({ cliente: '', motivo: '', fecha: '' });
       setErrors({});
 
