@@ -28,10 +28,8 @@ const Navigation: React.FC = () => {
     switch (location.pathname) {
       case '/':
         return 'Buscar Cliente';
-      case '/bonificaciones':
-        return 'Bonificaciones';
-      case '/rechazos':
-        return 'Rechazos';
+      case '/drive':
+        return 'Drive';
       default:
         return 'VaFood';
     }
@@ -45,16 +43,10 @@ const Navigation: React.FC = () => {
       description: 'Consultar información de clientes'
     },
     {
-      name: 'Bonificaciones',
-      path: '/bonificaciones',
+      name: 'Drive',
+      path: '/drive',
       icon: Save,
-      description: 'Registrar bonificaciones en Google Sheets'
-    },
-    {
-      name: 'Rechazos',
-      path: '/rechazos',
-      icon: AlertCircle,
-      description: 'Registrar rechazos de transporte'
+      description: 'Registrar rechazos en Google Sheets'
     }
   ];
 
