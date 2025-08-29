@@ -1,28 +1,43 @@
-import React, { useState } from 'react';
-import { Save, AlertCircle, CheckCircle, Calendar, User, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, AlertCircle, CheckCircle, Calendar, User, FileText, Package, DollarSign, UserCheck } from 'lucide-react';
 
 interface FormData {
   cliente: string;
-  motivo: string;
+  articulo: string;
+  bultos: string;
+  bonificacion: string;
+  nombreVendedor: string;
   fecha: string;
 }
 
 interface FormErrors {
   cliente?: string;
-  motivo?: string;
+  articulo?: string;
+  bultos?: string;
+  bonificacion?: string;
+  nombreVendedor?: string;
   fecha?: string;
 }
 
 const Drive: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     cliente: '',
-    motivo: '',
+    articulo: '',
+    bultos: '',
+    bonificacion: '',
+    nombreVendedor: '',
     fecha: ''
   });
   
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Auto-populate current date on component mount
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setFormData(prev => ({ ...prev, fecha: today }));
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -31,8 +46,24 @@ const Drive: React.FC = () => {
       newErrors.cliente = 'El campo Cliente es obligatorio';
     }
 
-    if (!formData.motivo.trim()) {
-      newErrors.motivo = 'El campo Motivo es obligatorio';
+    if (!formData.articulo.trim()) {
+      newErrors.articulo = 'El campo Artículo es obligatorio';
+    }
+
+    if (!formData.bultos.trim()) {
+      newErrors.bultos = 'El campo Bultos es obligatorio';
+    } else if (isNaN(Number(formData.bultos)) || Number(formData.bultos) <= 0) {
+      newErrors.bultos = 'Debe ser un número válido mayor a 0';
+    }
+
+    if (!formData.bonificacion.trim()) {
+      newErrors.bonificacion = 'El campo Bonificación es obligatorio';
+    } else if (isNaN(Number(formData.bonificacion)) || Number(formData.bonificacion) < 0) {
+      newErrors.bonificacion = 'Debe ser un número válido mayor o igual a 0';
+    }
+
+    if (!formData.nombreVendedor.trim()) {
+      newErrors.nombreVendedor = 'El campo Nombre del Vendedor es obligatorio';
     }
 
     if (!formData.fecha) {
@@ -66,32 +97,53 @@ const Drive: React.FC = () => {
     setMessage(null);
 
     try {
+      // Prepare data in exact sequence for Google Sheets
+      const orderedData = {
+        cliente: formData.cliente.trim(),
+        articulo: formData.articulo.trim(),
+        bultos: formData.bultos.trim(),
+        bonificacion: formData.bonificacion.trim(),
+        nombreVendedor: formData.nombreVendedor.trim(),
+        fecha: formData.fecha
+      };
+
       const response = await fetch('/.netlify/functions/rechazos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cliente: formData.cliente,
-          motivo: formData.motivo,
-          fecha: formData.fecha
-        }),
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderedData),
       });
 
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      await response.json();
+      const result = await response.json();
       
-      setMessage({ type: 'success', text: '✅ Registro enviado correctamente' });
+      setMessage({ 
+        type: 'success', 
+        text: '✅ Registro de bonificación enviado correctamente a Google Sheets' 
+      });
       
-      setFormData({ cliente: '', motivo: '', fecha: '' });
+      // Reset form but keep today's date
+      const today = new Date().toISOString().split('T')[0];
+      setFormData({ 
+        cliente: '', 
+        articulo: '', 
+        bultos: '', 
+        bonificacion: '', 
+        nombreVendedor: '', 
+        fecha: today 
+      });
       setErrors({});
 
     } catch (error) {
       console.error('Error al enviar datos:', error);
       setMessage({ 
         type: 'error', 
-        text: '❌ Error al guardar. Verifique su conexión e intente nuevamente.' 
+        text: `❌ Error al guardar: ${error instanceof Error ? error.message : 'Verifique su conexión e intente nuevamente'}` 
       });
     } finally {
       setLoading(false);
@@ -107,8 +159,8 @@ const Drive: React.FC = () => {
             <Save className="h-6 w-6 text-red-700" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Drive - Registro de Rechazos</h1>
-            <p className="text-gray-600">Registre información de rechazos en Google Sheets</p>
+            <h1 className="text-2xl font-bold text-gray-900">Drive - Registro de Bonificaciones</h1>
+            <p className="text-gray-600">Registre bonificaciones de clientes en Google Sheets</p>
           </div>
         </div>
 
@@ -130,13 +182,13 @@ const Drive: React.FC = () => {
           </div>
         )}
 
-        {/* Formulario */}
+        {/* Formulario con campos en secuencia específica */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Campo Cliente */}
+          {/* 1. Campo Cliente */}
           <div>
             <label htmlFor="cliente" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="h-4 w-4 mr-1" />
-              Cliente
+              Cliente <span className="text-red-500 ml-1">*</span>
             </label>
             <input
               type="text"
@@ -157,36 +209,115 @@ const Drive: React.FC = () => {
             )}
           </div>
 
-          {/* Campo Motivo */}
+          {/* 2. Campo Artículo */}
           <div>
-            <label htmlFor="motivo" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <FileText className="h-4 w-4 mr-1" />
-              Motivo
+            <label htmlFor="articulo" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Package className="h-4 w-4 mr-1" />
+              Artículo <span className="text-red-500 ml-1">*</span>
             </label>
-            <textarea
-              id="motivo"
-              value={formData.motivo}
-              onChange={(e) => handleInputChange('motivo', e.target.value)}
-              rows={3}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors resize-vertical ${
-                errors.motivo ? 'border-red-300 bg-red-50' : 'border-gray-300'
+            <input
+              type="text"
+              id="articulo"
+              value={formData.articulo}
+              onChange={(e) => handleInputChange('articulo', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
+                errors.articulo ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
-              placeholder="Describa el motivo del rechazo"
+              placeholder="Ingrese el nombre del artículo/producto"
               disabled={loading}
             />
-            {errors.motivo && (
+            {errors.articulo && (
               <p className="mt-1 text-sm text-red-600 flex items-center">
                 <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.motivo}
+                {errors.articulo}
               </p>
             )}
           </div>
 
-          {/* Campo Fecha */}
+          {/* 3. Campo Bultos */}
+          <div>
+            <label htmlFor="bultos" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Package className="h-4 w-4 mr-1" />
+              Bultos <span className="text-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="number"
+              id="bultos"
+              value={formData.bultos}
+              onChange={(e) => handleInputChange('bultos', e.target.value)}
+              min="1"
+              step="1"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
+                errors.bultos ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
+              placeholder="Cantidad de bultos/unidades"
+              disabled={loading}
+            />
+            {errors.bultos && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                {errors.bultos}
+              </p>
+            )}
+          </div>
+
+          {/* 4. Campo Bonificación */}
+          <div>
+            <label htmlFor="bonificacion" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <DollarSign className="h-4 w-4 mr-1" />
+              Bonificación <span className="text-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="number"
+              id="bonificacion"
+              value={formData.bonificacion}
+              onChange={(e) => handleInputChange('bonificacion', e.target.value)}
+              min="0"
+              step="0.01"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
+                errors.bonificacion ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
+              placeholder="Monto total de bonificación"
+              disabled={loading}
+            />
+            {errors.bonificacion && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                {errors.bonificacion}
+              </p>
+            )}
+          </div>
+
+          {/* 5. Campo Nombre del Vendedor */}
+          <div>
+            <label htmlFor="nombreVendedor" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <UserCheck className="h-4 w-4 mr-1" />
+              Nombre del Vendedor <span className="text-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="text"
+              id="nombreVendedor"
+              value={formData.nombreVendedor}
+              onChange={(e) => handleInputChange('nombreVendedor', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
+                errors.nombreVendedor ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
+              placeholder="Ingrese el nombre del vendedor"
+              disabled={loading}
+            />
+            {errors.nombreVendedor && (
+              <p className="mt-1 text-sm text-red-600 flex items-center">
+                <AlertCircle className="h-4 w-4 mr-1" />
+                {errors.nombreVendedor}
+              </p>
+            )}
+          </div>
+
+          {/* 6. Campo Fecha */}
           <div>
             <label htmlFor="fecha" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <Calendar className="h-4 w-4 mr-1" />
-              Fecha
+              Fecha <span className="text-red-500 ml-1">*</span>
             </label>
             <input
               type="date"
@@ -225,7 +356,7 @@ const Drive: React.FC = () => {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Guardar Registro
+                  Guardar Bonificación
                 </>
               )}
             </button>
@@ -235,8 +366,11 @@ const Drive: React.FC = () => {
         {/* Información adicional */}
         <div className="mt-6 p-4 bg-gray-50 rounded-lg">
           <p className="text-sm text-gray-600">
-            <strong>Nota:</strong> Los datos se guardarán directamente en Google Sheets. 
-            Asegúrese de que toda la información sea correcta antes de enviar.
+            <strong>Nota:</strong> Los datos se guardarán en Google Sheets en el siguiente orden: 
+            Cliente → Artículo → Bultos → Bonificación → Nombre del Vendedor → Fecha
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            La fecha se completa automáticamente con el día actual, pero puede modificarla si es necesario.
           </p>
         </div>
       </div>
