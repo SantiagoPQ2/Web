@@ -43,10 +43,10 @@ const Navigation: React.FC = () => {
       description: 'Consultar información de clientes'
     },
     {
-      name: 'Drive',
+      name: 'Bonificaciones',
       path: '/drive',
       icon: Save,
-      description: 'Registrar rechazos en Google Sheets'
+      description: 'Registrar Bonificaciones en Google Sheets'
     }
   ];
 
