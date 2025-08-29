@@ -82,3 +82,4 @@ server/google.json
 # Server dependencies
 server/node_modules/
 server/.env
+.env
