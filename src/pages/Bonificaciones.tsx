@@ -19,7 +19,7 @@ interface FormErrors {
   fecha?: string;
 }
 
-const Drive: React.FC = () => {
+const Bonificaciones: React.FC = () => {
   const [formData, setFormData] = useState<FormData>({
     cliente: '',
     articulo: '',
@@ -159,7 +159,7 @@ const Drive: React.FC = () => {
             <Save className="h-6 w-6 text-red-700" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Drive - Registro de Bonificaciones</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Bonificaciones - Registro de Bonificaciones</h1>
             <p className="text-gray-600">Registre bonificaciones de clientes en Google Sheets</p>
           </div>
         </div>
@@ -378,4 +378,4 @@ const Drive: React.FC = () => {
   );
 };
 
-export default Drive;
+export default Bonificaciones;

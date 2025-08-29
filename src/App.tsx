@@ -2,7 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import SearchPage from './pages/SearchPage';
-import Drive from './pages/Drive';
+import Bonificaciones from './pages/Bonificaciones';
+import Rechazos from './pages/Rechazos';
 
 function App() {
   return (
@@ -13,7 +14,8 @@ function App() {
         <main>
           <Routes>
             <Route path="/" element={<SearchPage />} />
-            <Route path="/drive" element={<Drive />} />
+            <Route path="/bonificaciones" element={<Bonificaciones />} />
+            <Route path="/rechazos" element={<Rechazos />} />
           </Routes>
         </main>
 
