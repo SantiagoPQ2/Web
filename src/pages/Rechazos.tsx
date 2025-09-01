@@ -219,11 +219,24 @@ const Rechazos: React.FC = () => {
                         </div>
                       </div>
 
-import { AlertTriangle, Truck, User, FileText, DollarSign, RefreshCw, Calendar, Plus } from 'lucide-react';
                       {/* Monto */}
-import { Link } from 'react-router-dom';
+                      <div className="flex items-start">
+                        <DollarSign className="h-4 w-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Monto</p>
+                          <p className="text-sm font-medium text-gray-800">{formatCurrency(rechazo.monto)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
-import LoadingSpinner from '../components/LoadingSpinner';
 
-import ErrorMessage from '../components/ErrorMessage';
 export default Rechazos;
