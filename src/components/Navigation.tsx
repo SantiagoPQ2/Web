@@ -27,8 +27,6 @@ const Navigation: React.FC = () => {
         return 'Buscar Cliente';
       case '/bonificaciones':
         return 'Bonificaciones';
-      case '/rechazos':
-        return 'Rechazos';
       case '/rechazos/nuevo':
         return 'Nuevo Rechazo';
       case '/coordenadas':
@@ -50,12 +48,6 @@ const Navigation: React.FC = () => {
       path: '/bonificaciones',
       icon: Save,
       description: 'Registrar bonificaciones de clientes'
-    },
-    {
-      name: 'Rechazos',
-      path: '/rechazos',
-      icon: AlertTriangle,
-      description: 'Ver rechazos registrados'
     },
     {
       name: 'Nuevo Rechazo',
