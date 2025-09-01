@@ -3,23 +3,21 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import SearchPage from './pages/SearchPage';
 import Bonificaciones from './pages/Bonificaciones';
-import Rechazos from './pages/Rechazos';
-import RechazosForm from './pages/RechazosForm';
-import NotasCredito from './pages/NotasCredito'; // 👈 nuevo
+import NotasCredito from './pages/NotasCredito';
+import Coordenadas from './pages/Coordenadas';
 
 function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <Navigation />
-
+        
         <main>
           <Routes>
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
-            <Route path="/rechazos" element={<Rechazos />} />
-            <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-            <Route path="/notas-credito" element={<NotasCredito />} /> {/* 👈 nueva ruta */}
+            <Route path="/notas-credito" element={<NotasCredito />} />
+            <Route path="/coordenadas" element={<Coordenadas />} />
           </Routes>
         </main>
 
@@ -37,3 +35,4 @@ function App() {
 }
 
 export default App;
+
