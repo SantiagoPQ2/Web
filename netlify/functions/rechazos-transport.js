@@ -19,10 +19,10 @@ exports.handler = async (event, context) => {
       const body = JSON.parse(event.body);
       
       // Extract data in the exact sequence required for Rechazos
-      const { transporte, cliente, motivoRechazo, monto } = body;
+      const { transporte, cliente, motivoRechazo, monto, fecha } = body;
 
       // Validate all required fields
-      if (!transporte || !cliente || !motivoRechazo || !monto) {
+      if (!transporte || !cliente || !motivoRechazo || !monto || !fecha) {
         return {
           statusCode: 400,
           headers: {
@@ -31,7 +31,7 @@ exports.handler = async (event, context) => {
           },
           body: JSON.stringify({ 
             success: false, 
-            error: "Todos los campos son obligatorios" 
+            error: "Todos los campos son obligatorios (transporte, cliente, motivo, monto, fecha)" 
           })
         };
       }
@@ -69,7 +69,7 @@ exports.handler = async (event, context) => {
         cliente.trim(), 
         motivoRechazo.trim(),
         monto.trim(),
-        fecha
+        fecha.trim()
       ];
 
       // First, try to get the sheet to check if it exists
