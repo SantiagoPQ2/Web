@@ -6,14 +6,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // 👈 clave
+      registerType: 'autoUpdate',
       workbox: {
         clientsClaim: true,
-        skipWaiting: true,
+        skipWaiting: true
       },
       devOptions: {
         enabled: true
-      }
+      },
+      manifest: false // usamos el manifest.json que está en /public
     })
   ]
 })
