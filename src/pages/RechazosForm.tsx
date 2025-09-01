@@ -92,7 +92,6 @@ const RechazosForm: React.FC = () => {
         motivoRechazo: formData.motivoRechazo.trim(),
         monto: formData.monto.trim(),
         fecha: formData.fecha
-        fecha: formData.fecha
       };
 
       const response = await fetch('/.netlify/functions/rechazos-transport', {
