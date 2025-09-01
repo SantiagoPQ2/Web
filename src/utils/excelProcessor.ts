@@ -1,14 +1,13 @@
 import * as XLSX from 'xlsx';
 import { ExcelData, ClienteData } from '../types';
-import { CONFIG } from '../config/constants';
 
 /**
- * Procesa el contenido de las columnas C y D convirtiendo comas a saltos de línea
- * y agregando guiones al inicio de cada línea para mejor legibilidad
+ * Procesa las columnas de texto con comas y las convierte en líneas legibles
  */
 export const processColumnContent = (content: string): string => {
   if (!content || typeof content !== 'string') return '';
-  return content.split(',')
+  return content
+    .split(',')
     .map(item => item.trim())
     .filter(item => item.length > 0)
     .map(item => `- ${item}`)
@@ -16,44 +15,40 @@ export const processColumnContent = (content: string): string => {
 };
 
 /**
- * Carga y procesa un archivo Excel desde /public (ej: /CSV.xlsx)
+ * Carga y procesa el archivo CSV.xlsx desde /public
  */
-export const loadExcelFromPublic = async (url: string): Promise<ExcelData> => {
+export const loadExcelFromPublic = async (): Promise<ExcelData> => {
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*',
-      },
-    });
+    console.log('📂 Intentando cargar /CSV.xlsx desde public...');
 
+    const response = await fetch('/CSV.xlsx');
     if (!response.ok) {
-      throw new Error(`No se pudo acceder al archivo Excel: ${response.status}`);
+      throw new Error(`Error al cargar CSV.xlsx: ${response.status}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
 
-    // Primera hoja
+    // Leer primera hoja
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // JSON bruto
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
-
-    // Validar
     if (jsonData.length === 0) {
-      throw new Error('El archivo Excel está vacío');
+      throw new Error('El archivo CSV.xlsx está vacío');
     }
 
+    // Procesar filas (omitir encabezados)
     const processedData: ExcelData = {};
-    const dataRows = jsonData.slice(1); // saltar encabezado
+    const dataRows = jsonData.slice(1);
 
-    dataRows.forEach(row => {
+    dataRows.forEach((row) => {
       if (row && row.length >= 4) {
         const [numeroCliente, columnaB, columnaC, columnaD] = row;
+
         if (numeroCliente && numeroCliente.toString().trim()) {
           const clienteKey = numeroCliente.toString().trim();
+
           processedData[clienteKey] = {
             numero: clienteKey,
             columnaB: (columnaB || '').toString(),
@@ -64,20 +59,18 @@ export const loadExcelFromPublic = async (url: string): Promise<ExcelData> => {
       }
     });
 
-    if (Object.keys(processedData).length === 0) {
-      throw new Error('No se encontraron datos válidos en el archivo');
-    }
-
+    console.log(`✅ ${Object.keys(processedData).length} clientes cargados desde CSV.xlsx`);
     return processedData;
 
   } catch (error) {
-    console.error('Error al procesar CSV.xlsx:', error);
-    throw error;
+    console.error('❌ Error al procesar CSV.xlsx:', error);
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al cargar CSV.xlsx');
   }
 };
 
 /**
- * Busca un cliente por su número
+ * Buscar cliente por número
  */
 export const searchClient = (data: ExcelData, numeroCliente: string): ClienteData | null => {
   const cleanNumber = numeroCliente.trim();
