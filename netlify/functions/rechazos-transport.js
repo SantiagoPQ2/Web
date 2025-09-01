@@ -1,7 +1,7 @@
 const { google } = require("googleapis");
 
 exports.handler = async (event, context) => {
-  // Handle CORS preflight requests
+  // 🔹 Manejo de preflight CORS
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -16,12 +16,12 @@ exports.handler = async (event, context) => {
 
   try {
     if (event.httpMethod === "POST") {
-      const body = JSON.parse(event.body);
+      const body = JSON.parse(event.body || "{}");
 
-      // Extract data in the exact sequence required for Rechazos
+      // 🔹 Extraer datos esperados
       const { transporte, cliente, motivoRechazo, monto, fecha } = body;
 
-      // Validate all required fields
+      // 🔹 Validar campos obligatorios
       if (!transporte || !cliente || !motivoRechazo || !monto || !fecha) {
         return {
           statusCode: 400,
@@ -36,7 +36,7 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Validate numeric field
+      // 🔹 Validar campo numérico
       if (isNaN(Number(monto)) || Number(monto) < 0) {
         return {
           statusCode: 400,
@@ -51,7 +51,7 @@ exports.handler = async (event, context) => {
         };
       }
 
-      // Configure Google Sheets authentication using environment variables
+      // 🔹 Autenticación Google Sheets
       const auth = new google.auth.JWT(
         process.env.GOOGLE_CLIENT_EMAIL,
         null,
@@ -62,7 +62,7 @@ exports.handler = async (event, context) => {
       const sheets = google.sheets({ version: "v4", auth });
       const spreadsheetId = process.env.SPREADSHEET_ID;
 
-      // Prepare data in exact sequence for Google Sheets
+      // 🔹 Datos a insertar
       const rowData = [
         transporte.trim(),
         cliente.trim(),
@@ -71,44 +71,44 @@ exports.handler = async (event, context) => {
         fecha.trim()
       ];
 
-      // Ensure sheet exists (if not, create it)
+      // 🔹 Verificar existencia de la hoja "Rechazos"
       try {
         await sheets.spreadsheets.get({
-          spreadsheetId: spreadsheetId,
-          ranges: ['Rechazos!A1:E1']
+          spreadsheetId,
+          ranges: ["Rechazos!A1:E1"]
         });
       } catch (error) {
-        try {
-          await sheets.spreadsheets.batchUpdate({
-            spreadsheetId: spreadsheetId,
-            resource: {
-              requests: [{
-                addSheet: { properties: { title: 'Rechazos' } }
-              }]
-            }
-          });
+        console.log("Hoja Rechazos no existe, creando...");
 
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: spreadsheetId,
-            range: 'Rechazos!A1:E1',
-            valueInputOption: 'USER_ENTERED',
-            resource: {
-              values: [['Transporte', 'Cliente', 'Motivo de Rechazo', 'Monto', 'Fecha']]
-            }
-          });
-        } catch (createError) {
-          console.error('Error creating Rechazos sheet:', createError);
-        }
+        await sheets.spreadsheets.batchUpdate({
+          spreadsheetId,
+          resource: {
+            requests: [{
+              addSheet: { properties: { title: "Rechazos" } }
+            }]
+          }
+        });
+
+        // Cabeceras
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: "Rechazos!A1:E1",
+          valueInputOption: "USER_ENTERED",
+          resource: {
+            values: [["Transporte", "Cliente", "Motivo de Rechazo", "Monto", "Fecha"]]
+          }
+        });
       }
 
-      // Append the new row
+      // 🔹 Insertar fila en la hoja
       await sheets.spreadsheets.values.append({
-        spreadsheetId: spreadsheetId,
+        spreadsheetId,
         range: "Rechazos!A:E",
         valueInputOption: "USER_ENTERED",
         resource: { values: [rowData] }
       });
 
+      // 🔹 Respuesta exitosa
       return {
         statusCode: 200,
         headers: {
@@ -118,33 +118,23 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({
           success: true,
           message: "Registro de rechazo guardado correctamente",
-          data: {
-            transporte,
-            cliente,
-            motivoRechazo,
-            monto,
-            fecha, // 🔥 ahora sí incluido correctamente
-            timestamp: new Date().toISOString()
-          }
+          data: { transporte, cliente, motivoRechazo, monto, fecha, timestamp: new Date().toISOString() }
         })
       };
     }
 
-    // Method not allowed
+    // 🔹 Método no permitido
     return {
       statusCode: 405,
       headers: {
         "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        success: false,
-        error: "Method Not Allowed"
-      })
+      body: JSON.stringify({ success: false, error: "Method Not Allowed" })
     };
 
   } catch (error) {
-    console.error('Error in rechazos function:', error);
+    console.error("Error en rechazos-transport:", error);
 
     return {
       statusCode: 500,
