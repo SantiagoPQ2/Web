@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import SearchPage from './pages/SearchPage';
 import Bonificaciones from './pages/Bonificaciones';
+import Rechazos from './pages/Rechazos';
 import RechazosForm from './pages/RechazosForm';
-import CoordsPage from './pages/CoordsPage';
+import NotasCredito from './pages/NotasCredito'; // 👈 nuevo
 
 function App() {
   return (
@@ -16,8 +17,9 @@ function App() {
           <Routes>
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
+            <Route path="/rechazos" element={<Rechazos />} />
             <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-            <Route path="/coordenadas" element={<CoordsPage />} />
+            <Route path="/notas-credito" element={<NotasCredito />} /> {/* 👈 nueva ruta */}
           </Routes>
         </main>
 
@@ -25,7 +27,7 @@ function App() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="text-center text-sm text-gray-600">
               <p>VaFood - Sistema de consulta de clientes</p>
-              <p className="mt-1">Consulte situación, promociones y coordenadas de clientes</p>
+              <p className="mt-1">Consulte situación y promociones de clientes</p>
             </div>
           </div>
         </footer>
@@ -35,4 +37,3 @@ function App() {
 }
 
 export default App;
-
