@@ -14,13 +14,11 @@ export const useExcelData = () => {
     try {
       setLoading(true);
       setError(null);
-
-      // 👇 acá llamamos a CSV.xlsx desde /public
-      const result = await loadExcelFromPublic('/CSV.xlsx');
+      const result = await loadExcelFromPublic();
       setData(result);
     } catch (err) {
-      console.error('Error al cargar CSV.xlsx:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido al cargar Excel');
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Error al cargar el Excel');
     } finally {
       setLoading(false);
     }
@@ -31,15 +29,10 @@ export const useExcelData = () => {
   }, []);
 
   const handleSearch = () => {
-    if (data && searchTerm.trim()) {
-      const result = searchClient(data, searchTerm);
-      setSearchResult(result);
-      setHasSearched(true);
-    }
-  };
-
-  const retryLoad = () => {
-    loadData();
+    if (!data) return;
+    setHasSearched(true);
+    const result = searchClient(data, searchTerm);
+    setSearchResult(result);
   };
 
   return {
@@ -51,6 +44,7 @@ export const useExcelData = () => {
     hasSearched,
     setSearchTerm,
     handleSearch,
-    retryLoad,
+    retryLoad: loadData,
   };
 };
+
