@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navigation from './components/Navigation';
 import SearchPage from './pages/SearchPage';
 import Bonificaciones from './pages/Bonificaciones';
-import Rechazos from './pages/Rechazos';
 import RechazosForm from './pages/RechazosForm';
 import CoordsPage from './pages/CoordsPage';
 
@@ -17,7 +16,6 @@ function App() {
           <Routes>
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
-            <Route path="/rechazos" element={<Rechazos />} />
             <Route path="/rechazos/nuevo" element={<RechazosForm />} />
             <Route path="/coordenadas" element={<CoordsPage />} />
           </Routes>
