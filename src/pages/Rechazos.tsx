@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, Truck, User, FileText, DollarSign, Calendar } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Truck, User, FileText, DollarSign } from 'lucide-react';
 
 interface FormData {
   transporte: string;
   cliente: string;
   motivoRechazo: string;
   monto: string;
+  fecha: string;
 }
 
 interface FormErrors {
@@ -13,6 +14,7 @@ interface FormErrors {
   cliente?: string;
   motivoRechazo?: string;
   monto?: string;
+  fecha?: string;
 }
 
 const Rechazos: React.FC = () => {
@@ -20,12 +22,19 @@ const Rechazos: React.FC = () => {
     transporte: '',
     cliente: '',
     motivoRechazo: '',
-    monto: ''
+    monto: '',
+    fecha: ''
   });
-  
+
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Set fecha actual por defecto
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    setFormData(prev => ({ ...prev, fecha: today }));
+  }, []);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -48,17 +57,19 @@ const Rechazos: React.FC = () => {
       newErrors.monto = 'Debe ser un número válido mayor o igual a 0';
     }
 
+    if (!formData.fecha) {
+      newErrors.fecha = 'La fecha es obligatoria';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
-    
     if (message) {
       setMessage(null);
     }
@@ -66,7 +77,7 @@ const Rechazos: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -75,20 +86,17 @@ const Rechazos: React.FC = () => {
     setMessage(null);
 
     try {
-      // Prepare data in exact sequence for Google Sheets: transporte, cliente, motivo, monto
       const orderedData = {
         transporte: formData.transporte.trim(),
         cliente: formData.cliente.trim(),
         motivoRechazo: formData.motivoRechazo.trim(),
         monto: formData.monto.trim(),
-        sheet: 'Rechazos' // Specify the sheet name
+        fecha: formData.fecha
       };
 
-      const response = await fetch('/.netlify/functions/rechazos-transport', {
+      const response = await fetch('/.netlify/functions/rechazos', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderedData),
       });
 
@@ -97,27 +105,23 @@ const Rechazos: React.FC = () => {
         throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
       }
 
-      const result = await response.json();
-      
-      setMessage({ 
-        type: 'success', 
-        text: '✅ Registro de rechazo enviado correctamente a Google Sheets' 
-      });
-      
-      // Reset form
-      setFormData({ 
-        transporte: '', 
-        cliente: '', 
-        motivoRechazo: '', 
-        monto: ''
+      await response.json();
+      setMessage({ type: 'success', text: '✅ Registro de rechazo enviado correctamente' });
+
+      const today = new Date().toISOString().split('T')[0];
+      setFormData({
+        transporte: '',
+        cliente: '',
+        motivoRechazo: '',
+        monto: '',
+        fecha: today
       });
       setErrors({});
-
     } catch (error) {
       console.error('Error al enviar datos:', error);
-      setMessage({ 
-        type: 'error', 
-        text: `❌ Error al guardar: ${error instanceof Error ? error.message : 'Verifique su conexión e intente nuevamente'}` 
+      setMessage({
+        type: 'error',
+        text: `❌ Error al guardar: ${error instanceof Error ? error.message : 'Verifique su conexión'}`
       });
     } finally {
       setLoading(false);
@@ -127,22 +131,20 @@ const Rechazos: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-lg shadow-sm p-6">
-        {/* Header */}
         <div className="flex items-center mb-6">
           <div className="bg-red-100 rounded-full p-2 mr-3">
-            <AlertCircle className="h-6 w-6 text-red-700" />
+            <Save className="h-6 w-6 text-red-700" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Rechazos - Registro de Rechazos de Transporte</h1>
-            <p className="text-gray-600">Registre rechazos de transporte en Google Sheets</p>
+            <h1 className="text-2xl font-bold text-gray-900">Rechazos - Registro</h1>
+            <p className="text-gray-600">Registre rechazos de clientes en Google Sheets</p>
           </div>
         </div>
 
-        {/* Mensaje de estado */}
         {message && (
           <div className={`mb-6 p-4 rounded-lg flex items-center ${
-            message.type === 'success' 
-              ? 'bg-green-50 border border-green-200' 
+            message.type === 'success'
+              ? 'bg-green-50 border border-green-200'
               : 'bg-red-50 border border-red-200'
           }`}>
             {message.type === 'success' ? (
@@ -156,13 +158,12 @@ const Rechazos: React.FC = () => {
           </div>
         )}
 
-        {/* Formulario con campos en secuencia específica */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 1. Campo Transporte */}
+          {/* Transporte */}
           <div>
             <label htmlFor="transporte" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <Truck className="h-4 w-4 mr-1" />
-              Transporte <span className="text-red-500 ml-1">*</span>
+              Transporte <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -172,22 +173,17 @@ const Rechazos: React.FC = () => {
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
                 errors.transporte ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
-              placeholder="Ingrese el nombre del transporte"
+              placeholder="Ingrese el transporte"
               disabled={loading}
             />
-            {errors.transporte && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.transporte}
-              </p>
-            )}
+            {errors.transporte && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.transporte}</p>}
           </div>
 
-          {/* 2. Campo Cliente */}
+          {/* Cliente */}
           <div>
             <label htmlFor="cliente" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="h-4 w-4 mr-1" />
-              Cliente <span className="text-red-500 ml-1">*</span>
+              Cliente <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -197,47 +193,37 @@ const Rechazos: React.FC = () => {
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
                 errors.cliente ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
-              placeholder="Ingrese el nombre del cliente"
+              placeholder="Ingrese el cliente"
               disabled={loading}
             />
-            {errors.cliente && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.cliente}
-              </p>
-            )}
+            {errors.cliente && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.cliente}</p>}
           </div>
 
-          {/* 3. Campo Motivo de Rechazo */}
+          {/* Motivo */}
           <div>
             <label htmlFor="motivoRechazo" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <FileText className="h-4 w-4 mr-1" />
-              Motivo de Rechazo <span className="text-red-500 ml-1">*</span>
+              Motivo del Rechazo <span className="text-red-500">*</span>
             </label>
             <textarea
               id="motivoRechazo"
               value={formData.motivoRechazo}
               onChange={(e) => handleInputChange('motivoRechazo', e.target.value)}
               rows={3}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors resize-vertical ${
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
                 errors.motivoRechazo ? 'border-red-300 bg-red-50' : 'border-gray-300'
               }`}
-              placeholder="Describa el motivo del rechazo del transporte"
+              placeholder="Describa el motivo del rechazo"
               disabled={loading}
             />
-            {errors.motivoRechazo && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.motivoRechazo}
-              </p>
-            )}
+            {errors.motivoRechazo && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.motivoRechazo}</p>}
           </div>
 
-          {/* 4. Campo Monto */}
+          {/* Monto */}
           <div>
             <label htmlFor="monto" className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <DollarSign className="h-4 w-4 mr-1" />
-              Monto <span className="text-red-500 ml-1">*</span>
+              Monto <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -252,23 +238,35 @@ const Rechazos: React.FC = () => {
               placeholder="Monto del rechazo"
               disabled={loading}
             />
-            {errors.monto && (
-              <p className="mt-1 text-sm text-red-600 flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {errors.monto}
-              </p>
-            )}
+            {errors.monto && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.monto}</p>}
           </div>
 
-          {/* Botón de envío */}
+          {/* Fecha */}
+          <div>
+            <label htmlFor="fecha" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Calendar className="h-4 w-4 mr-1" />
+              Fecha <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              id="fecha"
+              value={formData.fecha}
+              onChange={(e) => handleInputChange('fecha', e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
+                errors.fecha ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
+              disabled={loading}
+            />
+            {errors.fecha && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.fecha}</p>}
+          </div>
+
+          {/* Botón */}
           <div className="pt-4">
             <button
               type="submit"
               disabled={loading}
               className={`w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg text-white font-medium transition-all duration-200 ${
-                loading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2'
+                loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2'
               }`}
             >
               {loading ? (
@@ -278,24 +276,13 @@ const Rechazos: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-4 w-4 mr-2" />
+                  <Save className="h-4 w-4 mr-2" />
                   Guardar Rechazo
                 </>
               )}
             </button>
           </div>
         </form>
-
-        {/* Información adicional */}
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-sm text-gray-600">
-            <strong>Nota:</strong> Los datos se guardarán en Google Sheets en la hoja "Rechazos" en el siguiente orden: 
-            Transporte → Cliente → Motivo de Rechazo → Monto
-          </p>
-          <p className="text-xs text-gray-500 mt-2">
-            Todos los campos son obligatorios. El monto debe ser un número válido.
-          </p>
-        </div>
       </div>
     </div>
   );
