@@ -4,7 +4,7 @@ import Navigation from './components/Navigation';
 import SearchPage from './pages/SearchPage';
 import Bonificaciones from './pages/Bonificaciones';
 import NotasCredito from './pages/NotasCredito';
-import Coordenadas from './pages/Coordenadas';
+import Coordenadas from './pages/CoordsPage';
 
 function App() {
   return (
@@ -17,7 +17,7 @@ function App() {
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
             <Route path="/notas-credito" element={<NotasCredito />} />
-            <Route path="/coordenadas" element={<Coordenadas />} />
+            <Route path="/CoordsPage" element={<CoordsPage />} />
           </Routes>
         </main>
 
