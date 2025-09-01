@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Search, Save, FileText, MapPin } from 'lucide-react';
+import { ChevronDown, Search, Save, Plus, FileText, MapPin } from 'lucide-react';
 
 const Navigation: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
+  // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -18,6 +19,7 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cerrar dropdown al cambiar de ruta
   useEffect(() => {
     setIsDropdownOpen(false);
   }, [location]);
@@ -28,6 +30,8 @@ const Navigation: React.FC = () => {
         return 'Buscar Cliente';
       case '/bonificaciones':
         return 'Bonificaciones';
+      case '/rechazos/nuevo':
+        return 'Nuevo Rechazo';
       case '/notas-credito':
         return 'Notas de Crédito';
       case '/CoordsPage':
@@ -51,6 +55,12 @@ const Navigation: React.FC = () => {
       description: 'Registrar bonificaciones de clientes'
     },
     {
+      name: 'Nuevo Rechazo',
+      path: '/rechazos/nuevo',
+      icon: Plus,
+      description: 'Registrar nuevo rechazo'
+    },
+    {
       name: 'Notas de Crédito',
       path: '/notas-credito',
       icon: FileText,
@@ -68,6 +78,7 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          {/* Logo y nombre */}
           <div className="flex items-center">
             <div className="mr-3">
               <img 
@@ -81,6 +92,7 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
+          {/* Navegación con dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -94,6 +106,7 @@ const Navigation: React.FC = () => {
               />
             </button>
 
+            {/* Dropdown menu */}
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 animate-fadeIn">
                 <div className="py-2">
@@ -128,5 +141,3 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
-
-
