@@ -17,7 +17,7 @@ exports.handler = async (event, context) => {
   try {
     if (event.httpMethod === "POST") {
       const body = JSON.parse(event.body);
-      
+
       // Extract data in the exact sequence required for Rechazos
       const { transporte, cliente, motivoRechazo, monto, fecha } = body;
 
@@ -29,9 +29,9 @@ exports.handler = async (event, context) => {
             "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ 
-            success: false, 
-            error: "Todos los campos son obligatorios (transporte, cliente, motivo, monto, fecha)" 
+          body: JSON.stringify({
+            success: false,
+            error: "Todos los campos son obligatorios (transporte, cliente, motivo, monto, fecha)"
           })
         };
       }
@@ -44,9 +44,9 @@ exports.handler = async (event, context) => {
             "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ 
-            success: false, 
-            error: "Monto debe ser un número válido mayor o igual a 0" 
+          body: JSON.stringify({
+            success: false,
+            error: "Monto debe ser un número válido mayor o igual a 0"
           })
         };
       }
@@ -63,38 +63,31 @@ exports.handler = async (event, context) => {
       const spreadsheetId = process.env.SPREADSHEET_ID;
 
       // Prepare data in exact sequence for Google Sheets
-      // Order: Transporte, Cliente, Motivo de Rechazo, Monto, Fecha
       const rowData = [
         transporte.trim(),
-        cliente.trim(), 
+        cliente.trim(),
         motivoRechazo.trim(),
         monto.trim(),
         fecha.trim()
       ];
 
-      // First, try to get the sheet to check if it exists
+      // Ensure sheet exists (if not, create it)
       try {
         await sheets.spreadsheets.get({
           spreadsheetId: spreadsheetId,
           ranges: ['Rechazos!A1:E1']
         });
       } catch (error) {
-        // If sheet doesn't exist, create it with headers
         try {
           await sheets.spreadsheets.batchUpdate({
             spreadsheetId: spreadsheetId,
             resource: {
               requests: [{
-                addSheet: {
-                  properties: {
-                    title: 'Rechazos'
-                  }
-                }
+                addSheet: { properties: { title: 'Rechazos' } }
               }]
             }
           });
 
-          // Add headers in exact sequence
           await sheets.spreadsheets.values.update({
             spreadsheetId: spreadsheetId,
             range: 'Rechazos!A1:E1',
@@ -108,22 +101,12 @@ exports.handler = async (event, context) => {
         }
       }
 
-      // Append the new row to the sheet
-      const appendResult = await sheets.spreadsheets.values.append({
+      // Append the new row
+      await sheets.spreadsheets.values.append({
         spreadsheetId: spreadsheetId,
         range: "Rechazos!A:E",
         valueInputOption: "USER_ENTERED",
-        resource: {
-          values: [rowData]
-        }
-      });
-
-      console.log('Rechazo data successfully saved to Google Sheets:', {
-        transporte,
-        cliente,
-        motivoRechazo,
-        monto,
-        updatedRows: appendResult.data.updates?.updatedRows
+        resource: { values: [rowData] }
       });
 
       return {
@@ -132,14 +115,15 @@ exports.handler = async (event, context) => {
           "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ 
-          success: true, 
+        body: JSON.stringify({
+          success: true,
           message: "Registro de rechazo guardado correctamente",
           data: {
             transporte,
             cliente,
             motivoRechazo,
             monto,
+            fecha, // 🔥 ahora sí incluido correctamente
             timestamp: new Date().toISOString()
           }
         })
@@ -153,23 +137,23 @@ exports.handler = async (event, context) => {
         "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ 
-        success: false, 
-        error: "Method Not Allowed" 
+      body: JSON.stringify({
+        success: false,
+        error: "Method Not Allowed"
       })
     };
 
   } catch (error) {
-    console.error('Error in rechazos-transport function:', error);
-    
+    console.error('Error in rechazos function:', error);
+
     return {
       statusCode: 500,
       headers: {
         "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ 
-        success: false, 
+      body: JSON.stringify({
+        success: false,
         error: error.message || "Error interno del servidor"
       })
     };
