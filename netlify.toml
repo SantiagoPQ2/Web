@@ -1,7 +1,23 @@
 [build]
   command = "npm run build"
-  publish = "dist" # o "build", según cómo compile tu React/Vite
+  publish = "dist"
 
+# Headers generales para toda la app React
+[[headers]]
+  for = "/*"
+  [headers.values]
+  Access-Control-Allow-Origin = "*"
+  Cache-Control = "public, max-age=0, must-revalidate"
+
+# ⚡ Forzar que el Excel siempre se pida nuevo
+[[headers]]
+  for = "/CSV.xlsx"
+  [headers.values]
+  Cache-Control = "no-cache, no-store, must-revalidate"
+  Pragma = "no-cache"
+  Expires = "0"
+
+# 🔄 Para apps de React SPA: todas las rutas deben devolver index.html
 [[redirects]]
   from = "/*"
   to = "/index.html"
