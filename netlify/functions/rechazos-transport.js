@@ -63,19 +63,20 @@ exports.handler = async (event, context) => {
       const spreadsheetId = process.env.SPREADSHEET_ID;
 
       // Prepare data in exact sequence for Google Sheets
-      // Order: Transporte, Cliente, Motivo de Rechazo, Monto
+      // Order: Transporte, Cliente, Motivo de Rechazo, Monto, Fecha
       const rowData = [
         transporte.trim(),
         cliente.trim(), 
         motivoRechazo.trim(),
-        monto.trim()
+        monto.trim(),
+        fecha
       ];
 
       // First, try to get the sheet to check if it exists
       try {
         await sheets.spreadsheets.get({
           spreadsheetId: spreadsheetId,
-          ranges: ['Rechazos!A1:D1']
+          ranges: ['Rechazos!A1:E1']
         });
       } catch (error) {
         // If sheet doesn't exist, create it with headers
@@ -96,10 +97,10 @@ exports.handler = async (event, context) => {
           // Add headers in exact sequence
           await sheets.spreadsheets.values.update({
             spreadsheetId: spreadsheetId,
-            range: 'Rechazos!A1:D1',
+            range: 'Rechazos!A1:E1',
             valueInputOption: 'USER_ENTERED',
             resource: {
-              values: [['Transporte', 'Cliente', 'Motivo de Rechazo', 'Monto']]
+              values: [['Transporte', 'Cliente', 'Motivo de Rechazo', 'Monto', 'Fecha']]
             }
           });
         } catch (createError) {
@@ -110,7 +111,7 @@ exports.handler = async (event, context) => {
       // Append the new row to the sheet
       const appendResult = await sheets.spreadsheets.values.append({
         spreadsheetId: spreadsheetId,
-        range: "Rechazos!A:D",
+        range: "Rechazos!A:E",
         valueInputOption: "USER_ENTERED",
         resource: {
           values: [rowData]

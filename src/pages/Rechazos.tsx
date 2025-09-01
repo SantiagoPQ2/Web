@@ -1,291 +1,229 @@
-import React, { useState, useEffect } from 'react';
-import { Save, AlertCircle, CheckCircle, Truck, User, FileText, DollarSign } from 'lucide-react';
 
-interface FormData {
+interface RechazoData {
   transporte: string;
   cliente: string;
   motivoRechazo: string;
   monto: string;
-  fecha: string;
-}
-
-interface FormErrors {
-  transporte?: string;
-  cliente?: string;
-  motivoRechazo?: string;
-  monto?: string;
   fecha?: string;
+  timestamp?: string;
+}
+import React, { useState, useEffect } from 'react';
+import { AlertTriangle, Truck, User, FileText, DollarSign, RefreshCw, Calendar } from 'lucide-react';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorMessage from '../components/ErrorMessage';
+
+interface RechazoData {
+  transporte: string;
+  cliente: string;
+  motivoRechazo: string;
+  monto: string;
+  fecha?: string;
+  timestamp?: string;
 }
 
 const Rechazos: React.FC = () => {
-  const [formData, setFormData] = useState<FormData>({
-    transporte: '',
-    cliente: '',
-    motivoRechazo: '',
-    monto: '',
-    fecha: ''
-  });
+  const [rechazos, setRechazos] = useState<RechazoData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredRechazos, setFilteredRechazos] = useState<RechazoData[]>([]);
 
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Set fecha actual por defecto
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    setFormData(prev => ({ ...prev, fecha: today }));
-  }, []);
-
-  const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    if (!formData.transporte.trim()) {
-      newErrors.transporte = 'El campo Transporte es obligatorio';
-    }
-
-    if (!formData.cliente.trim()) {
-      newErrors.cliente = 'El campo Cliente es obligatorio';
-    }
-
-    if (!formData.motivoRechazo.trim()) {
-      newErrors.motivoRechazo = 'El campo Motivo de Rechazo es obligatorio';
-    }
-
-    if (!formData.monto.trim()) {
-      newErrors.monto = 'El campo Monto es obligatorio';
-    } else if (isNaN(Number(formData.monto)) || Number(formData.monto) < 0) {
-      newErrors.monto = 'Debe ser un número válido mayor o igual a 0';
-    }
-
-    if (!formData.fecha) {
-      newErrors.fecha = 'La fecha es obligatoria';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleInputChange = (field: keyof FormData, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
-    if (message) {
-      setMessage(null);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
-
-    setLoading(true);
-    setMessage(null);
-
+  const loadRechazos = async () => {
     try {
-      const orderedData = {
-        transporte: formData.transporte.trim(),
-        cliente: formData.cliente.trim(),
-        motivoRechazo: formData.motivoRechazo.trim(),
-        monto: formData.monto.trim(),
-        fecha: formData.fecha
-      };
+      setLoading(true);
+      setError(null);
 
-      const response = await fetch('/.netlify/functions/rechazos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderedData),
+      const response = await fetch('/.netlify/functions/get-rechazos', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
+        throw new Error(`Error ${response.status}: No se pudieron cargar los rechazos`);
       }
 
-      await response.json();
-      setMessage({ type: 'success', text: '✅ Registro de rechazo enviado correctamente' });
+      const data = await response.json();
+      setRechazos(data.rechazos || []);
+      setFilteredRechazos(data.rechazos || []);
 
-      const today = new Date().toISOString().split('T')[0];
-      setFormData({
-        transporte: '',
-        cliente: '',
-        motivoRechazo: '',
-        monto: '',
-        fecha: today
-      });
-      setErrors({});
-    } catch (error) {
-      console.error('Error al enviar datos:', error);
-      setMessage({
-        type: 'error',
-        text: `❌ Error al guardar: ${error instanceof Error ? error.message : 'Verifique su conexión'}`
-      });
+    } catch (err) {
+      console.error('Error al cargar rechazos:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar los datos');
     } finally {
       setLoading(false);
     }
   };
 
+  // Filtrar rechazos basado en el término de búsqueda
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredRechazos(rechazos);
+    } else {
+      const filtered = rechazos.filter(rechazo =>
+        rechazo.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rechazo.transporte.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        rechazo.motivoRechazo.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredRechazos(filtered);
+    }
+  }, [searchTerm, rechazos]);
+
+  // Cargar datos al montar el componente
+  useEffect(() => {
+    loadRechazos();
+  }, []);
+
+  const formatCurrency = (amount: string) => {
+    const num = parseFloat(amount);
+    return isNaN(num) ? amount : `$${num.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'Sin fecha';
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('es-AR');
+    } catch {
+      return dateString;
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center mb-6">
-          <div className="bg-red-100 rounded-full p-2 mr-3">
-            <Save className="h-6 w-6 text-red-700" />
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="bg-red-100 rounded-full p-2 mr-3">
+              <AlertTriangle className="h-6 w-6 text-red-700" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Rechazos Registrados</h1>
+              <p className="text-gray-600">Visualización de rechazos guardados en Google Sheets</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Rechazos - Registro</h1>
-            <p className="text-gray-600">Registre rechazos de clientes en Google Sheets</p>
-          </div>
+          <button
+            onClick={loadRechazos}
+            disabled={loading}
+            className="flex items-center px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 disabled:bg-gray-400 transition-colors duration-200"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
         </div>
-
-        {message && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center ${
-            message.type === 'success'
-              ? 'bg-green-50 border border-green-200'
-              : 'bg-red-50 border border-red-200'
-          }`}>
-            {message.type === 'success' ? (
-              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
-            ) : (
-              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
-            )}
-            <span className={message.type === 'success' ? 'text-green-800' : 'text-red-800'}>
-              {message.text}
-            </span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Transporte */}
-          <div>
-            <label htmlFor="transporte" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <Truck className="h-4 w-4 mr-1" />
-              Transporte <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="transporte"
-              value={formData.transporte}
-              onChange={(e) => handleInputChange('transporte', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.transporte ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Ingrese el transporte"
-              disabled={loading}
-            />
-            {errors.transporte && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.transporte}</p>}
-          </div>
-
-          {/* Cliente */}
-          <div>
-            <label htmlFor="cliente" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <User className="h-4 w-4 mr-1" />
-              Cliente <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              id="cliente"
-              value={formData.cliente}
-              onChange={(e) => handleInputChange('cliente', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.cliente ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Ingrese el cliente"
-              disabled={loading}
-            />
-            {errors.cliente && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.cliente}</p>}
-          </div>
-
-          {/* Motivo */}
-          <div>
-            <label htmlFor="motivoRechazo" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <FileText className="h-4 w-4 mr-1" />
-              Motivo del Rechazo <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              id="motivoRechazo"
-              value={formData.motivoRechazo}
-              onChange={(e) => handleInputChange('motivoRechazo', e.target.value)}
-              rows={3}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.motivoRechazo ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Describa el motivo del rechazo"
-              disabled={loading}
-            />
-            {errors.motivoRechazo && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.motivoRechazo}</p>}
-          </div>
-
-          {/* Monto */}
-          <div>
-            <label htmlFor="monto" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <DollarSign className="h-4 w-4 mr-1" />
-              Monto <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              id="monto"
-              value={formData.monto}
-              onChange={(e) => handleInputChange('monto', e.target.value)}
-              min="0"
-              step="0.01"
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.monto ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              placeholder="Monto del rechazo"
-              disabled={loading}
-            />
-            {errors.monto && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.monto}</p>}
-          </div>
-
-          {/* Fecha */}
-          <div>
-            <label htmlFor="fecha" className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <Calendar className="h-4 w-4 mr-1" />
-              Fecha <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              id="fecha"
-              value={formData.fecha}
-              onChange={(e) => handleInputChange('fecha', e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.fecha ? 'border-red-300 bg-red-50' : 'border-gray-300'
-              }`}
-              disabled={loading}
-            />
-            {errors.fecha && <p className="mt-1 text-sm text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{errors.fecha}</p>}
-          </div>
-
-          {/* Botón */}
-          <div className="pt-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full flex items-center justify-center px-6 py-3 border border-transparent rounded-lg text-white font-medium transition-all duration-200 ${
-                loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Enviando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Guardar Rechazo
-                </>
-              )}
-            </button>
-          </div>
-        </form>
       </div>
-    </div>
-  );
-};
 
+      {/* Barra de búsqueda */}
+      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="max-w-md">
+          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
+            Buscar en rechazos
+          </label>
+          <input
+            type="text"
+            id="search"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar por cliente, transporte o motivo..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Estados de carga y error */}
+      {loading && (
+        <div className="bg-white rounded-lg shadow-sm p-8">
+          <LoadingSpinner message="Cargando rechazos desde Google Sheets..." />
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="mb-6">
+          <ErrorMessage message={error} onRetry={loadRechazos} />
+        </div>
+      )}
+
+      {/* Lista de rechazos */}
+      {!loading && !error && (
+        <div className="space-y-4">
+          {filteredRechazos.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+              <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                {searchTerm ? 'No se encontraron rechazos' : 'No hay rechazos registrados'}
+              </h3>
+              <p className="text-gray-600">
+                {searchTerm 
+                  ? `No hay rechazos que coincidan con "${searchTerm}"`
+                  : 'Aún no se han registrado rechazos en el sistema'
+                }
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Contador de resultados */}
+              <div className="bg-white rounded-lg shadow-sm p-4">
+                <p className="text-sm text-gray-600">
+                  Mostrando {filteredRechazos.length} de {rechazos.length} rechazos
+                  {searchTerm && ` para "${searchTerm}"`}
+                </p>
+              </div>
+
+              {/* Grid de rechazos */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredRechazos.map((rechazo, index) => (
+                  <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200">
+                    {/* Header de la tarjeta */}
+                    <div className="flex items-center mb-4">
+                      <div className="bg-red-100 rounded-full p-2 mr-3">
+                        <AlertTriangle className="h-5 w-5 text-red-700" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-800 truncate">
+                          {rechazo.cliente}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {formatDate(rechazo.fecha || rechazo.timestamp || '')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Información del rechazo */}
+                    <div className="space-y-3">
+                      {/* Transporte */}
+                      <div className="flex items-start">
+                        <Truck className="h-4 w-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Transporte</p>
+                          <p className="text-sm font-medium text-gray-800">{rechazo.transporte}</p>
+                        </div>
+                      </div>
+
+                      {/* Cliente */}
+                      <div className="flex items-start">
+                        <User className="h-4 w-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Cliente</p>
+                          <p className="text-sm font-medium text-gray-800">{rechazo.cliente}</p>
+                        </div>
+                      </div>
+
+                      {/* Motivo */}
+                      <div className="flex items-start">
+                        <FileText className="h-4 w-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Motivo</p>
+                          <p className="text-sm text-gray-700 leading-relaxed">{rechazo.motivoRechazo}</p>
+                        </div>
+                      </div>
+
+import { AlertTriangle, Truck, User, FileText, DollarSign, RefreshCw, Calendar, Plus } from 'lucide-react';
+                      {/* Monto */}
+import { Link } from 'react-router-dom';
+};
+import LoadingSpinner from '../components/LoadingSpinner';
+
+import ErrorMessage from '../components/ErrorMessage';
 export default Rechazos;

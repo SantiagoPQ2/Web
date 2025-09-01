@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Search, Save } from 'lucide-react';
+import { ChevronDown, Search, Save, AlertTriangle, Plus } from 'lucide-react';
 
 const Navigation: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -28,8 +28,12 @@ const Navigation: React.FC = () => {
     switch (location.pathname) {
       case '/':
         return 'Buscar Cliente';
-      case '/drive':
-        return 'Drive';
+      case '/bonificaciones':
+        return 'Bonificaciones';
+      case '/rechazos':
+        return 'Rechazos';
+      case '/rechazos/nuevo':
+        return 'Nuevo Rechazo';
       default:
         return 'VaFood';
     }
@@ -44,9 +48,21 @@ const Navigation: React.FC = () => {
     },
     {
       name: 'Bonificaciones',
-      path: '/drive',
+      path: '/bonificaciones',
       icon: Save,
-      description: 'Registrar Bonificaciones en Google Sheets'
+      description: 'Registrar bonificaciones de clientes'
+    },
+    {
+      name: 'Rechazos',
+      path: '/rechazos',
+      icon: AlertTriangle,
+      description: 'Ver rechazos registrados'
+    },
+    {
+      name: 'Nuevo Rechazo',
+      path: '/rechazos/nuevo',
+      icon: Plus,
+      description: 'Registrar nuevo rechazo'
     }
   ];
 
