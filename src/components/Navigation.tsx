@@ -30,8 +30,8 @@ const Navigation: React.FC = () => {
         return 'Bonificaciones';
       case '/notas-credito':
         return 'Notas de Crédito';
-      case '/coordenadas':
-        return 'Coordenadas';
+      case '/CoordsPage':
+        return 'CoordsPage';
       default:
         return 'VaFood';
     }
@@ -57,8 +57,8 @@ const Navigation: React.FC = () => {
       description: 'Registrar notas de crédito en Google Sheets'
     },
     {
-      name: 'Coordenadas',
-      path: '/coordenadas',
+      name: 'CoordsPage',
+      path: '/CoordsPage',
       icon: MapPin,
       description: 'Consultar coordenadas de clientes'
     }
