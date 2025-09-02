@@ -5,6 +5,8 @@ import { useAuth } from "../context/AuthContext"
 export default function Settings() {
   const { user, logout } = useAuth()
   const [profile, setProfile] = useState({ name: "", age: "", phone: "" })
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -44,6 +46,31 @@ export default function Settings() {
     }
   }
 
+  const changePassword = async () => {
+    if (!user) return
+    if (!newPassword || !confirmPassword) {
+      alert("⚠️ Completa ambos campos de contraseña")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      alert("⚠️ Las contraseñas no coinciden")
+      return
+    }
+
+    const { error } = await supabase
+      .from("usuarios_app")
+      .update({ password: newPassword })
+      .eq("id", user.id)
+
+    if (error) {
+      alert("❌ Error al cambiar contraseña: " + error.message)
+    } else {
+      alert("✅ Contraseña actualizada correctamente")
+      setNewPassword("")
+      setConfirmPassword("")
+    }
+  }
+
   const handleLogout = () => {
     logout()
     window.location.href = "/" // redirige al login
@@ -79,9 +106,34 @@ export default function Settings() {
         Guardar
       </button>
 
+      <hr className="my-4" />
+
+      <h3 className="text-lg font-semibold">🔑 Cambiar contraseña</h3>
+      <input
+        type="password"
+        placeholder="Nueva contraseña"
+        value={newPassword}
+        onChange={(e) => setNewPassword(e.target.value)}
+        className="border p-2 w-full rounded"
+      />
+      <input
+        type="password"
+        placeholder="Confirmar nueva contraseña"
+        value={confirmPassword}
+        onChange={(e) => setConfirmPassword(e.target.value)}
+        className="border p-2 w-full rounded"
+      />
+
+      <button
+        onClick={changePassword}
+        className="bg-blue-600 text-white px-4 py-2 rounded w-full"
+      >
+        Cambiar contraseña
+      </button>
+
       <button
         onClick={handleLogout}
-        className="bg-gray-600 text-white px-4 py-2 rounded w-full"
+        className="bg-gray-600 text-white px-4 py-2 rounded w-full mt-2"
       >
         Cerrar sesión
       </button>
