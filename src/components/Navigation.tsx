@@ -29,6 +29,8 @@ const Navigation: React.FC = () => {
         return 'Bonificaciones';
       case '/rechazos/nuevo':
         return 'Nuevo Rechazo';
+      case '/coordenadas':
+        return 'Coordenadas';
       case '/gps-logger':
         return 'GPS Logger';
       case '/notas-credito':
@@ -64,6 +66,12 @@ const Navigation: React.FC = () => {
       description: 'Registrar notas de crédito en Google Sheets'
     },
     {
+      name: 'Coordenadas',
+      path: '/coordenadas',
+      icon: MapPin,
+      description: 'Consultar coordenadas de clientes'
+    },
+    {
       name: 'GPS Logger',
       path: '/gps-logger',
       icon: MapPin,
@@ -75,6 +83,7 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          {/* Logo */}
           <div className="flex items-center">
             <div className="mr-3">
               <img 
@@ -88,6 +97,7 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
+          {/* Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
