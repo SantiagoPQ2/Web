@@ -7,19 +7,16 @@ const Navigation: React.FC = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
-  // Cerrar dropdown al hacer click fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Cerrar dropdown al cambiar de ruta
   useEffect(() => {
     setIsDropdownOpen(false);
   }, [location]);
@@ -32,8 +29,8 @@ const Navigation: React.FC = () => {
         return 'Bonificaciones';
       case '/rechazos/nuevo':
         return 'Nuevo Rechazo';
-      case '/coordenadas':
-        return 'Coordenadas';
+      case '/gps-logger':
+        return 'GPS Logger';
       case '/notas-credito':
         return 'Notas de Crédito';
       default:
@@ -67,10 +64,10 @@ const Navigation: React.FC = () => {
       description: 'Registrar notas de crédito en Google Sheets'
     },
     {
-      name: 'Coordenadas',
-      path: '/coordenadas',
+      name: 'GPS Logger',
+      path: '/gps-logger',
       icon: MapPin,
-      description: 'Consultar coordenadas de clientes'
+      description: 'Registrar y ver coordenadas GPS'
     }
   ];
 
@@ -78,7 +75,6 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo y nombre */}
           <div className="flex items-center">
             <div className="mr-3">
               <img 
@@ -92,7 +88,6 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* Navegación con dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -100,13 +95,10 @@ const Navigation: React.FC = () => {
             >
               <span className="mr-2">{getCurrentPageName()}</span>
               <ChevronDown 
-                className={`h-4 w-4 transition-transform duration-200 ${
-                  isDropdownOpen ? 'rotate-180' : ''
-                }`} 
+                className={`h-4 w-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} 
               />
             </button>
 
-            {/* Dropdown menu */}
             {isDropdownOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 animate-fadeIn">
                 <div className="py-2">
@@ -141,5 +133,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
-
 
