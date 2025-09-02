@@ -31,8 +31,6 @@ const Navigation: React.FC = () => {
         return 'Nuevo Rechazo';
       case '/gps-logger':
         return 'GPS Logger';
-      case '/coordenadas': 
-        return 'Coordenadas'; 
       case '/notas-credito':
         return 'Notas de Crédito';
       default:
@@ -41,44 +39,37 @@ const Navigation: React.FC = () => {
   };
 
   const menuItems = [
-  {
-    name: 'Buscar Cliente',
-    path: '/',
-    icon: Search,
-    description: 'Consultar información de clientes'
-  },
-  {
-    name: 'Bonificaciones',
-    path: '/bonificaciones',
-    icon: Save,
-    description: 'Registrar bonificaciones de clientes'
-  },
-  {
-    name: 'Nuevo Rechazo',
-    path: '/rechazos/nuevo',
-    icon: Plus,
-    description: 'Registrar nuevo rechazo'
-  },
-  {
-    name: 'Notas de Crédito',
-    path: '/notas-credito',
-    icon: FileText,
-    description: 'Registrar notas de crédito en Google Sheets'
-  },
-  {
-    name: 'Coordenadas',
-    path: '/coordenadas',
-    icon: MapPin,
-    description: 'Consultar coordenadas de clientes'
-  },
-  {
-    name: 'GPS Logger',
-    path: '/gps-logger',
-    icon: MapPin,
-    description: 'Registrar y ver coordenadas GPS'
-  }
-];
-
+    {
+      name: 'Buscar Cliente',
+      path: '/',
+      icon: Search,
+      description: 'Consultar información de clientes'
+    },
+    {
+      name: 'Bonificaciones',
+      path: '/bonificaciones',
+      icon: Save,
+      description: 'Registrar bonificaciones de clientes'
+    },
+    {
+      name: 'Nuevo Rechazo',
+      path: '/rechazos/nuevo',
+      icon: Plus,
+      description: 'Registrar nuevo rechazo'
+    },
+    {
+      name: 'Notas de Crédito',
+      path: '/notas-credito',
+      icon: FileText,
+      description: 'Registrar notas de crédito en Google Sheets'
+    },
+    {
+      name: 'GPS Logger',
+      path: '/gps-logger',
+      icon: MapPin,
+      description: 'Registrar y ver coordenadas GPS'
+    }
+  ];
 
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
@@ -142,4 +133,3 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
-
