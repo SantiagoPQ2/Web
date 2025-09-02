@@ -1,5 +1,4 @@
 import React from 'react';
-import { FileSpreadsheet } from 'lucide-react';
 import { useExcelData } from '../hooks/useExcelData';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -7,6 +6,7 @@ import SearchBox from '../components/SearchBox';
 import ClientResult from '../components/ClientResult';
 import EmptyState from '../components/EmptyState';
 import { CONFIG } from '../config/constants';
+import { supabase } from '../config/supabase';  // 👈 importar supabase
 
 const SearchPage: React.FC = () => {
   const {
@@ -17,30 +17,45 @@ const SearchPage: React.FC = () => {
     searchResult,
     hasSearched,
     setSearchTerm,
-    handleSearch,
+    handleSearch: handleExcelSearch,
     retryLoad,
   } = useExcelData();
 
+  // 🔹 Envolvemos handleSearch para también guardar en Supabase
+  const handleSearch = async () => {
+    if (!searchTerm) return;
+
+    // Guardar en Supabase
+    const { error } = await supabase
+      .from("busquedas_clientes")
+      .insert([{ cliente_numero: searchTerm }]);
+
+    if (error) {
+      console.error("❌ Error al guardar búsqueda:", error.message);
+    } else {
+      console.log("✅ Búsqueda guardada en Supabase:", searchTerm);
+    }
+
+    // Ejecutar búsqueda normal en Excel
+    handleExcelSearch();
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Estado de carga inicial */}
       {loading && (
         <div className="bg-white rounded-lg shadow-sm p-8">
           <LoadingSpinner message={CONFIG.MESSAGES.LOADING} />
         </div>
       )}
 
-      {/* Estado de error */}
       {error && !loading && (
         <div className="mb-6">
           <ErrorMessage message={error} onRetry={retryLoad} />
         </div>
       )}
 
-      {/* Contenido principal cuando los datos están cargados */}
       {data && !loading && !error && (
         <div className="space-y-6">
-          {/* Caja de búsqueda */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Buscar Cliente
@@ -48,12 +63,11 @@ const SearchPage: React.FC = () => {
             <SearchBox
               value={searchTerm}
               onChange={setSearchTerm}
-              onSearch={handleSearch}
+              onSearch={handleSearch}  {/* 👈 usamos el nuevo handleSearch */}
               placeholder={CONFIG.MESSAGES.SEARCH_PLACEHOLDER}
             />
           </div>
 
-          {/* Resultados de la búsqueda */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             {searchResult ? (
               <ClientResult cliente={searchResult} />
