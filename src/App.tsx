@@ -18,14 +18,13 @@ function App() {
         <Navigation />
         
         <main>
-           <Routes>
+          <Routes>
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
             <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-            <Route path="/coordenadas" element={<CoordsPage />} />    {/* 👈 la vieja */}
             <Route path="/notas-credito" element={<NotasCredito />} />
-            <Route path="/gps-logger" element={<GpsLogger />} />      {/* 👈 la nueva */}
-</Routes>
+            <Route path="/gps-logger" element={<GpsLogger />} /> {/* 👈 nueva ruta */}
+          </Routes>
         </main>
 
         {hasUpdate && (
@@ -46,4 +45,3 @@ function App() {
 }
 
 export default App;
-
