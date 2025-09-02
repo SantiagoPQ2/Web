@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { supabase } from "../config/supabase"
+import { useAuth } from "../context/AuthContext" // 👈 usuario logueado
 
 export default function GpsLogger() {
+  const { user } = useAuth()
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [pointName, setPointName] = useState("")
   const [log, setLog] = useState<{ name: string; lat: number; lng: number }[]>([])
@@ -26,13 +28,21 @@ export default function GpsLogger() {
         setLog([...log, newPoint])
         setPointName("")
 
-        // Guardar en Supabase
+        // Guardar en Supabase con usuario
         const { error } = await supabase
           .from("coordenadas")
-          .insert([{ nombre: newPoint.name, lat: newPoint.lat, lng: newPoint.lng }])
+          .insert([{
+            nombre: newPoint.name,
+            lat: newPoint.lat,
+            lng: newPoint.lng,
+            created_by: user?.id   // 👈 guarda el id del usuario logueado
+          }])
 
-        if (error) console.error("❌ Error guardando coordenada:", error.message)
-        else console.log("✅ Coordenada guardada en Supabase:", newPoint)
+        if (error) {
+          console.error("❌ Error guardando coordenada:", error.message)
+        } else {
+          console.log("✅ Coordenada guardada en Supabase:", newPoint, "por", user?.username)
+        }
       },
       (err) => {
         console.error(err)
@@ -70,7 +80,7 @@ export default function GpsLogger() {
 
       {log.length > 0 && (
         <div className="mt-4">
-          <h3 className="font-semibold">Puntos guardados:</h3>
+          <h3 className="font-semibold">Puntos guardados (locales):</h3>
           <ul className="list-disc pl-5">
             {log.map((p, i) => (
               <li key={i}>
