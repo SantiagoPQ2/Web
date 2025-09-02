@@ -13,28 +13,52 @@ import { AuthProvider, useAuth } from "./context/AuthContext"
 import { useVersionChecker } from "./hooks/useVersionChecker"
 import UpdateBanner from "./components/UpdateBanner"
 
-// Rutas protegidas
 function ProtectedApp() {
   const { user } = useAuth()
   const hasUpdate = useVersionChecker(60000)
 
   if (!user) return <Login />
 
+  const role = user.role
+
+  let allowedRoutes
+  if (role === "vendedor") {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/bonificaciones" element={<Bonificaciones />} />
+        <Route path="/notas-credito" element={<NotasCredito />} />
+        <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    )
+  } else if (role === "logistica") {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/rechazos/nuevo" element={<RechazosForm />} />
+        <Route path="/coordenadas" element={<CoordsPage />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    )
+  } else {
+    // admin: todas las rutas
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/bonificaciones" element={<Bonificaciones />} />
+        <Route path="/rechazos/nuevo" element={<RechazosForm />} />
+        <Route path="/coordenadas" element={<CoordsPage />} />
+        <Route path="/notas-credito" element={<NotasCredito />} />
+        <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navigation />
-
-      <main>
-        <Routes>
-          <Route path="/" element={<SearchPage />} />
-          <Route path="/bonificaciones" element={<Bonificaciones />} />
-          <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-          <Route path="/coordenadas" element={<CoordsPage />} />
-          <Route path="/notas-credito" element={<NotasCredito />} />
-          <Route path="/gps-logger" element={<GpsLogger />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </main>
+      <main>{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
