@@ -4,13 +4,13 @@ import Navigation from "./components/Navigation";
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
 import RechazosForm from "./pages/RechazosForm";
-import CoordsPage from "./pages/CoordsPage";
 import NotasCredito from "./pages/NotasCredito";
+import GpsLogger from "./pages/GpsLogger"; // 👈 nuevo
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
 
 function App() {
-  const hasUpdate = useVersionChecker(60000); // revisa cada 60s
+  const hasUpdate = useVersionChecker(60000);
 
   return (
     <Router>
@@ -22,8 +22,8 @@ function App() {
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
             <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-            <Route path="/coordenadas" element={<CoordsPage />} />
             <Route path="/notas-credito" element={<NotasCredito />} />
+            <Route path="/gps-logger" element={<GpsLogger />} /> {/* 👈 nueva ruta */}
           </Routes>
         </main>
 
@@ -45,3 +45,4 @@ function App() {
 }
 
 export default App;
+
