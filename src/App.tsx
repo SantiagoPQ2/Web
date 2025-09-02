@@ -4,8 +4,9 @@ import Navigation from "./components/Navigation";
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
 import RechazosForm from "./pages/RechazosForm";
+import CoordsPage from "./pages/CoordsPage";
 import NotasCredito from "./pages/NotasCredito";
-import GpsLogger from "./pages/GpsLogger"; // 👈 nuevo
+import GpsLogger from "./pages/GpsLogger";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
 
@@ -22,8 +23,9 @@ function App() {
             <Route path="/" element={<SearchPage />} />
             <Route path="/bonificaciones" element={<Bonificaciones />} />
             <Route path="/rechazos/nuevo" element={<RechazosForm />} />
+            <Route path="/coordenadas" element={<CoordsPage />} />  {/* 👈 página original */}
             <Route path="/notas-credito" element={<NotasCredito />} />
-            <Route path="/gps-logger" element={<GpsLogger />} /> {/* 👈 nueva ruta */}
+            <Route path="/gps-logger" element={<GpsLogger />} />    {/* 👈 nueva */}
           </Routes>
         </main>
 
