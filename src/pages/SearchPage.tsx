@@ -6,9 +6,12 @@ import SearchBox from '../components/SearchBox';
 import ClientResult from '../components/ClientResult';
 import EmptyState from '../components/EmptyState';
 import { CONFIG } from '../config/constants';
-import { supabase } from '../config/supabase'; // 👈 conexión a Supabase
+import { supabase } from '../config/supabase';
+import { useAuth } from '../context/AuthContext'; // 👈 usuario logueado
 
 const SearchPage: React.FC = () => {
+  const { user } = useAuth();
+
   const {
     data,
     loading,
@@ -24,11 +27,14 @@ const SearchPage: React.FC = () => {
   const handleSearch = async () => {
     if (!searchTerm) return;
 
-    console.log("Intentando guardar en Supabase:", searchTerm);
+    console.log("Intentando guardar en Supabase:", searchTerm, "por", user?.username);
 
     const { data: inserted, error } = await supabase
       .from("busquedas_clientes")
-      .insert([{ cliente_numero: searchTerm }])
+      .insert([{
+        cliente_numero: searchTerm,
+        created_by: user?.id   // 👈 guarda el id del usuario logueado
+      }])
       .select();
 
     if (error) {
@@ -84,3 +90,4 @@ const SearchPage: React.FC = () => {
 };
 
 export default SearchPage;
+
