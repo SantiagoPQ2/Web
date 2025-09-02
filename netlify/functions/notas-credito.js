@@ -16,9 +16,10 @@ exports.handler = async (event) => {
   try {
     if (event.httpMethod === "POST") {
       const body = JSON.parse(event.body);
-      const { cliente, numeroNC, monto, descripcion, fecha } = body;
+      // Los campos que realmente manda tu React
+      const { fechaEntrega, cliente, codigoArticulo, bultosTotal } = body;
 
-      if (!cliente || !numeroNC || !monto || !descripcion || !fecha) {
+      if (!fechaEntrega || !cliente || !codigoArticulo || !bultosTotal) {
         return {
           statusCode: 400,
           headers: { "Access-Control-Allow-Origin": "https://vafoodbot.netlify.app" },
@@ -36,17 +37,17 @@ exports.handler = async (event) => {
       const sheets = google.sheets({ version: "v4", auth });
       const spreadsheetId = process.env.SPREADSHEET_ID;
 
+      // Orden de columnas en tu hoja: Fecha, Cliente, Código Artículo, Bultos
       const rowData = [
+        fechaEntrega.trim(),
         cliente.trim(),
-        numeroNC.trim(),
-        monto.trim(),
-        descripcion.trim(),
-        fecha.trim()
+        codigoArticulo.trim(),
+        bultosTotal.trim()
       ];
 
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: "NC!A:E",
+        range: "NC!A:D", // ahora 4 columnas
         valueInputOption: "USER_ENTERED",
         resource: { values: [rowData] }
       });
