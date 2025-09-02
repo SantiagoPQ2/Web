@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ChevronDown, Search, Save, Plus, FileText, MapPin } from 'lucide-react';
+import { ChevronDown, Search, Save, Plus, FileText, MapPin, User } from 'lucide-react';
 
 const Navigation: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -35,6 +35,8 @@ const Navigation: React.FC = () => {
         return 'GPS Logger';
       case '/notas-credito':
         return 'Notas de Crédito';
+      case '/settings':
+        return 'Settings';
       default:
         return 'VaFood';
     }
@@ -76,6 +78,12 @@ const Navigation: React.FC = () => {
       path: '/gps-logger',
       icon: MapPin,
       description: 'Registrar y ver coordenadas GPS'
+    },
+    {
+      name: 'Settings',
+      path: '/settings',
+      icon: User,
+      description: 'Configurar mi perfil y cerrar sesión'
     }
   ];
 
