@@ -6,7 +6,7 @@ import SearchBox from '../components/SearchBox';
 import ClientResult from '../components/ClientResult';
 import EmptyState from '../components/EmptyState';
 import { CONFIG } from '../config/constants';
-import { supabase } from '../config/supabase';  // 👈 importar supabase
+import { supabase } from '../config/supabase';  // 👈 conexión a Supabase
 
 const SearchPage: React.FC = () => {
   const {
@@ -21,7 +21,7 @@ const SearchPage: React.FC = () => {
     retryLoad,
   } = useExcelData();
 
-  // 🔹 Envolvemos handleSearch para también guardar en Supabase
+  // Nuevo handleSearch que guarda la búsqueda en Supabase y luego busca en Excel
   const handleSearch = async () => {
     if (!searchTerm) return;
 
@@ -42,32 +42,38 @@ const SearchPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Estado de carga inicial */}
       {loading && (
         <div className="bg-white rounded-lg shadow-sm p-8">
           <LoadingSpinner message={CONFIG.MESSAGES.LOADING} />
         </div>
       )}
 
+      {/* Estado de error */}
       {error && !loading && (
         <div className="mb-6">
           <ErrorMessage message={error} onRetry={retryLoad} />
         </div>
       )}
 
+      {/* Contenido principal cuando los datos están cargados */}
       {data && !loading && !error && (
         <div className="space-y-6">
+          {/* Caja de búsqueda */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Buscar Cliente
             </h2>
+            {/* Usamos el nuevo handleSearch que guarda también en Supabase */}
             <SearchBox
               value={searchTerm}
               onChange={setSearchTerm}
-              onSearch={handleSearch}  {/* 👈 usamos el nuevo handleSearch */}
+              onSearch={handleSearch}
               placeholder={CONFIG.MESSAGES.SEARCH_PLACEHOLDER}
             />
           </div>
 
+          {/* Resultados de la búsqueda */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             {searchResult ? (
               <ClientResult cliente={searchResult} />
