@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { useExcelData } from '../hooks/useExcelData';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -7,11 +7,8 @@ import ClientResult from '../components/ClientResult';
 import EmptyState from '../components/EmptyState';
 import { CONFIG } from '../config/constants';
 import { supabase } from '../config/supabase';
-import { useAuth } from '../context/AuthContext'; // 👈 usuario logueado
 
 const SearchPage: React.FC = () => {
-  const { user } = useAuth();
-
   const {
     data,
     loading,
@@ -24,23 +21,35 @@ const SearchPage: React.FC = () => {
     retryLoad,
   } = useExcelData();
 
+  // 👇 Guardamos el último cliente buscado
+  const lastSearchRef = useRef<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
   const handleSearch = async () => {
+    setLocalError(null);
+
     if (!searchTerm) return;
 
-    console.log("Intentando guardar en Supabase:", searchTerm, "por", user?.username);
+    // 🚫 Evitar búsqueda duplicada consecutiva
+    if (lastSearchRef.current === searchTerm) {
+      setLocalError("⚠️ Ya buscaste este cliente, prueba con otro distinto.");
+      return;
+    }
+
+    console.log("Intentando guardar en Supabase:", searchTerm);
 
     const { data: inserted, error } = await supabase
       .from("busquedas_clientes")
-      .insert([{
-        cliente_numero: searchTerm,
-        created_by: user?.id   // 👈 guarda el id del usuario logueado
-      }])
+      .insert([{ cliente_numero: searchTerm }])
       .select();
 
     if (error) {
       console.error("❌ Error al guardar búsqueda:", error.message);
+      setLocalError("❌ Error al guardar búsqueda.");
     } else {
       console.log("✅ Búsqueda guardada en Supabase:", inserted);
+      // ✅ Guardamos como la última búsqueda
+      lastSearchRef.current = searchTerm;
     }
 
     handleExcelSearch();
@@ -54,9 +63,9 @@ const SearchPage: React.FC = () => {
         </div>
       )}
 
-      {error && !loading && (
+      {(error || localError) && !loading && (
         <div className="mb-6">
-          <ErrorMessage message={error} onRetry={retryLoad} />
+          <ErrorMessage message={error || localError} onRetry={retryLoad} />
         </div>
       )}
 
@@ -90,4 +99,3 @@ const SearchPage: React.FC = () => {
 };
 
 export default SearchPage;
-
