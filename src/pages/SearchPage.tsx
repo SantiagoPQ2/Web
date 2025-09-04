@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { useExcelData } from '../hooks/useExcelData';
+import { supabase } from '../config/supabase';
+import { CONFIG } from '../config/constants';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import SearchBox from '../components/SearchBox';
 import ClientResult from '../components/ClientResult';
 import EmptyState from '../components/EmptyState';
-import { CONFIG } from '../config/constants';
-import { supabase } from '../config/supabase';
 
 const SearchPage: React.FC = () => {
   const {
@@ -21,16 +21,17 @@ const SearchPage: React.FC = () => {
     retryLoad,
   } = useExcelData();
 
-  // 👇 Guardamos el último cliente buscado
   const lastSearchRef = useRef<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // 👇 Recuperamos el usuario logueado desde localStorage
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   const handleSearch = async () => {
     setLocalError(null);
 
     if (!searchTerm) return;
 
-    // 🚫 Evitar búsqueda duplicada consecutiva
     if (lastSearchRef.current === searchTerm) {
       setLocalError("⚠️ Ya buscaste este cliente, prueba con otro distinto.");
       return;
@@ -40,7 +41,12 @@ const SearchPage: React.FC = () => {
 
     const { data: inserted, error } = await supabase
       .from("busquedas_clientes")
-      .insert([{ cliente_numero: searchTerm }])
+      .insert([
+        {
+          cliente_numero: searchTerm,
+          created_by: currentUser.id, // 👈 ahora guardamos el usuario logueado
+        },
+      ])
       .select();
 
     if (error) {
@@ -48,7 +54,6 @@ const SearchPage: React.FC = () => {
       setLocalError("❌ Error al guardar búsqueda.");
     } else {
       console.log("✅ Búsqueda guardada en Supabase:", inserted);
-      // ✅ Guardamos como la última búsqueda
       lastSearchRef.current = searchTerm;
     }
 
