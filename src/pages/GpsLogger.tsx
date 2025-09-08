@@ -7,6 +7,7 @@ export default function GpsLogger() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [pointName, setPointName] = useState("")
   const [log, setLog] = useState<{ name: string; lat: number; lng: number }[]>([])
+  const [loading, setLoading] = useState(false) // 👈 estado de cargando
 
   const savePoint = () => {
     if (!navigator.geolocation) {
@@ -16,11 +17,15 @@ export default function GpsLogger() {
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        if (loading) return // evita doble click mientras guarda
+        setLoading(true)
+
         const { latitude, longitude } = pos.coords
         setCoords({ lat: latitude, lng: longitude })
 
         if (pointName.trim() === "") {
           alert("⚠️ Primero ingresa un nombre para el punto")
+          setLoading(false)
           return
         }
 
@@ -40,13 +45,18 @@ export default function GpsLogger() {
 
         if (error) {
           console.error("❌ Error guardando coordenada:", error.message)
+          alert("❌ Error guardando coordenada: " + error.message)
         } else {
           console.log("✅ Coordenada guardada en Supabase:", newPoint, "por", user?.username)
+          alert("✅ Punto guardado correctamente")
         }
+
+        setLoading(false)
       },
       (err) => {
         console.error(err)
         alert("❌ Error obteniendo ubicación: " + err.message)
+        setLoading(false)
       }
     )
   }
@@ -65,9 +75,12 @@ export default function GpsLogger() {
 
       <button
         onClick={savePoint}
-        className="bg-red-700 text-white px-4 py-2 rounded w-full"
+        disabled={loading} // 👈 deshabilitado mientras guarda
+        className={`px-4 py-2 rounded w-full ${
+          loading ? "bg-gray-400 cursor-not-allowed" : "bg-red-700 text-white"
+        }`}
       >
-        Guardar punto actual
+        {loading ? "⏳ Guardando..." : "Guardar punto actual"}
       </button>
 
       {coords && (
@@ -93,4 +106,3 @@ export default function GpsLogger() {
     </div>
   )
 }
-
