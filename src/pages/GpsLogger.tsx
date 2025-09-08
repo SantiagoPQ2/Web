@@ -7,7 +7,6 @@ export default function GpsLogger() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [pointName, setPointName] = useState("")
   const [log, setLog] = useState<{ name: string; lat: number; lng: number }[]>([])
-  const [lastSaved, setLastSaved] = useState<string | null>(null) // 👈 último punto guardado
 
   const savePoint = () => {
     if (!navigator.geolocation) {
@@ -25,16 +24,9 @@ export default function GpsLogger() {
           return
         }
 
-        // 🚫 Evitar guardar dos veces seguidas el mismo punto
-        if (lastSaved === pointName.trim()) {
-          alert("⚠️ Ya guardaste este punto, ingresa otro diferente")
-          return
-        }
-
-        const newPoint = { name: pointName.trim(), lat: latitude, lng: longitude }
+        const newPoint = { name: pointName, lat: latitude, lng: longitude }
         setLog([...log, newPoint])
         setPointName("")
-        setLastSaved(newPoint.name) // 👈 actualizar último guardado
 
         // Guardar en Supabase con usuario
         const { error } = await supabase
@@ -48,7 +40,6 @@ export default function GpsLogger() {
 
         if (error) {
           console.error("❌ Error guardando coordenada:", error.message)
-          alert("❌ Error guardando coordenada: " + error.message)
         } else {
           console.log("✅ Coordenada guardada en Supabase:", newPoint, "por", user?.username)
         }
