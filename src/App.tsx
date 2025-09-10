@@ -9,6 +9,7 @@ import NotasCredito from "./pages/NotasCredito"
 import GpsLogger from "./pages/GpsLogger"
 import Settings from "./pages/Settings"
 import Login from "./pages/Login"
+import Informacion from "./pages/Informacion"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import { useVersionChecker } from "./hooks/useVersionChecker"
 import UpdateBanner from "./components/UpdateBanner"
@@ -29,6 +30,7 @@ function ProtectedApp() {
         <Route path="/bonificaciones" element={<Bonificaciones />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/informacion" element={<Informacion />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -37,6 +39,7 @@ function ProtectedApp() {
       <Routes>
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
+        <Route path="/informacion" element={<Informacion />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -50,6 +53,7 @@ function ProtectedApp() {
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/informacion" element={<Informacion />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -85,4 +89,3 @@ function App() {
 }
 
 export default App
-
