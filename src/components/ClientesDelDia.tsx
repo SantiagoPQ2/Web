@@ -1,8 +1,8 @@
 import React from "react"
 
 const clientes = [
-  { nombre: "Cliente 1", direccion: "Av. Siempre Viva 123", visita: "Mañana" },
-  { nombre: "Cliente 2", direccion: "Calle Falsa 456", visita: "Tarde" }
+  { nombre: "Cliente 1", direccion: "Dricka 123", visita: "Mañana" },
+  { nombre: "Cliente 2", direccion: "VaFood 456", visita: "Tarde" }
 ]
 
 export default function ClientesDelDia() {
