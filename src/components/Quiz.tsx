@@ -2,7 +2,7 @@ import React, { useState } from "react"
 
 const preguntas = [
   { id: 1, texto: "¿Cuál es la promoción vigente de hoy?", opciones: ["A", "B", "C"], respuesta: "B" },
-  { id: 2, texto: "¿Qué cliente tiene visita obligatoria?", opciones: ["Cliente X", "Cliente Y", "Cliente Z"], respuesta: "Cliente X" }
+  { id: 2, texto: "¿Qué cliente tiene visita obligatoria?", opciones: ["X", "Y", "Z"], respuesta: "Cliente X" }
 ]
 
 export default function Quiz() {
