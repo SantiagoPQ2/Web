@@ -9,6 +9,8 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Hamburguesas: ["hamburguesa", "paty"],
   Salchichas: ["VSS", "ICB"],
   Azucar: ["Azucar"],
+  Softys: ["Softy"],
+  Molinos: ["Molino","Snack"],
   Otros: [] // fallback
 };
 
