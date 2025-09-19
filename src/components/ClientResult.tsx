@@ -1,12 +1,14 @@
-import React, { useState } from "react";
-import { User, FileText, List, Info } from "lucide-react";
+import React from "react";
+import { User, FileText, List, Info, ChevronDown } from "lucide-react";
 import { ClienteData } from "../types";
 
-// 🔑 Diccionario de categorías (rellenalo con keywords)
+// 🔑 Diccionario de categorías (rellenalo con tus keywords)
 const PROMO_CATEGORIES: Record<string, string[]> = {
   Fiambres: ["fiambres", "jamon", "mortadela", "salame"],
-  Bebidas: ["am", "dada", "frizze", "vino", "cerveza"],
-  Hamburguesas: ["hamburguesa", "paty", "mccain"],
+  Peñaflor: ["dada", "frizze", "vino", "cerveza", "SMF", "gordons", "MSD"],
+  Hamburguesas: ["hamburguesa", "paty"],
+  Salchichas: ["VSS", "ICB"],
+  Azucar: ["Azucar"],
   Otros: [] // fallback
 };
 
@@ -51,10 +53,7 @@ function categorizePromos(promosRaw: string | undefined) {
 
 const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
   const categorizedPromos = categorizePromos(cliente.columnaD);
-  const tabs = Object.keys(categorizedPromos);
-  const [activeTab, setActiveTab] = useState<string>(
-    tabs.length > 0 ? tabs[0] : ""
-  );
+  const categories = Object.keys(categorizedPromos);
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 animate-fadeIn">
@@ -95,43 +94,40 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
         </div>
 
         {/* Promos categorizadas */}
-        {tabs.length > 0 && (
-          <div className="bg-red-100 rounded-lg shadow border border-gray-200">
-            {/* Tabs */}
-            <div className="border-b border-gray-200">
-              <nav className="flex -mb-px">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 ${
-                      activeTab === tab
-                        ? "border-red-600 text-red-600"
-                        : "border-transparent text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </nav>
+        {categories.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center mb-2">
+              <FileText className="h-5 w-5 text-red-800 mr-2" />
+              <h3 className="font-semibold text-gray-800">Promos</h3>
             </div>
 
-            {/* Contenido de la pestaña activa */}
-            <div className="p-4 space-y-2">
-              {categorizedPromos[activeTab]?.map((promo, i) => (
-                <div
-                  key={i}
-                  className="bg-red-50 border border-red-200 rounded p-2 text-sm text-gray-800"
-                >
-                  {promo}
+            {categories.map((cat) => (
+              <div
+                key={cat}
+                className="bg-red-100 border border-red-300 rounded-lg p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-red-700">{cat}</h4>
+                  <ChevronDown className="h-4 w-4 text-red-700" />
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-2">
+                  {categorizedPromos[cat].map((promo, i) => (
+                    <div
+                      key={i}
+                      className="bg-white border border-red-200 rounded p-2 text-sm text-gray-800"
+                    >
+                      {promo}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
         {/* Si no hay promos */}
-        {tabs.length === 0 && (
+        {categories.length === 0 && (
           <div className="bg-red-100 rounded-lg p-4">
             <div className="flex items-center mb-2">
               <FileText className="h-5 w-5 text-red-800 mr-2" />
