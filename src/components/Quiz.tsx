@@ -1,52 +1,130 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react";
+import { supabase } from "../config/supabase";
 
-const preguntas = [
-  { id: 1, texto: "¿Cuál es la promoción vigente de hoy?", opciones: ["A", "B", "C"], respuesta: "B" },
-  { id: 2, texto: "¿Qué cliente tiene visita obligatoria?", opciones: ["X", "Y", "Z"], respuesta: "Cliente X" }
-]
+interface Pregunta {
+  id: string;
+  texto: string;
+  opciones: string[];
+  correcta: string;
+}
 
-export default function Quiz() {
-  const [respuestas, setRespuestas] = useState<{ [key: number]: string }>({})
-  const [resultado, setResultado] = useState<string | null>(null)
+const Quiz: React.FC = () => {
+  const [preguntas, setPreguntas] = useState<Pregunta[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [respuestas, setRespuestas] = useState<Record<string, string>>({});
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const handleChange = (id: number, opcion: string) => {
-    setRespuestas((prev) => ({ ...prev, [id]: opcion }))
-  }
+  useEffect(() => {
+    const loadPreguntas = async () => {
+      setLoading(true);
 
-  const handleSubmit = () => {
-    let correctas = 0
-    preguntas.forEach((p) => {
-      if (respuestas[p.id] === p.respuesta) correctas++
-    })
-    setResultado(`Respondiste ${correctas} de ${preguntas.length} correctamente`)
-  }
+      const hoy = new Date().toLocaleDateString("es-ES", { weekday: "short" }).toUpperCase().slice(0, 3);
+
+      // Traigo top 5 del día
+      const { data: top5 } = await supabase
+        .from("top_5")
+        .select("cliente, categoria")
+        .eq("vendedor_username", currentUser.username)
+        .eq("dia", hoy);
+
+      if (!top5 || top5.length === 0) {
+        setPreguntas([]);
+        setLoading(false);
+        return;
+      }
+
+      // Pregunta principal
+      const clientesHoy = top5.map(c => String(c.cliente));
+      const { data: otrosClientes } = await supabase
+        .from("top_5")
+        .select("cliente")
+        .neq("vendedor_username", currentUser.username)
+        .limit(50);
+
+      const opcionesClientes = [
+        ...clientesHoy,
+        ...(otrosClientes?.map(c => String(c.cliente)).slice(0, 5) || [])
+      ].sort(() => Math.random() - 0.5);
+
+      const preguntasGen: Pregunta[] = [
+        {
+          id: "q1",
+          texto: "¿Qué clientes debes visitar hoy?",
+          opciones: opcionesClientes,
+          correcta: clientesHoy.join(",")
+        }
+      ];
+
+      // Dos preguntas extra sobre categorías
+      const elegidos = top5.sort(() => Math.random() - 0.5).slice(0, 2);
+
+      for (let i = 0; i < elegidos.length; i++) {
+        const cliente = elegidos[i];
+        const categorias = ["QUESOS Y FIAMBRES", "HAMBURGUESAS", "REBOZADOS", "SALCHICHAS", cliente.categoria];
+        const opciones = [...new Set(categorias)].sort(() => Math.random() - 0.5);
+
+        preguntasGen.push({
+          id: `cat-${cliente.cliente}`,
+          texto: `¿Qué categoría debes ofrecerle al cliente ${cliente.cliente}?`,
+          opciones,
+          correcta: cliente.categoria
+        });
+      }
+
+      setPreguntas(preguntasGen);
+      setLoading(false);
+    };
+
+    loadPreguntas();
+  }, []);
+
+  const handleRespuesta = async (pregunta: Pregunta, opcion: string) => {
+    const esCorrecta =
+      pregunta.id === "q1"
+        ? pregunta.correcta.split(",").includes(opcion)
+        : opcion === pregunta.correcta;
+
+    setRespuestas({ ...respuestas, [pregunta.id]: opcion });
+
+    await supabase.from("quiz_respuestas").insert([
+      {
+        vendedor_username: currentUser.username,
+        pregunta: pregunta.texto,
+        respondida: true,
+        correcta: esCorrecta
+      }
+    ]);
+  };
+
+  if (loading) return <p>Cargando preguntas...</p>;
 
   return (
-    <div className="p-4 border rounded bg-white shadow">
-      <h2 className="text-lg font-semibold mb-4">Quiz Rápido</h2>
+    <div className="space-y-6">
       {preguntas.map((p) => (
-        <div key={p.id} className="mb-4">
-          <p className="font-medium">{p.texto}</p>
-          <div className="flex gap-2">
-            {p.opciones.map((o) => (
-              <label key={o} className="flex items-center gap-1">
-                <input
-                  type="radio"
-                  name={`pregunta-${p.id}`}
-                  value={o}
-                  checked={respuestas[p.id] === o}
-                  onChange={() => handleChange(p.id, o)}
-                />
-                {o}
-              </label>
+        <div key={p.id} className="bg-white shadow p-4 rounded-lg">
+          <h3 className="font-semibold mb-2">{p.texto}</h3>
+          <div className="space-y-2">
+            {p.opciones.map((op) => (
+              <button
+                key={op}
+                className={`w-full p-2 rounded border ${
+                  respuestas[p.id] === op
+                    ? op === p.correcta
+                      ? "bg-green-200 border-green-500"
+                      : "bg-red-200 border-red-500"
+                    : "bg-gray-50"
+                }`}
+                disabled={!!respuestas[p.id]}
+                onClick={() => handleRespuesta(p, op)}
+              >
+                {op}
+              </button>
             ))}
           </div>
         </div>
       ))}
-      <button onClick={handleSubmit} className="bg-green-500 text-white px-4 py-2 rounded">
-        Enviar
-      </button>
-      {resultado && <p className="mt-4 font-semibold">{resultado}</p>}
     </div>
-  )
-}
+  );
+};
+
+export default Quiz;
