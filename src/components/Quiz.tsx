@@ -5,7 +5,7 @@ interface Pregunta {
   id: string;
   texto: string;
   opciones: string[];
-  correctas: string[]; // ahora soporta múltiples correctas
+  correctas: string[];
 }
 
 const Quiz: React.FC = () => {
@@ -13,6 +13,7 @@ const Quiz: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [evaluado, setEvaluado] = useState(false);
+  const [resultados, setResultados] = useState<Record<string, boolean>>({});
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   useEffect(() => {
@@ -24,7 +25,7 @@ const Quiz: React.FC = () => {
         .toUpperCase()
         .slice(0, 3);
 
-      // 🔹 Traigo top 5 del día
+      // ✅ Traigo top 5 del día
       const { data: top5 } = await supabase
         .from("top_5")
         .select("cliente, categoria")
@@ -37,24 +38,26 @@ const Quiz: React.FC = () => {
         return;
       }
 
-      // 🔹 Pregunta principal con 5 correctos y 5 incorrectos
       const clientesHoy = top5.map((c) => String(c.cliente));
 
+      // ✅ Traigo clientes para distractores
       const { data: otrosClientes } = await supabase
         .from("top_5")
         .select("cliente")
-        .neq("vendedor_username", currentUser.username)
-        .limit(50);
+        .limit(100);
 
+      // ✅ Me aseguro que sean distintos
       const incorrectos = otrosClientes
         ?.map((c) => String(c.cliente))
         .filter((c) => !clientesHoy.includes(c))
+        .sort(() => Math.random() - 0.5)
         .slice(0, 5) || [];
 
       const opcionesClientes = [...clientesHoy, ...incorrectos].sort(
         () => Math.random() - 0.5
       );
 
+      // ✅ Pregunta principal
       const preguntasGen: Pregunta[] = [
         {
           id: "q1",
@@ -64,7 +67,7 @@ const Quiz: React.FC = () => {
         },
       ];
 
-      // 🔹 Dos preguntas extra sobre categorías
+      // ✅ Agrego 2 preguntas más de categoría
       const elegidos = top5.sort(() => Math.random() - 0.5).slice(0, 2);
 
       for (let i = 0; i < elegidos.length; i++) {
@@ -107,7 +110,7 @@ const Quiz: React.FC = () => {
   };
 
   const enviarRespuestas = async () => {
-    setEvaluado(true);
+    const nuevosResultados: Record<string, boolean> = {};
 
     for (const p of preguntas) {
       const seleccionadas = selected[p.id] || [];
@@ -116,6 +119,8 @@ const Quiz: React.FC = () => {
       const esCorrecta =
         seleccionadas.length === correctas.length &&
         seleccionadas.every((s) => correctas.includes(s));
+
+      nuevosResultados[p.id] = esCorrecta;
 
       await supabase.from("quiz_respuestas").insert([
         {
@@ -126,9 +131,15 @@ const Quiz: React.FC = () => {
         },
       ]);
     }
+
+    setResultados(nuevosResultados);
+    setEvaluado(true);
   };
 
   if (loading) return <p>Cargando preguntas...</p>;
+
+  const total = preguntas.length;
+  const correctas = Object.values(resultados).filter((r) => r).length;
 
   return (
     <div className="space-y-6">
@@ -149,6 +160,8 @@ const Quiz: React.FC = () => {
                         ? "bg-green-100 border-green-400"
                         : checked && !esCorrecta
                         ? "bg-red-100 border-red-400"
+                        : esCorrecta
+                        ? "bg-green-50 border-green-200"
                         : "bg-gray-50"
                       : "bg-gray-50"
                   }`}
@@ -165,6 +178,11 @@ const Quiz: React.FC = () => {
               );
             })}
           </div>
+          {evaluado && (
+            <p className="mt-2 text-sm">
+              {resultados[p.id] ? "✅ Correcto" : "❌ Incorrecto"}
+            </p>
+          )}
         </div>
       ))}
 
@@ -175,6 +193,12 @@ const Quiz: React.FC = () => {
         >
           Enviar respuestas
         </button>
+      )}
+
+      {evaluado && (
+        <div className="bg-gray-100 p-4 rounded-lg text-center font-semibold">
+          Resultado: {correctas} de {total} correctas
+        </div>
       )}
     </div>
   );
