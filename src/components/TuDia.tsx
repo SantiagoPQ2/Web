@@ -1,55 +1,100 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
-import { useAuth } from "../context/AuthContext";
 
-interface Top5 {
+interface Top5Row {
   cliente: string;
+  vendedor_username: string;
+  dia: string;
   diferencia: number;
   categoria: string;
 }
 
-export default function TuDia() {
-  const { user } = useAuth();
-  const [tareas, setTareas] = useState<Top5[]>([]);
+const TuDia: React.FC = () => {
+  const [registros, setRegistros] = useState<Top5Row[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
+  // ✅ Detectar día actual en formato "DOM, LUN, MAR..."
+  const today = new Date()
+    .toLocaleDateString("es-AR", { weekday: "short" })
+    .toUpperCase()
+    .slice(0, 3);
 
+  useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const dayName = new Date().toLocaleDateString("es-ES", { weekday: "long" }); 
-      const dia = dayName.charAt(0).toUpperCase() + dayName.slice(1); // "Lunes"
+
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+      if (!user || !user.username) {
+        setRegistros([]);
+        setLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("top_5")
-        .select("cliente, diferencia, categoria")
-        .eq("vendedor_username", user.username)
-        .eq("dia", dia);
+        .select("*")
+        .eq("vendedor_username", user.username.toString())
+        .eq("dia", today);
 
-      if (!error && data) {
-        setTareas(data);
+      if (error) {
+        console.error("❌ Error cargando Top 5:", error.message);
+        setRegistros([]);
+      } else {
+        setRegistros(data || []);
       }
+
       setLoading(false);
     };
 
     fetchData();
-  }, [user]);
-
-  if (loading) return <p>⏳ Cargando...</p>;
-
-  if (tareas.length === 0) return <p>Hoy no tenés clientes asignados en Top 5</p>;
+  }, [today]);
 
   return (
-    <div className="bg-white rounded-lg shadow p-4 space-y-3">
-      <h2 className="text-lg font-bold text-red-700 mb-4">📊 Top 5 Clientes de Hoy</h2>
-      {tareas.map((t, i) => (
-        <p key={i} className="text-gray-800">
-          📌 Tenes que visitar al cliente <b>{t.cliente}</b>, la diferencia para
-          recuperar es de <b>{t.diferencia.toLocaleString("es-AR")}</b> y la
-          categoría a atacar es <b>{t.categoria}</b>.
+    <div className="bg-white rounded-lg shadow p-6">
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        Tu Top 5 del día ({today})
+      </h2>
+
+      {loading ? (
+        <p className="text-gray-600">⏳ Cargando...</p>
+      ) : registros.length === 0 ? (
+        <p className="text-gray-600">
+          Hoy no tenés clientes asignados en Top 5
         </p>
-      ))}
+      ) : (
+        <ul className="space-y-4">
+          {registros.map((r, idx) => (
+            <li
+              key={idx}
+              className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+            >
+              <p className="text-gray-800">
+                <span className="font-semibold">Cliente:</span> {r.cliente}
+              </p>
+              <p className="text-gray-800">
+                <span className="font-semibold">Diferencia:</span>{" "}
+                {r.diferencia.toLocaleString("es-AR", {
+                  style: "currency",
+                  currency: "ARS",
+                  minimumFractionDigits: 2,
+                })}
+              </p>
+              <p className="text-gray-800">
+                <span className="font-semibold">Categoría a atacar:</span>{" "}
+                {r.categoria}
+              </p>
+              <p className="mt-2 text-red-700 font-medium">
+                👉 Tenés que visitar al cliente {r.cliente}, la diferencia para
+                recuperar es de {r.diferencia.toFixed(2)} y la categoría a
+                atacar es {r.categoria}.
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
-}
+};
+
+export default TuDia;
