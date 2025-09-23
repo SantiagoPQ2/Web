@@ -67,27 +67,53 @@ const Quiz: React.FC = () => {
         },
       ];
 
-      // ✅ Agrego 2 preguntas más de categoría
-      const elegidos = top5.sort(() => Math.random() - 0.5).slice(0, 2);
-
-      for (let i = 0; i < elegidos.length; i++) {
-        const cliente = elegidos[i];
+      // ✅ Agrego 1 sola pregunta de categoría
+      const elegido = top5.sort(() => Math.random() - 0.5)[0];
+      if (elegido) {
         const categorias = [
           "QUESOS Y FIAMBRES",
           "HAMBURGUESAS",
           "REBOZADOS",
           "SALCHICHAS",
-          cliente.categoria,
+          elegido.categoria,
         ];
         const opciones = [...new Set(categorias)].sort(
           () => Math.random() - 0.5
         );
 
         preguntasGen.push({
-          id: `cat-${cliente.cliente}`,
-          texto: `¿Qué categoría debes ofrecerle al cliente ${cliente.cliente}?`,
+          id: `cat-${elegido.cliente}`,
+          texto: `¿Qué categoría debes ofrecerle al cliente ${elegido.cliente}?`,
           opciones,
-          correctas: [cliente.categoria],
+          correctas: [elegido.categoria],
+        });
+      }
+
+      // ✅ Traigo Llaves & Desarrollos del mes
+      const { data: devs } = await supabase
+        .from("desarrollos")
+        .select("categoria, a_evaluar, objetivo, avance, diferencia")
+        .eq("id", currentUser.username);
+
+      if (devs && devs.length > 0) {
+        devs.forEach((d, i) => {
+          const texto =
+            d.a_evaluar.toLowerCase() === "llave"
+              ? `¿Cuál es tu objetivo y avance en la LLAVE ${d.categoria}?`
+              : `¿Cuál es tu objetivo y avance en el DESARROLLO ${d.categoria}?`;
+
+          const opciones = [
+            `Objetivo: ${d.objetivo} | Avance: ${d.avance}`,
+            `Objetivo: ${d.objetivo} | Avance: ${d.avance + 5}`,
+            `Objetivo: ${d.objetivo + 10} | Avance: ${d.avance}`,
+          ].sort(() => Math.random() - 0.5);
+
+          preguntasGen.push({
+            id: `dev-${i}`,
+            texto,
+            opciones,
+            correctas: [`Objetivo: ${d.objetivo} | Avance: ${d.avance}`],
+          });
         });
       }
 
