@@ -9,6 +9,7 @@ interface Top5Row {
   categoria: string;
   facturacion: number;   // ✅ nueva columna
   oportunidad: number;   // ✅ nueva columna
+  gps?: boolean;         // opcional
 }
 
 interface DesarrolloRow {
@@ -152,20 +153,27 @@ const TuDia: React.FC = () => {
           {/* OPORTUNIDAD */}
           <div className="mb-6">
             <h3 className="text-md font-semibold text-gray-800 mb-2">💡 Oportunidad</h3>
-            <p className="text-gray-800">
-              Generalmente por día hacés{" "}
-              {totalFacturacion.toLocaleString("es-AR", {
-                style: "currency",
-                currency: "ARS",
-                minimumFractionDigits: 2,
-              })}.{" "}
-              La oportunidad que tenés para alcanzar es de{" "}
-              {totalOportunidad.toLocaleString("es-AR", {
-                style: "currency",
-                currency: "ARS",
-                minimumFractionDigits: 2,
-              })}.
-            </p>
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <p className="text-gray-800">
+                <span className="font-semibold">Generalmente por día hacés:</span>{" "}
+                {totalFacturacion.toLocaleString("es-AR", {
+                  style: "currency",
+                  currency: "ARS",
+                  minimumFractionDigits: 2,
+                })}
+              </p>
+              <p className="text-gray-800">
+                <span className="font-semibold">La oportunidad que tenés para alcanzar es de:</span>{" "}
+                {totalOportunidad.toLocaleString("es-AR", {
+                  style: "currency",
+                  currency: "ARS",
+                  minimumFractionDigits: 2,
+                })}
+              </p>
+              <p className="mt-2 text-red-700 font-medium">
+                👉 ¡Aprovechá esta oportunidad para llegar a tu meta!
+              </p>
+            </div>
           </div>
 
           {/* DESARROLLOS */}
