@@ -7,10 +7,12 @@ interface Top5Row {
   dia: string;
   diferencia: number;
   categoria: string;
+  facturacion: number;   // ✅ nueva columna
+  oportunidad: number;   // ✅ nueva columna
 }
 
 interface DesarrolloRow {
-  id: string; // este ID se vincula con usuarios_app.username
+  id: string;
   categoria: string;
   a_evaluar: string;
   objetivo: number;
@@ -23,7 +25,7 @@ const TuDia: React.FC = () => {
   const [desarrollos, setDesarrollos] = useState<DesarrolloRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Detectar día actual en formato "DOM, LUN, MAR..."
+  // ✅ Día actual en formato "LUN, MAR..."
   const today = new Date()
     .toLocaleDateString("es-AR", { weekday: "short" })
     .toUpperCase()
@@ -56,7 +58,7 @@ const TuDia: React.FC = () => {
         setRegistros(top5 || []);
       }
 
-      // 2. Desarrollos y Llaves del mes
+      // 2. Desarrollos
       const { data: devs, error: devError } = await supabase
         .from("desarrollos")
         .select("categoria, a_evaluar, objetivo, avance, diferencia")
@@ -74,6 +76,10 @@ const TuDia: React.FC = () => {
 
     fetchData();
   }, [today]);
+
+  // ✅ Calcular totales de facturación y oportunidad
+  const totalFacturacion = registros.reduce((acc, r) => acc + (r.facturacion || 0), 0);
+  const totalOportunidad = registros.reduce((acc, r) => acc + (r.oportunidad || 0), 0);
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -102,8 +108,7 @@ const TuDia: React.FC = () => {
                     className="border border-gray-200 rounded-lg p-4 bg-gray-50"
                   >
                     <p className="text-gray-800">
-                      <span className="font-semibold">Cliente:</span>{" "}
-                      {r.cliente}
+                      <span className="font-semibold">Cliente:</span> {r.cliente}
                     </p>
                     <p className="text-gray-800">
                       <span className="font-semibold">Diferencia:</span>{" "}
@@ -114,9 +119,23 @@ const TuDia: React.FC = () => {
                       })}
                     </p>
                     <p className="text-gray-800">
-                      <span className="font-semibold">
-                        Categoría a atacar:
-                      </span>{" "}
+                      <span className="font-semibold">Facturación:</span>{" "}
+                      {r.facturacion?.toLocaleString("es-AR", {
+                        style: "currency",
+                        currency: "ARS",
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                    <p className="text-gray-800">
+                      <span className="font-semibold">Oportunidad:</span>{" "}
+                      {r.oportunidad?.toLocaleString("es-AR", {
+                        style: "currency",
+                        currency: "ARS",
+                        minimumFractionDigits: 2,
+                      })}
+                    </p>
+                    <p className="text-gray-800">
+                      <span className="font-semibold">Categoría a atacar:</span>{" "}
                       {r.categoria}
                     </p>
                     <p className="mt-2 text-red-700 font-medium">
@@ -128,6 +147,25 @@ const TuDia: React.FC = () => {
                 ))}
               </ul>
             )}
+          </div>
+
+          {/* OPORTUNIDAD */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-800 mb-2">💡 Oportunidad</h3>
+            <p className="text-gray-800">
+              Generalmente por día hacés{" "}
+              {totalFacturacion.toLocaleString("es-AR", {
+                style: "currency",
+                currency: "ARS",
+                minimumFractionDigits: 2,
+              })}.{" "}
+              La oportunidad que tenés para alcanzar es de{" "}
+              {totalOportunidad.toLocaleString("es-AR", {
+                style: "currency",
+                currency: "ARS",
+                minimumFractionDigits: 2,
+              })}.
+            </p>
           </div>
 
           {/* DESARROLLOS */}
@@ -153,12 +191,10 @@ const TuDia: React.FC = () => {
                       {d.categoria}
                     </p>
                     <p className="text-gray-800">
-                      <span className="font-semibold">Objetivo:</span>{" "}
-                      {d.objetivo}
+                      <span className="font-semibold">Objetivo:</span> {d.objetivo}
                     </p>
                     <p className="text-gray-800">
-                      <span className="font-semibold">Avance:</span>{" "}
-                      {d.avance}
+                      <span className="font-semibold">Avance:</span> {d.avance}
                     </p>
 
                     <p className="mt-2 text-red-700 font-medium">
@@ -178,3 +214,4 @@ const TuDia: React.FC = () => {
 };
 
 export default TuDia;
+
