@@ -9,9 +9,11 @@ interface Agenda {
 }
 
 const SupervisorPage: React.FC = () => {
-  const [agenda, setAgenda] = useState<Agenda[]>([]);
+  const [salidas, setSalidas] = useState<Agenda[]>([]);
+  const [vespertinas, setVespertinas] = useState<Agenda[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Día actual abreviado en español (LUN, MAR, MIE, etc.)
   const today = new Date()
     .toLocaleDateString("es-AR", { weekday: "short" })
     .toUpperCase()
@@ -31,11 +33,15 @@ const SupervisorPage: React.FC = () => {
 
       if (error) {
         console.error("❌ Error cargando agenda:", error.message);
-        setAgenda([]);
+        setSalidas([]);
+        setVespertinas([]);
       } else {
-        setAgenda(data || []);
+        // Separar por tipo de actividad
+        const salidasData = data?.filter((r) => r.modo.toLowerCase() === "salida") || [];
+        const vespertinasData = data?.filter((r) => r.modo.toLowerCase() === "vespertina") || [];
+        setSalidas(salidasData);
+        setVespertinas(vespertinasData);
       }
-
       setLoading(false);
     };
 
@@ -45,32 +51,63 @@ const SupervisorPage: React.FC = () => {
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">
-        🧭 Agenda del Día ({today})
+        🧭 Agenda del día ({today})
       </h2>
 
       {loading ? (
         <p className="text-gray-600">⏳ Cargando agenda...</p>
-      ) : agenda.length === 0 ? (
-        <p className="text-gray-600">No tenés actividades asignadas para hoy.</p>
       ) : (
-        <table className="min-w-full border border-gray-200 rounded-lg text-sm">
-          <thead className="bg-gray-100 text-gray-700">
-            <tr>
-              <th className="px-4 py-2 text-left">Empleado</th>
-              <th className="px-4 py-2 text-left">Día</th>
-              <th className="px-4 py-2 text-left">Modo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agenda.map((item, idx) => (
-              <tr key={idx} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-2">{item.empleado}</td>
-                <td className="px-4 py-2">{item.dia}</td>
-                <td className="px-4 py-2">{item.modo}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          {/* 🚗 SALIDAS */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-800 mb-2">🚗 Salidas programadas</h3>
+            {salidas.length === 0 ? (
+              <p className="text-gray-600">No tenés salidas asignadas para hoy.</p>
+            ) : (
+              <table className="min-w-full border border-gray-200 rounded-lg text-sm">
+                <thead className="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Empleado</th>
+                    <th className="px-4 py-2 text-left">Modo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salidas.map((item, idx) => (
+                    <tr key={idx} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2">{item.empleado}</td>
+                      <td className="px-4 py-2">{item.modo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* ☕ REUNIONES VESPERTINAS */}
+          <div>
+            <h3 className="text-md font-semibold text-gray-800 mb-2">☕ Reuniones vespertinas</h3>
+            {vespertinas.length === 0 ? (
+              <p className="text-gray-600">No tenés reuniones vespertinas para hoy.</p>
+            ) : (
+              <table className="min-w-full border border-gray-200 rounded-lg text-sm">
+                <thead className="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Empleado</th>
+                    <th className="px-4 py-2 text-left">Modo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vespertinas.map((item, idx) => (
+                    <tr key={idx} className="border-t hover:bg-gray-50">
+                      <td className="px-4 py-2">{item.empleado}</td>
+                      <td className="px-4 py-2">{item.modo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
