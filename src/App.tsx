@@ -10,6 +10,7 @@ import GpsLogger from "./pages/GpsLogger"
 import Settings from "./pages/Settings"
 import Login from "./pages/Login"
 import Informacion from "./pages/Informacion"
+import SupervisorPage from "./pages/SupervisorPage"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import { useVersionChecker } from "./hooks/useVersionChecker"
 import UpdateBanner from "./components/UpdateBanner"
@@ -21,8 +22,8 @@ function ProtectedApp() {
   if (!user) return <Login />
 
   const role = user.role
-
   let allowedRoutes
+
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -31,6 +32,18 @@ function ProtectedApp() {
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    )
+  } else if (role === "supervisor") {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/bonificaciones" element={<Bonificaciones />} />
+        <Route path="/notas-credito" element={<NotasCredito />} />
+        <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/informacion" element={<Informacion />} />
+        <Route path="/supervisor" element={<SupervisorPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -44,7 +57,7 @@ function ProtectedApp() {
       </Routes>
     )
   } else {
-    // admin: todas las rutas
+    // admin
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -54,6 +67,7 @@ function ProtectedApp() {
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
+        <Route path="/supervisor" element={<SupervisorPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
