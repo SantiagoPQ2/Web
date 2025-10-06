@@ -9,6 +9,7 @@ import {
   MapPin,
   User,
   Info,
+  Compass,
 } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 
@@ -48,6 +49,8 @@ const Navigation: React.FC = () => {
         return "Notas de Crédito"
       case "/informacion":
         return "Información"
+      case "/supervisor":
+        return "Supervisor"
       case "/settings":
         return "Settings"
       default:
@@ -55,7 +58,6 @@ const Navigation: React.FC = () => {
     }
   }
 
-  // 🔑 Menú según rol
   let menuItems: { name: string; path: string; icon: any; description: string }[] = []
 
   if (user?.role === "vendedor") {
@@ -67,6 +69,16 @@ const Navigation: React.FC = () => {
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
+  } else if (user?.role === "supervisor") {
+    menuItems = [
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
+      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
+      { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
+    ]
   } else if (user?.role === "logistica") {
     menuItems = [
       { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
@@ -75,7 +87,7 @@ const Navigation: React.FC = () => {
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   } else {
-    // admin → todas las rutas
+    // admin
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
       { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
@@ -84,6 +96,7 @@ const Navigation: React.FC = () => {
       { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
+      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   }
@@ -92,7 +105,6 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <div className="flex items-center">
             <div className="mr-3">
               <img src="/image.png" alt="VaFood Logo" className="h-10 w-10 rounded object-contain" />
@@ -107,7 +119,6 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
