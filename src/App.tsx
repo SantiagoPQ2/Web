@@ -11,6 +11,7 @@ import Settings from "./pages/Settings"
 import Login from "./pages/Login"
 import Informacion from "./pages/Informacion"
 import SupervisorPage from "./pages/SupervisorPage"
+import ChatPage from "./pages/ChatPage" // 👈 nueva página
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import { useVersionChecker } from "./hooks/useVersionChecker"
 import UpdateBanner from "./components/UpdateBanner"
@@ -32,6 +33,7 @@ function ProtectedApp() {
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -44,6 +46,7 @@ function ProtectedApp() {
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/supervisor" element={<SupervisorPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -53,6 +56,7 @@ function ProtectedApp() {
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/informacion" element={<Informacion />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
@@ -68,6 +72,7 @@ function ProtectedApp() {
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/supervisor" element={<SupervisorPage />} />
+        <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     )
