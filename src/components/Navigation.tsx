@@ -10,6 +10,7 @@ import {
   User,
   Info,
   Compass,
+  MessageSquare,
 } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 
@@ -51,6 +52,8 @@ const Navigation: React.FC = () => {
         return "Información"
       case "/supervisor":
         return "Supervisor"
+      case "/chat":
+        return "Chat"
       case "/settings":
         return "Settings"
       default:
@@ -67,6 +70,7 @@ const Navigation: React.FC = () => {
       { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con supervisores" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   } else if (user?.role === "supervisor") {
@@ -77,6 +81,7 @@ const Navigation: React.FC = () => {
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con vendedores" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   } else if (user?.role === "logistica") {
@@ -84,6 +89,7 @@ const Navigation: React.FC = () => {
       { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
       { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas de clientes" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con administración" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   } else {
@@ -97,6 +103,7 @@ const Navigation: React.FC = () => {
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna general" },
       { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
     ]
   }
@@ -105,6 +112,7 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          {/* Logo + usuario */}
           <div className="flex items-center">
             <div className="mr-3">
               <img src="/image.png" alt="VaFood Logo" className="h-10 w-10 rounded object-contain" />
@@ -119,13 +127,16 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
+          {/* Menú desplegable */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200"
             >
               <span className="mr-2">{getCurrentPageName()}</span>
-              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+              />
             </button>
 
             {isDropdownOpen && (
