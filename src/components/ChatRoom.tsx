@@ -1,219 +1,196 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
+import { Paperclip, Send, ArrowLeft } from "lucide-react";
 
 interface Mensaje {
   id: number;
   remitente_username: string;
   destinatario_username: string;
-  contenido: string;
-  imagen_url?: string | null;
+  contenido: string | null;
+  imagen_url: string | null;
   created_at: string;
 }
 
-interface ChatRoomProps {
+interface Props {
   destino: string;
+  volverSidebar: () => void;
 }
 
-const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
+const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const { user } = useAuth();
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [nuevoMensaje, setNuevoMensaje] = useState("");
   const [imagen, setImagen] = useState<File | null>(null);
-  const [subiendo, setSubiendo] = useState(false);
-  const mensajesEndRef = useRef<HTMLDivElement>(null);
-  const remitente = user?.username || "";
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 🔹 Cargar y suscribirse en tiempo real
   useEffect(() => {
-    if (!remitente || !destino) return;
-    cargarMensajes();
-
-    const canal = supabase
-      .channel("chat-room")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "mensajes" },
-        (payload) => {
-          const msg = payload.new as Mensaje;
-          if (
-            (msg.remitente_username === remitente &&
-              msg.destinatario_username === destino) ||
-            (msg.remitente_username === destino &&
-              msg.destinatario_username === remitente)
-          ) {
-            setMensajes((prev) => {
-              // evitar duplicados
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg];
-            });
-            scrollToBottom();
+    if (destino && user) {
+      cargarMensajes();
+      const canal = supabase
+        .channel("mensajes_realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "mensajes" },
+          (payload) => {
+            const nuevo = payload.new as Mensaje;
+            if (
+              (nuevo.remitente_username === user.username &&
+                nuevo.destinatario_username === destino) ||
+              (nuevo.remitente_username === destino &&
+                nuevo.destinatario_username === user.username)
+            ) {
+              setMensajes((prev) => [...prev, nuevo]);
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(canal);
-    };
-  }, [remitente, destino]);
+      return () => {
+        supabase.removeChannel(canal);
+      };
+    }
+  }, [destino, user]);
 
-  // 🔹 Cargar mensajes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [mensajes]);
+
   const cargarMensajes = async () => {
+    if (!user) return;
     const { data, error } = await supabase
       .from("mensajes")
       .select("*")
       .or(
-        `and(remitente_username.eq.${remitente},destinatario_username.eq.${destino}),
-         and(remitente_username.eq.${destino},destinatario_username.eq.${remitente})`
+        `and(remitente_username.eq.${user.username},destinatario_username.eq.${destino}),and(remitente_username.eq.${destino},destinatario_username.eq.${user.username})`
       )
-      .order("created_at", { ascending: true })
-      .limit(500);
+      .order("created_at", { ascending: true });
 
-    if (!error && data) {
-      setMensajes(data);
-      scrollToBottom();
-    }
+    if (!error && data) setMensajes(data);
   };
 
-  // 🔹 Enviar mensaje
   const enviarMensaje = async () => {
-    if ((!nuevoMensaje.trim() && !imagen) || !remitente) return;
+    if (!user || (!nuevoMensaje && !imagen)) return;
 
     let imagen_url = null;
-
-    // 👇 Subida de imagen si existe
     if (imagen) {
-      setSubiendo(true);
-      const nombreArchivo = `${remitente}_${Date.now()}.${imagen.name.split(".").pop()}`;
+      const nombreArchivo = `${Date.now()}-${imagen.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("chat_uploads")
         .upload(nombreArchivo, imagen);
 
-      if (!uploadError && uploadData) {
-        const { data: urlData } = supabase.storage
+      if (!uploadError && uploadData)
+        imagen_url = supabase.storage
           .from("chat_uploads")
-          .getPublicUrl(nombreArchivo);
-        imagen_url = urlData.publicUrl;
-      }
-      setSubiendo(false);
-      setImagen(null);
+          .getPublicUrl(uploadData.path).data.publicUrl;
     }
 
-    // 👇 Mostrar mensaje instantáneamente
-    const temporal: Mensaje = {
-      id: Date.now(),
-      remitente_username: remitente,
-      destinatario_username: destino,
-      contenido: nuevoMensaje.trim(),
-      imagen_url,
-      created_at: new Date().toISOString(),
-    };
-    setMensajes((prev) => [...prev, temporal]);
-    scrollToBottom();
+    const { error } = await supabase.from("mensajes").insert([
+      {
+        remitente_username: user.username,
+        destinatario_username: destino,
+        contenido: nuevoMensaje || null,
+        imagen_url,
+      },
+    ]);
 
-    // 👇 Guardar en Supabase
-    await supabase.from("mensajes").insert({
-      remitente_username: remitente,
-      destinatario_username: destino,
-      contenido: nuevoMensaje.trim(),
-      imagen_url,
-    });
-
-    setNuevoMensaje("");
-  };
-
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
+    if (!error) {
+      setNuevoMensaje("");
+      setImagen(null);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border rounded-lg shadow relative">
-      {/* Lista de mensajes */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {mensajes.length === 0 && (
-          <p className="text-center text-gray-400 text-sm mt-10">
-            No hay mensajes aún.
-          </p>
-        )}
-        {mensajes.map((m) => (
-          <div
-            key={m.id}
-            className={`max-w-[75%] p-2 rounded-2xl shadow-sm ${
-              m.remitente_username === remitente
-                ? "ml-auto bg-red-500 text-white"
-                : "mr-auto bg-gray-200 text-gray-800"
-            }`}
-          >
-            {m.imagen_url && (
-              <img
-                src={m.imagen_url}
-                alt="imagen"
-                className="rounded-lg mb-1 max-h-64 object-contain"
-              />
-            )}
-            {m.contenido && <p className="whitespace-pre-wrap">{m.contenido}</p>}
-            <p
-              className={`text-[10px] mt-1 ${
-                m.remitente_username === remitente
-                  ? "text-gray-200 text-right"
-                  : "text-gray-500 text-left"
-              }`}
+    <div className="flex flex-col h-full bg-gradient-to-br from-gray-50 to-blue-50">
+      {!destino ? (
+        <div className="m-auto text-gray-400 text-sm">
+          Seleccioná un contacto para comenzar a chatear 💬
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center p-3 border-b bg-white shadow-sm">
+            <button
+              onClick={volverSidebar}
+              className="md:hidden text-gray-500 hover:text-red-500 mr-3"
             >
-              {new Date(m.created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </p>
+              <ArrowLeft size={20} />
+            </button>
+            <h2 className="font-semibold text-gray-700 text-sm">
+              Chat con {destino}
+            </h2>
           </div>
-        ))}
-        <div ref={mensajesEndRef} />
-      </div>
 
-      {/* Input */}
-      <div className="flex items-center border-t p-2 gap-2 bg-white sticky bottom-0">
-        {/* Imagen */}
-        <label className="cursor-pointer bg-gray-100 px-3 py-2 rounded-lg border hover:bg-gray-200 text-gray-600 text-sm">
-          📎
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => setImagen(e.target.files?.[0] || null)}
-          />
-        </label>
-
-        {/* Previsualización */}
-        {imagen && (
-          <div className="text-xs text-gray-500 italic truncate max-w-[120px]">
-            {imagen.name}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
+            {mensajes.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm mt-4">
+                No hay mensajes aún.
+              </p>
+            ) : (
+              mensajes.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${
+                    m.remitente_username === user.username
+                      ? "justify-end"
+                      : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`p-2 max-w-[70%] rounded-2xl shadow-sm ${
+                      m.remitente_username === user.username
+                        ? "bg-red-500 text-white"
+                        : "bg-gray-200 text-gray-800"
+                    }`}
+                  >
+                    {m.imagen_url && (
+                      <img
+                        src={m.imagen_url}
+                        alt="imagen"
+                        className="rounded-lg mb-1 max-w-[200px]"
+                      />
+                    )}
+                    <p>{m.contenido}</p>
+                    <p className="text-[10px] text-right opacity-70 mt-1">
+                      {new Date(m.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        )}
 
-        {/* Input texto */}
-        <input
-          type="text"
-          className="flex-1 border rounded-lg p-2 text-sm focus:ring-1 focus:ring-red-500 outline-none"
-          placeholder="Escribí un mensaje..."
-          value={nuevoMensaje}
-          onChange={(e) => setNuevoMensaje(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && enviarMensaje()}
-          disabled={subiendo}
-        />
-
-        {/* Botón enviar */}
-        <button
-          onClick={enviarMensaje}
-          disabled={subiendo}
-          className={`px-4 py-2 rounded-lg text-white ${
-            subiendo ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
-          }`}
-        >
-          {subiendo ? "Subiendo..." : "Enviar"}
-        </button>
-      </div>
+          <div className="flex items-center border-t bg-white p-2">
+            <label className="p-2 text-gray-500 hover:text-red-500 cursor-pointer">
+              <Paperclip size={18} />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setImagen(e.target.files?.[0] || null)}
+                className="hidden"
+              />
+            </label>
+            <input
+              type="text"
+              className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Escribí un mensaje..."
+              value={nuevoMensaje}
+              onChange={(e) => setNuevoMensaje(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && enviarMensaje()}
+            />
+            <button
+              onClick={enviarMensaje}
+              className="ml-2 bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 text-sm"
+            >
+              Enviar
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 };
