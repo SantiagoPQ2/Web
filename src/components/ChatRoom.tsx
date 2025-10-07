@@ -7,7 +7,7 @@ interface Mensaje {
   remitente_username: string;
   destinatario_username: string;
   contenido: string;
-  imagen_url?: string;
+  imagen_url?: string | null;
   created_at: string;
 }
 
@@ -20,15 +20,17 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [nuevoMensaje, setNuevoMensaje] = useState("");
   const [imagen, setImagen] = useState<File | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
   const mensajesEndRef = useRef<HTMLDivElement>(null);
   const remitente = user?.username || "";
 
+  // 🔹 Cargar y suscribirse en tiempo real
   useEffect(() => {
     if (!remitente || !destino) return;
     cargarMensajes();
 
     const canal = supabase
-      .channel("mensajes")
+      .channel("chat-room")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "mensajes" },
@@ -40,7 +42,11 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
             (msg.remitente_username === destino &&
               msg.destinatario_username === remitente)
           ) {
-            setMensajes((prev) => [...prev, msg]);
+            setMensajes((prev) => {
+              // evitar duplicados
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              return [...prev, msg];
+            });
             scrollToBottom();
           }
         }
@@ -52,63 +58,90 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
     };
   }, [remitente, destino]);
 
+  // 🔹 Cargar mensajes
   const cargarMensajes = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("mensajes")
       .select("*")
       .or(
-        `and(remitente_username.eq.${remitente},destinatario_username.eq.${destino}),and(remitente_username.eq.${destino},destinatario_username.eq.${remitente})`
+        `and(remitente_username.eq.${remitente},destinatario_username.eq.${destino}),
+         and(remitente_username.eq.${destino},destinatario_username.eq.${remitente})`
       )
       .order("created_at", { ascending: true })
       .limit(500);
-    setMensajes(data || []);
-    scrollToBottom();
+
+    if (!error && data) {
+      setMensajes(data);
+      scrollToBottom();
+    }
   };
 
+  // 🔹 Enviar mensaje
   const enviarMensaje = async () => {
-    if (!nuevoMensaje.trim() && !imagen) return;
+    if ((!nuevoMensaje.trim() && !imagen) || !remitente) return;
 
     let imagen_url = null;
+
+    // 👇 Subida de imagen si existe
     if (imagen) {
+      setSubiendo(true);
       const nombreArchivo = `${remitente}_${Date.now()}.${imagen.name.split(".").pop()}`;
-      const { data, error } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from("chat_uploads")
         .upload(nombreArchivo, imagen);
-      if (!error && data) {
+
+      if (!uploadError && uploadData) {
         const { data: urlData } = supabase.storage
           .from("chat_uploads")
           .getPublicUrl(nombreArchivo);
         imagen_url = urlData.publicUrl;
       }
+      setSubiendo(false);
       setImagen(null);
     }
 
-    const { error } = await supabase.from("mensajes").insert({
+    // 👇 Mostrar mensaje instantáneamente
+    const temporal: Mensaje = {
+      id: Date.now(),
+      remitente_username: remitente,
+      destinatario_username: destino,
+      contenido: nuevoMensaje.trim(),
+      imagen_url,
+      created_at: new Date().toISOString(),
+    };
+    setMensajes((prev) => [...prev, temporal]);
+    scrollToBottom();
+
+    // 👇 Guardar en Supabase
+    await supabase.from("mensajes").insert({
       remitente_username: remitente,
       destinatario_username: destino,
       contenido: nuevoMensaje.trim(),
       imagen_url,
     });
 
-    if (!error) {
-      setNuevoMensaje("");
-      scrollToBottom();
-    }
+    setNuevoMensaje("");
   };
 
   const scrollToBottom = () => {
     setTimeout(() => {
       mensajesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 200);
+    }, 100);
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border rounded-lg shadow">
+    <div className="flex flex-col h-full bg-white border rounded-lg shadow relative">
+      {/* Lista de mensajes */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {mensajes.length === 0 && (
+          <p className="text-center text-gray-400 text-sm mt-10">
+            No hay mensajes aún.
+          </p>
+        )}
         {mensajes.map((m) => (
           <div
             key={m.id}
-            className={`max-w-[75%] p-2 rounded-2xl ${
+            className={`max-w-[75%] p-2 rounded-2xl shadow-sm ${
               m.remitente_username === remitente
                 ? "ml-auto bg-red-500 text-white"
                 : "mr-auto bg-gray-200 text-gray-800"
@@ -117,12 +150,18 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
             {m.imagen_url && (
               <img
                 src={m.imagen_url}
-                alt="imagen enviada"
-                className="rounded-lg mb-1 max-h-56"
+                alt="imagen"
+                className="rounded-lg mb-1 max-h-64 object-contain"
               />
             )}
-            <p>{m.contenido}</p>
-            <p className="text-[10px] text-gray-300 mt-1 text-right">
+            {m.contenido && <p className="whitespace-pre-wrap">{m.contenido}</p>}
+            <p
+              className={`text-[10px] mt-1 ${
+                m.remitente_username === remitente
+                  ? "text-gray-200 text-right"
+                  : "text-gray-500 text-left"
+              }`}
+            >
               {new Date(m.created_at).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -134,8 +173,9 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
       </div>
 
       {/* Input */}
-      <div className="flex items-center border-t p-2 gap-2">
-        <label className="cursor-pointer bg-gray-100 px-3 py-2 rounded-lg border hover:bg-gray-200">
+      <div className="flex items-center border-t p-2 gap-2 bg-white sticky bottom-0">
+        {/* Imagen */}
+        <label className="cursor-pointer bg-gray-100 px-3 py-2 rounded-lg border hover:bg-gray-200 text-gray-600 text-sm">
           📎
           <input
             type="file"
@@ -144,6 +184,15 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
             onChange={(e) => setImagen(e.target.files?.[0] || null)}
           />
         </label>
+
+        {/* Previsualización */}
+        {imagen && (
+          <div className="text-xs text-gray-500 italic truncate max-w-[120px]">
+            {imagen.name}
+          </div>
+        )}
+
+        {/* Input texto */}
         <input
           type="text"
           className="flex-1 border rounded-lg p-2 text-sm focus:ring-1 focus:ring-red-500 outline-none"
@@ -151,12 +200,18 @@ const ChatRoom: React.FC<ChatRoomProps> = ({ destino }) => {
           value={nuevoMensaje}
           onChange={(e) => setNuevoMensaje(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && enviarMensaje()}
+          disabled={subiendo}
         />
+
+        {/* Botón enviar */}
         <button
           onClick={enviarMensaje}
-          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          disabled={subiendo}
+          className={`px-4 py-2 rounded-lg text-white ${
+            subiendo ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
+          }`}
         >
-          Enviar
+          {subiendo ? "Subiendo..." : "Enviar"}
         </button>
       </div>
     </div>
