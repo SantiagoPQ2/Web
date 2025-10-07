@@ -12,6 +12,7 @@ import {
   Compass,
 } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
+import NotificationBell from "./NotificationBell"
 
 const Navigation: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -105,6 +106,7 @@ const Navigation: React.FC = () => {
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
+          {/* Logo + Info usuario */}
           <div className="flex items-center">
             <div className="mr-3">
               <img src="/image.png" alt="VaFood Logo" className="h-10 w-10 rounded object-contain" />
@@ -119,13 +121,20 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          <div className="relative" ref={dropdownRef}>
+          {/* Campanita + Dropdown */}
+          <div className="flex items-center gap-3" ref={dropdownRef}>
+            {user && <NotificationBell username={user.username} />}
+
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200"
             >
               <span className="mr-2">{getCurrentPageName()}</span>
-              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  isDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
 
             {isDropdownOpen && (
@@ -139,13 +148,21 @@ const Navigation: React.FC = () => {
                         key={item.path}
                         to={item.path}
                         className={`flex items-center px-4 py-3 text-sm hover:bg-gray-50 transition-colors duration-200 ${
-                          isActive ? "bg-red-50 text-red-700 border-r-2 border-red-700" : "text-gray-700"
+                          isActive
+                            ? "bg-red-50 text-red-700 border-r-2 border-red-700"
+                            : "text-gray-700"
                         }`}
                       >
-                        <Icon className={`h-4 w-4 mr-3 ${isActive ? "text-red-700" : "text-gray-400"}`} />
+                        <Icon
+                          className={`h-4 w-4 mr-3 ${
+                            isActive ? "text-red-700" : "text-gray-400"
+                          }`}
+                        />
                         <div>
                           <div className="font-medium">{item.name}</div>
-                          <div className="text-xs text-gray-500">{item.description}</div>
+                          <div className="text-xs text-gray-500">
+                            {item.description}
+                          </div>
                         </div>
                       </Link>
                     )
