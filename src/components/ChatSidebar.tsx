@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
+import { Search } from "lucide-react";
 
 interface Usuario {
   username: string;
@@ -20,11 +21,12 @@ interface Props {
 const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }) => {
   const { user } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [busqueda, setBusqueda] = useState("");
 
   useEffect(() => {
     if (user) cargarUsuarios();
 
-    // 👇 Escucha realtime: si hay nuevos mensajes, se actualiza la lista
+    // 🔄 Actualización en tiempo real cuando se inserta un nuevo mensaje
     const canal = supabase
       .channel("mensajes_sidebar")
       .on(
@@ -42,17 +44,15 @@ const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }
   const cargarUsuarios = async () => {
     if (!user) return;
 
-    // 🔹 Traer todos los usuarios según el rol del actual
-    let query = supabase.from("usuarios_app").select("username, name, role");
+    // 🔹 Todos los usuarios menos el propio
+    const { data: usuariosData, error } = await supabase
+      .from("usuarios_app")
+      .select("username, name, role")
+      .neq("username", user.username);
 
-    if (user.role === "vendedor") query = query.in("role", ["supervisor", "admin"]);
-    else if (user.role === "supervisor") query = query.in("role", ["vendedor", "admin"]);
-    else query = query.neq("username", user.username);
-
-    const { data: usuariosData, error } = await query;
     if (error || !usuariosData) return;
 
-    // 🔹 Buscar último mensaje entre usuario actual y cada otro
+    // 🔹 Buscar último mensaje entre el usuario actual y cada otro
     const { data: mensajes } = await supabase
       .from("mensajes")
       .select("remitente_username, destinatario_username, contenido, created_at")
@@ -72,14 +72,20 @@ const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }
       };
     });
 
-    // 🔹 Ordenar: primero los más recientes, luego alfabéticamente
+    // 🔹 Ordenar: primero los chats con mensajes recientes, luego por nombre
     lista.sort((a, b) => {
       if (a.actualizado && b.actualizado) return a.actualizado < b.actualizado ? 1 : -1;
+      if (a.actualizado) return -1;
+      if (b.actualizado) return 1;
       return (a.name || "").localeCompare(b.name || "");
     });
 
     setUsuarios(lista);
   };
+
+  const usuariosFiltrados = usuarios.filter((u) =>
+    (u.name || "").toLowerCase().includes(busqueda.toLowerCase())
+  );
 
   return (
     <div
@@ -97,20 +103,32 @@ const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }
         </button>
       </div>
 
+      {/* 🔍 Buscador */}
+      <div className="relative p-2 border-b bg-gray-50">
+        <Search className="absolute left-4 top-3.5 h-4 w-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Buscar contacto..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
+        />
+      </div>
+
       <div className={`${visible ? "block" : "hidden md:block"}`}>
-        {usuarios.length === 0 ? (
-          <div className="text-gray-400 text-sm text-center mt-8">
-            No hay usuarios disponibles
+        {usuariosFiltrados.length === 0 ? (
+          <div className="text-gray-400 text-sm text-center mt-6">
+            No se encontraron usuarios
           </div>
         ) : (
-          usuarios.map((u) => (
+          usuariosFiltrados.map((u) => (
             <div
               key={u.username}
               onClick={() => {
                 onSelect(u.username);
                 setVisible(false);
               }}
-              className={`p-3 cursor-pointer border-b hover:bg-red-50 ${
+              className={`p-3 cursor-pointer border-b hover:bg-red-50 transition ${
                 destino === u.username ? "bg-red-100" : ""
               }`}
             >
