@@ -4,9 +4,10 @@ import { useAuth } from "../context/AuthContext";
 
 interface Usuario {
   username: string;
-  nombre: string;
+  name: string | null;
   role: string;
   ultimo_mensaje?: string;
+  actualizado?: string;
 }
 
 interface Props {
@@ -21,40 +22,63 @@ const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
 
   useEffect(() => {
-    cargarUsuarios();
+    if (user) cargarUsuarios();
+
+    // 👇 Escucha realtime: si hay nuevos mensajes, se actualiza la lista
+    const canal = supabase
+      .channel("mensajes_sidebar")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "mensajes" },
+        () => cargarUsuarios()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
   }, [user]);
 
   const cargarUsuarios = async () => {
     if (!user) return;
 
-    let query = supabase.from("usuarios_app").select("username, nombre, role");
+    // 🔹 Traer todos los usuarios según el rol del actual
+    let query = supabase.from("usuarios_app").select("username, name, role");
 
     if (user.role === "vendedor") query = query.in("role", ["supervisor", "admin"]);
-    else if (user.role === "supervisor") query = query.eq("role", "vendedor");
+    else if (user.role === "supervisor") query = query.in("role", ["vendedor", "admin"]);
     else query = query.neq("username", user.username);
 
-    const { data } = await query;
-    if (!data) return;
+    const { data: usuariosData, error } = await query;
+    if (error || !usuariosData) return;
 
-    // Traemos último mensaje de cada conversación
+    // 🔹 Buscar último mensaje entre usuario actual y cada otro
     const { data: mensajes } = await supabase
       .from("mensajes")
       .select("remitente_username, destinatario_username, contenido, created_at")
       .order("created_at", { ascending: false });
 
-    const usuariosConMensaje = data.map((u) => {
+    const lista = usuariosData.map((u) => {
       const ultimo = mensajes?.find(
         (m) =>
           (m.remitente_username === u.username && m.destinatario_username === user.username) ||
           (m.destinatario_username === u.username && m.remitente_username === user.username)
       );
+
       return {
         ...u,
         ultimo_mensaje: ultimo ? ultimo.contenido : "",
+        actualizado: ultimo ? ultimo.created_at : "",
       };
     });
 
-    setUsuarios(usuariosConMensaje);
+    // 🔹 Ordenar: primero los más recientes, luego alfabéticamente
+    lista.sort((a, b) => {
+      if (a.actualizado && b.actualizado) return a.actualizado < b.actualizado ? 1 : -1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+    setUsuarios(lista);
   };
 
   return (
@@ -72,24 +96,33 @@ const ChatSidebar: React.FC<Props> = ({ onSelect, destino, visible, setVisible }
           ✕
         </button>
       </div>
+
       <div className={`${visible ? "block" : "hidden md:block"}`}>
-        {usuarios.map((u) => (
-          <div
-            key={u.username}
-            onClick={() => {
-              onSelect(u.username);
-              setVisible(false);
-            }}
-            className={`p-3 cursor-pointer border-b hover:bg-red-50 ${
-              destino === u.username ? "bg-red-100" : ""
-            }`}
-          >
-            <p className="font-medium text-sm text-gray-800">
-              {u.username} - {u.nombre}
-            </p>
-            <p className="text-xs text-gray-500 truncate">{u.ultimo_mensaje || "..."}</p>
+        {usuarios.length === 0 ? (
+          <div className="text-gray-400 text-sm text-center mt-8">
+            No hay usuarios disponibles
           </div>
-        ))}
+        ) : (
+          usuarios.map((u) => (
+            <div
+              key={u.username}
+              onClick={() => {
+                onSelect(u.username);
+                setVisible(false);
+              }}
+              className={`p-3 cursor-pointer border-b hover:bg-red-50 ${
+                destino === u.username ? "bg-red-100" : ""
+              }`}
+            >
+              <p className="font-medium text-sm text-gray-800 truncate">
+                {u.username} - {u.name || "Sin nombre"}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {u.ultimo_mensaje || "Sin mensajes"}
+              </p>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
