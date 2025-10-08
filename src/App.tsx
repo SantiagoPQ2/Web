@@ -79,7 +79,6 @@ function ProtectedApp() {
     );
   }
 
-  // Ocultamos el footer en /chat para que el chat ocupe toda la pantalla
   const isChat = location.pathname === "/chat";
 
   return (
@@ -112,4 +111,3 @@ function App() {
 }
 
 export default App;
-
