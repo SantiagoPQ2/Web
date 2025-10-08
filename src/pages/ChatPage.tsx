@@ -14,20 +14,16 @@ const ChatPage: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row flex-1 bg-gray-50 overflow-hidden">
-      {/* sidebar – en móvil, se oculta si hay chat abierto */}
+      {/* sidebar – en móvil se oculta si hay chat abierto */}
       <div
         className={`transition-all duration-300 ${
-          isMobile
-            ? selectedUser
-              ? "hidden"
-              : "h-full w-full"
-            : "h-full w-80 border-r bg-white"
+          isMobile ? (selectedUser ? "hidden" : "h-full w-full") : "h-full w-80 border-r bg-white"
         }`}
       >
         <ChatSidebar onSelectUser={setSelectedUser} selectedUser={selectedUser} />
       </div>
 
-      {/* chat – en móvil, se oculta si no hay chat seleccionado */}
+      {/* chat – en móvil se oculta si no hay chat */}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ${
           isMobile && !selectedUser ? "hidden" : "block"
@@ -42,7 +38,7 @@ const ChatPage: React.FC = () => {
         )}
       </div>
 
-      {/* botón volver sólo en móvil */}
+      {/* botón volver solo en móvil */}
       {isMobile && selectedUser && (
         <button
           className="fixed top-16 left-4 z-50 p-2 bg-white rounded-full shadow border"
