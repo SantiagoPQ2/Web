@@ -1,29 +1,30 @@
-import React from "react"
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom"
-import Navigation from "./components/Navigation"
-import SearchPage from "./pages/SearchPage"
-import Bonificaciones from "./pages/Bonificaciones"
-import RechazosForm from "./pages/RechazosForm"
-import CoordsPage from "./pages/CoordsPage"
-import NotasCredito from "./pages/NotasCredito"
-import GpsLogger from "./pages/GpsLogger"
-import Settings from "./pages/Settings"
-import Login from "./pages/Login"
-import Informacion from "./pages/Informacion"
-import SupervisorPage from "./pages/SupervisorPage"
-import ChatPage from "./pages/ChatPage" // 👈 nueva página
-import { AuthProvider, useAuth } from "./context/AuthContext"
-import { useVersionChecker } from "./hooks/useVersionChecker"
-import UpdateBanner from "./components/UpdateBanner"
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import Navigation from "./components/Navigation";
+import SearchPage from "./pages/SearchPage";
+import Bonificaciones from "./pages/Bonificaciones";
+import RechazosForm from "./pages/RechazosForm";
+import CoordsPage from "./pages/CoordsPage";
+import NotasCredito from "./pages/NotasCredito";
+import GpsLogger from "./pages/GpsLogger";
+import Settings from "./pages/Settings";
+import Login from "./pages/Login";
+import Informacion from "./pages/Informacion";
+import SupervisorPage from "./pages/SupervisorPage";
+import ChatPage from "./pages/ChatPage";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { useVersionChecker } from "./hooks/useVersionChecker";
+import UpdateBanner from "./components/UpdateBanner";
 
 function ProtectedApp() {
-  const { user } = useAuth()
-  const hasUpdate = useVersionChecker(60000)
+  const { user } = useAuth();
+  const hasUpdate = useVersionChecker(60000);
+  const location = useLocation();
 
-  if (!user) return <Login />
+  if (!user) return <Login />;
 
-  const role = user.role
-  let allowedRoutes
+  const role = user.role;
+  let allowedRoutes;
 
   if (role === "vendedor") {
     allowedRoutes = (
@@ -36,7 +37,7 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
-    )
+    );
   } else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
@@ -49,7 +50,7 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
-    )
+    );
   } else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
@@ -59,7 +60,7 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
-    )
+    );
   } else {
     // admin
     allowedRoutes = (
@@ -75,26 +76,35 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
-    )
+    );
   }
 
+  // Ocultamos el footer en la vista de chat, y hacemos que el main ocupe todo
+  const isChat = location.pathname === "/chat";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
       <Navigation />
-      <main>{allowedRoutes}</main>
+
+      {/* El main crece y quita scroll extra para que el chat pueda usar 100vh sin dejar rectángulos */}
+      <main className="flex-1 overflow-hidden">
+        {allowedRoutes}
+      </main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="text-center text-sm text-gray-600">
-            <p>VaFood - Sistema de consulta de clientes</p>
-            <p className="mt-1">Consulte situación y promociones de clientes</p>
+      {!isChat && (
+        <footer className="bg-white border-t border-gray-200 mt-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="text-center text-sm text-gray-600">
+              <p>VaFood - Sistema de consulta de clientes</p>
+              <p className="mt-1">Consulte situación y promociones de clientes</p>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
-  )
+  );
 }
 
 function App() {
@@ -104,8 +114,7 @@ function App() {
         <ProtectedApp />
       </Router>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
-
+export default App;
