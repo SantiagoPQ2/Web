@@ -13,8 +13,8 @@ const ChatPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-8rem)] bg-gray-50">
-      {/* sidebar – in mobile, hide when a chat is open */}
+    <div className="flex flex-col md:flex-row flex-1 bg-gray-50 overflow-hidden">
+      {/* sidebar – en móvil, se oculta si hay chat abierto */}
       <div
         className={`transition-all duration-300 ${
           isMobile
@@ -24,23 +24,17 @@ const ChatPage: React.FC = () => {
             : "h-full w-80 border-r bg-white"
         }`}
       >
-        <ChatSidebar
-          onSelectUser={setSelectedUser}
-          selectedUser={selectedUser}
-        />
+        <ChatSidebar onSelectUser={setSelectedUser} selectedUser={selectedUser} />
       </div>
 
-      {/* chat – in mobile, hide when no chat selected */}
+      {/* chat – en móvil, se oculta si no hay chat seleccionado */}
       <div
         className={`flex-1 flex flex-col transition-all duration-300 ${
           isMobile && !selectedUser ? "hidden" : "block"
         }`}
       >
         {selectedUser ? (
-          <ChatRoom
-            destino={selectedUser}
-            volverSidebar={() => setSelectedUser(null)}
-          />
+          <ChatRoom destino={selectedUser} volverSidebar={() => setSelectedUser(null)} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
             Seleccioná un contacto para comenzar a chatear 💬
@@ -48,7 +42,7 @@ const ChatPage: React.FC = () => {
         )}
       </div>
 
-      {/* back button only on mobile */}
+      {/* botón volver sólo en móvil */}
       {isMobile && selectedUser && (
         <button
           className="fixed top-16 left-4 z-50 p-2 bg-white rounded-full shadow border"
