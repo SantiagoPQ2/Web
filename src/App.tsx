@@ -79,20 +79,14 @@ function ProtectedApp() {
     );
   }
 
-  // Ocultamos el footer en la vista de chat, y hacemos que el main ocupe todo
+  // Ocultamos el footer en /chat para que el chat ocupe toda la pantalla
   const isChat = location.pathname === "/chat";
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
       <Navigation />
-
-      {/* El main crece y quita scroll extra para que el chat pueda usar 100vh sin dejar rectángulos */}
-      <main className="flex-1 overflow-hidden">
-        {allowedRoutes}
-      </main>
-
+      <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
-
       {!isChat && (
         <footer className="bg-white border-t border-gray-200 mt-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -118,3 +112,4 @@ function App() {
 }
 
 export default App;
+
