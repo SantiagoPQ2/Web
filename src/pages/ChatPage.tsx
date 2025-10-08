@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import ChatSidebar from "../components/ChatSidebar";
 import ChatRoom from "../components/ChatRoom";
 
@@ -7,46 +7,51 @@ const ChatPage: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    // bloquear scroll del body mientras estoy en /chat
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("resize", onResize);
+      document.body.style.overflow = prev;
+    };
   }, []);
 
   return (
-    <div className="flex flex-col md:flex-row flex-1 bg-gray-50 overflow-hidden">
-      {/* sidebar – en móvil se oculta si hay chat abierto */}
-      <div
-        className={`transition-all duration-300 ${
-          isMobile ? (selectedUser ? "hidden" : "h-full w-full") : "h-full w-80 border-r bg-white"
-        }`}
-      >
-        <ChatSidebar onSelectUser={setSelectedUser} selectedUser={selectedUser} />
-      </div>
+    // fijamos la vista: de borde a borde bajo el header (ajusta el top si tu header es más alto)
+    <div className="fixed inset-x-0 bottom-0 top-16 md:top-16 bg-gray-50">
+      <div className="h-full w-full flex md:flex-row flex-col overflow-hidden">
+        {/* Sidebar */}
+        <div
+          className={`transition-all duration-300 bg-white border-r ${
+            isMobile ? (selectedUser ? "hidden" : "block h-full w-full") : "block h-full w-80"
+          }`}
+        >
+          <ChatSidebar onSelectUser={setSelectedUser} selectedUser={selectedUser} />
+        </div>
 
-      {/* chat – en móvil se oculta si no hay chat */}
-      <div
-        className={`flex-1 flex flex-col transition-all duration-300 ${
-          isMobile && !selectedUser ? "hidden" : "block"
-        }`}
-      >
-        {selectedUser ? (
-          <ChatRoom destino={selectedUser} volverSidebar={() => setSelectedUser(null)} />
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            Seleccioná un contacto para comenzar a chatear 💬
-          </div>
+        {/* Chat */}
+        <div className={`flex-1 h-full ${isMobile && !selectedUser ? "hidden" : "block"}`}>
+          {selectedUser ? (
+            <ChatRoom destino={selectedUser} volverSidebar={() => setSelectedUser(null)} />
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400">
+              Seleccioná un contacto para comenzar a chatear 💬
+            </div>
+          )}
+        </div>
+
+        {/* botón volver solo en mobile */}
+        {isMobile && selectedUser && (
+          <button
+            className="fixed top-20 left-4 z-50 p-2 bg-white rounded-full shadow border"
+            onClick={() => setSelectedUser(null)}
+          >
+            ←
+          </button>
         )}
       </div>
-
-      {/* botón volver solo en móvil */}
-      {isMobile && selectedUser && (
-        <button
-          className="fixed top-16 left-4 z-50 p-2 bg-white rounded-full shadow border"
-          onClick={() => setSelectedUser(null)}
-        >
-          ←
-        </button>
-      )}
     </div>
   );
 };
