@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
-import { Paperclip, Send, ArrowLeft, Camera } from "lucide-react";
+import { Paperclip, Camera, Send, ArrowLeft } from "lucide-react";
 
 interface Mensaje {
   id: number;
@@ -26,30 +26,24 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [subiendo, setSubiendo] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Carga y realtime
+  // Carga inicial y realtime
   useEffect(() => {
     if (!destino || !user) return;
     cargarMensajes();
 
     const canal = supabase
       .channel(`chat_${user.username}_${destino}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "mensajes" },
-        (payload) => {
-          const nuevo = payload.new as Mensaje;
-          const pertenece =
-            [user.username, destino].includes(nuevo.remitente_username) &&
-            [user.username, destino].includes(nuevo.destinatario_username);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes" }, (payload) => {
+        const nuevo = payload.new as Mensaje;
+        const pertenece =
+          [user.username, destino].includes(nuevo.remitente_username) &&
+          [user.username, destino].includes(nuevo.destinatario_username);
 
-          // Evitar duplicados
-          if (pertenece) {
-            setMensajes((prev) =>
-              prev.some((m) => m.id === nuevo.id) ? prev : [...prev, nuevo]
-            );
-          }
+        // Añadir solo si aún no existe
+        if (pertenece) {
+          setMensajes((prev) => (prev.some((m) => m.id === nuevo.id) ? prev : [...prev, nuevo]));
         }
-      )
+      })
       .subscribe();
 
     return () => {
@@ -64,10 +58,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
   }, [mensajes]);
 
-  // Carga inicial + marcar leídos
+  // Cargar historial + marcar leídos
   const cargarMensajes = async () => {
     if (!user || !destino) return;
-
     const { data, error } = await supabase
       .from("mensajes")
       .select("*")
@@ -82,11 +75,12 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
     setMensajes(data || []);
 
+    // Marcar como leídos los mensajes que me enviaron desde este contacto
     const noLeidos =
       data
         ?.filter(
           (m) =>
-            !m.leido &&
+            m.leido === false &&
             m.destinatario_username === user.username &&
             m.remitente_username === destino
         )
@@ -97,18 +91,22 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
   };
 
-  // Enviar
+  // Enviar mensaje o imagen
   const enviarMensaje = async () => {
     if (!user || (!nuevoMensaje.trim() && !imagen)) return;
 
     setSubiendo(true);
     let imagen_url: string | null = null;
 
+    // Sube imagen si existe
     if (imagen) {
       const nombreArchivo = `${user.username}-${Date.now()}-${imagen.name}`;
       const { error: uploadError } = await supabase.storage
         .from("chat_uploads")
-        .upload(nombreArchivo, imagen, { cacheControl: "3600", upsert: false });
+        .upload(nombreArchivo, imagen, {
+          cacheControl: "3600",
+          upsert: false,
+        });
 
       if (uploadError) {
         console.error("Error subiendo imagen:", uploadError);
@@ -119,10 +117,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       const { data: urlData } = supabase.storage
         .from("chat_uploads")
         .getPublicUrl(nombreArchivo);
-
       imagen_url = urlData.publicUrl;
     }
 
+    // Inserta mensaje en la tabla
     const { data, error } = await supabase
       .from("mensajes")
       .insert([
@@ -143,10 +141,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
 
     if (data && data.length > 0) {
-      // Sólo insertamos si aún no está (evita duplicados con realtime)
-      setMensajes((prev) =>
-        prev.some((m) => m.id === data[0].id) ? prev : [...prev, data[0]]
-      );
+      const newMsg = data[0] as Mensaje;
+      // Añadir solo si aún no está (realtime lo duplicaría)
+      setMensajes((prev) => (prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]));
     }
 
     setNuevoMensaje("");
@@ -161,6 +158,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         </div>
       ) : (
         <>
+          {/* Cabecera */}
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
@@ -171,11 +169,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             <h2 className="font-semibold text-gray-700 text-sm">Chat con {destino}</h2>
           </div>
 
+          {/* Lista de mensajes */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
             {mensajes.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm mt-4">
-                No hay mensajes aún.
-              </p>
+              <p className="text-center text-gray-400 text-sm mt-4">No hay mensajes aún.</p>
             ) : (
               mensajes.map((m) => {
                 const soyYo = m.remitente_username === user?.username;
@@ -211,8 +208,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
+          {/* Barra de entrada */}
           <div className="flex items-center gap-2 border-t bg-white p-2">
-            {/* Cámara */}
+            {/* Botón cámara */}
             <label className="p-2 text-gray-500 hover:text-red-500 cursor-pointer">
               <Camera size={18} />
               <input
@@ -223,7 +221,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 className="hidden"
               />
             </label>
-            {/* Adjuntar */}
+            {/* Botón adjuntar */}
             <label className="p-2 text-gray-500 hover:text-red-500 cursor-pointer">
               <Paperclip size={18} />
               <input
@@ -233,7 +231,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 className="hidden"
               />
             </label>
-            {/* Texto */}
+            {/* Input de texto */}
             <input
               type="text"
               className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
@@ -242,7 +240,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               onChange={(e) => setNuevoMensaje(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && enviarMensaje()}
             />
-            {/* Enviar */}
+            {/* Botón enviar */}
             <button
               disabled={subiendo}
               onClick={enviarMensaje}
@@ -255,7 +253,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </button>
           </div>
 
-          {/* Preview */}
+          {/* Preview de imagen */}
           {imagen && (
             <div className="p-2 bg-gray-50 border-t flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -283,3 +281,4 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 };
 
 export default ChatRoom;
+
