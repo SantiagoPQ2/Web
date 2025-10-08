@@ -26,9 +26,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [subiendo, setSubiendo] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // =========================
-  // CARGA + REALTIME
-  // =========================
+  // Carga y realtime
   useEffect(() => {
     if (!destino || !user) return;
     cargarMensajes();
@@ -40,11 +38,16 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         { event: "INSERT", schema: "public", table: "mensajes" },
         (payload) => {
           const nuevo = payload.new as Mensaje;
-          const esDeEsteChat =
+          const pertenece =
             [user.username, destino].includes(nuevo.remitente_username) &&
             [user.username, destino].includes(nuevo.destinatario_username);
 
-          if (esDeEsteChat) setMensajes((prev) => [...prev, nuevo]);
+          // Evitar duplicados
+          if (pertenece) {
+            setMensajes((prev) =>
+              prev.some((m) => m.id === nuevo.id) ? prev : [...prev, nuevo]
+            );
+          }
         }
       )
       .subscribe();
@@ -61,13 +64,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
   }, [mensajes]);
 
-  // =========================
-  // CARGAR MENSAJES + MARCAR LEÍDOS
-  // =========================
+  // Carga inicial + marcar leídos
   const cargarMensajes = async () => {
     if (!user || !destino) return;
 
-    // Cualquier mensaje donde remitente y destinatario estén en el set {yo, otro}
     const { data, error } = await supabase
       .from("mensajes")
       .select("*")
@@ -82,70 +82,57 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
     setMensajes(data || []);
 
-    // Marcar como leídos los que me enviaron desde este contacto
-    const noLeidosIds =
-      (data || [])
-        .filter(
+    const noLeidos =
+      data
+        ?.filter(
           (m) =>
-            m.leido === false &&
+            !m.leido &&
             m.destinatario_username === user.username &&
             m.remitente_username === destino
         )
-        .map((m) => m.id) ?? [];
+        .map((m) => m.id) || [];
 
-    if (noLeidosIds.length > 0) {
-      await supabase.from("mensajes").update({ leido: true }).in("id", noLeidosIds);
+    if (noLeidos.length > 0) {
+      await supabase.from("mensajes").update({ leido: true }).in("id", noLeidos);
     }
   };
 
-  // =========================
-  // ENVIAR MENSAJE / IMAGEN
-  // =========================
+  // Enviar
   const enviarMensaje = async () => {
     if (!user || (!nuevoMensaje.trim() && !imagen)) return;
 
     setSubiendo(true);
     let imagen_url: string | null = null;
 
-    // Subir imagen si existe
     if (imagen) {
-      try {
-        const nombreArchivo = `${user.username}-${Date.now()}-${imagen.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("chat_uploads")
-          .upload(nombreArchivo, imagen, {
-            cacheControl: "3600",
-            upsert: false,
-          });
+      const nombreArchivo = `${user.username}-${Date.now()}-${imagen.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("chat_uploads")
+        .upload(nombreArchivo, imagen, { cacheControl: "3600", upsert: false });
 
-        if (uploadError) {
-          console.error("Error subiendo imagen:", uploadError);
-          setSubiendo(false);
-          return;
-        }
-
-        const { data: publicUrl } = supabase
-          .storage
-          .from("chat_uploads")
-          .getPublicUrl(nombreArchivo);
-
-        imagen_url = publicUrl.publicUrl || null;
-      } catch (e) {
-        console.error("Error inesperado subiendo imagen:", e);
+      if (uploadError) {
+        console.error("Error subiendo imagen:", uploadError);
         setSubiendo(false);
         return;
       }
+
+      const { data: urlData } = supabase.storage
+        .from("chat_uploads")
+        .getPublicUrl(nombreArchivo);
+
+      imagen_url = urlData.publicUrl;
     }
 
-    // Insertar mensaje
     const { data, error } = await supabase
       .from("mensajes")
-      .insert([{
-        remitente_username: user.username,
-        destinatario_username: destino,
-        contenido: nuevoMensaje.trim() || null,
-        imagen_url,
-      }])
+      .insert([
+        {
+          remitente_username: user.username,
+          destinatario_username: destino,
+          contenido: nuevoMensaje.trim() || null,
+          imagen_url,
+        },
+      ])
       .select("*");
 
     setSubiendo(false);
@@ -155,23 +142,25 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       return;
     }
 
-    if (data && data.length > 0) setMensajes((prev) => [...prev, data[0]]);
+    if (data && data.length > 0) {
+      // Sólo insertamos si aún no está (evita duplicados con realtime)
+      setMensajes((prev) =>
+        prev.some((m) => m.id === data[0].id) ? prev : [...prev, data[0]]
+      );
+    }
+
     setNuevoMensaje("");
     setImagen(null);
   };
 
-  // =========================
-  // UI
-  // =========================
   return (
-    <div className="flex flex-col h-screen md:h-[calc(100vh-4rem)] bg-gradient-to-br from-gray-50 to-blue-50 overflow-hidden">
+    <div className="flex flex-col flex-1 bg-gradient-to-br from-gray-50 to-blue-50">
       {!destino ? (
         <div className="m-auto text-gray-400 text-sm">
           Seleccioná un contacto para comenzar a chatear 💬
         </div>
       ) : (
         <>
-          {/* Header */}
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
@@ -179,20 +168,22 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             >
               <ArrowLeft size={20} />
             </button>
-            <h2 className="font-semibold text-gray-700 text-sm">
-              Chat con {destino}
-            </h2>
+            <h2 className="font-semibold text-gray-700 text-sm">Chat con {destino}</h2>
           </div>
 
-          {/* Mensajes */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2">
             {mensajes.length === 0 ? (
-              <p className="text-center text-gray-400 text-sm mt-4">No hay mensajes aún.</p>
+              <p className="text-center text-gray-400 text-sm mt-4">
+                No hay mensajes aún.
+              </p>
             ) : (
               mensajes.map((m) => {
-                const soyYo = m.remitente_username === user.username;
+                const soyYo = m.remitente_username === user?.username;
                 return (
-                  <div key={m.id} className={`flex ${soyYo ? "justify-end" : "justify-start"}`}>
+                  <div
+                    key={m.id}
+                    className={`flex ${soyYo ? "justify-end" : "justify-start"}`}
+                  >
                     <div
                       className={`p-3 max-w-[75%] rounded-2xl shadow-sm ${
                         soyYo ? "bg-red-500 text-white" : "bg-gray-200 text-gray-800"
@@ -208,7 +199,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                       )}
                       {m.contenido && <p>{m.contenido}</p>}
                       <p className="text-[10px] text-right opacity-70 mt-1">
-                        {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(m.created_at).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </p>
                     </div>
                   </div>
@@ -217,7 +211,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
-          {/* Barra de entrada */}
           <div className="flex items-center gap-2 border-t bg-white p-2">
             {/* Cámara */}
             <label className="p-2 text-gray-500 hover:text-red-500 cursor-pointer">
@@ -230,7 +223,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 className="hidden"
               />
             </label>
-
             {/* Adjuntar */}
             <label className="p-2 text-gray-500 hover:text-red-500 cursor-pointer">
               <Paperclip size={18} />
@@ -241,7 +233,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 className="hidden"
               />
             </label>
-
             {/* Texto */}
             <input
               type="text"
@@ -251,7 +242,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               onChange={(e) => setNuevoMensaje(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && enviarMensaje()}
             />
-
             {/* Enviar */}
             <button
               disabled={subiendo}
@@ -265,7 +255,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </button>
           </div>
 
-          {/* Preview imagen */}
+          {/* Preview */}
           {imagen && (
             <div className="p-2 bg-gray-50 border-t flex items-center justify-between">
               <div className="flex items-center gap-3">
