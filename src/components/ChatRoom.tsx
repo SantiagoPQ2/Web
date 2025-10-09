@@ -403,8 +403,3 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 };
 
 export default ChatRoom;
-
-  );
-};
-
-export default ChatRoom;
