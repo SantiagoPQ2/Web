@@ -62,7 +62,6 @@ function ProtectedApp() {
       </Routes>
     );
   } else {
-    // admin
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -85,7 +84,9 @@ function ProtectedApp() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
       <Navigation />
       <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
+
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
+
       {!isChat && (
         <footer className="bg-white border-t border-gray-200 mt-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
