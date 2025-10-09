@@ -33,7 +33,35 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🔹 Traemos tu lógica original exacta de menú por roles:
+  // 🔹 Función para mostrar el nombre de la página actual
+  const getCurrentPageName = () => {
+    switch (location.pathname) {
+      case "/":
+        return "Buscar Cliente";
+      case "/bonificaciones":
+        return "Bonificaciones";
+      case "/notas-credito":
+        return "Notas de Crédito";
+      case "/gps-logger":
+        return "GPS Logger";
+      case "/informacion":
+        return "Información";
+      case "/rechazos/nuevo":
+        return "Nuevo Rechazo";
+      case "/coordenadas":
+        return "Coordenadas";
+      case "/supervisor":
+        return "Supervisor";
+      case "/chat":
+        return "Chat";
+      case "/settings":
+        return "Configuración";
+      default:
+        return "VaFood SRL - AR";
+    }
+  };
+
+  // 🔹 Menús por rol (tu versión original)
   let menuItems: { name: string; path: string; icon: any; description: string }[] = [];
 
   if (user?.role === "vendedor") {
@@ -97,7 +125,7 @@ const Navigation: React.FC = () => {
             </button>
             <div className="flex items-center">
               <img src="/image.png" alt="VaFood" className="h-8 w-8 object-contain mr-2" />
-              <h1 className="text-lg font-semibold text-gray-800">VaFood SRL - AR</h1>
+              <h1 className="text-lg font-semibold text-gray-800">{getCurrentPageName()}</h1>
             </div>
           </div>
 
@@ -108,6 +136,8 @@ const Navigation: React.FC = () => {
               aria-label="Notificaciones"
             >
               <Bell size={20} />
+              {/* Ejemplo de burbuja roja */}
+              {/* <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span> */}
             </button>
 
             <div className="relative" ref={userMenuRef}>
