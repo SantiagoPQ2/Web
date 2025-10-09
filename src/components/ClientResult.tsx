@@ -1,5 +1,5 @@
 import React from "react";
-import { User, FileText, List, Info, ChevronDown } from "lucide-react";
+import { User, FileText, List, Info, ChevronDown, Building } from "lucide-react";
 import { ClienteData } from "../types";
 
 // 🔑 Diccionario de categorías (rellenalo con tus keywords)
@@ -10,9 +10,9 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Salchichas: ["VSS", "ICB"],
   Azucar: ["Azucar"],
   Softys: ["Softy"],
-  Molinos: ["Molino","Snack"],
+  Molinos: ["Molino", "Snack"],
   QuesoRallado: ["rallado"],
-  Otros: [] // fallback
+  Otros: [], // fallback
 };
 
 // 👉 Función para categorizar promos
@@ -32,11 +32,7 @@ function categorizePromos(promosRaw: string | undefined) {
   for (const promo of promos) {
     let foundCategory = "Otros";
     for (const [cat, keywords] of Object.entries(PROMO_CATEGORIES)) {
-      if (
-        keywords.some((kw) =>
-          promo.toLowerCase().includes(kw.toLowerCase())
-        )
-      ) {
+      if (keywords.some((kw) => promo.toLowerCase().includes(kw.toLowerCase()))) {
         foundCategory = cat;
         break;
       }
@@ -66,14 +62,23 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
           <User className="h-6 w-6 text-red-700" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-800">
-            Cliente Encontrado
-          </h2>
+          <h2 className="text-xl font-bold text-gray-800">Cliente Encontrado</h2>
           <p className="text-red-700 font-medium">N° {cliente.numero}</p>
         </div>
       </div>
 
       <div className="space-y-6">
+        {/* Razón Social */}
+        <div className="bg-gray-50 rounded-lg p-4">
+          <div className="flex items-center mb-2">
+            <Building className="h-5 w-5 text-gray-600 mr-2" />
+            <h3 className="font-semibold text-gray-800">Razón Social</h3>
+          </div>
+          <p className="text-gray-700 leading-relaxed">
+            {cliente.razon_social || "No disponible"}
+          </p>
+        </div>
+
         {/* Deuda */}
         <div className="bg-gray-50 rounded-lg p-4">
           <div className="flex items-center mb-2">
