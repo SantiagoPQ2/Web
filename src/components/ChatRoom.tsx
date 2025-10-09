@@ -9,6 +9,7 @@ interface Mensaje {
   destinatario_username: string;
   contenido: string | null;
   imagen_url: string | null;
+  audio_url?: string | null;
   created_at: string;
   leido?: boolean | null;
 }
@@ -18,21 +19,24 @@ interface Props {
   volverSidebar: () => void;
 }
 
-const MAX_MB = 15; // límite de archivo
+const MAX_MB = 15;
 
 const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const { user } = useAuth();
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [nuevoMensaje, setNuevoMensaje] = useState("");
   const [archivo, setArchivo] = useState<File | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [subiendo, setSubiendo] = useState(false);
+  const [grabando, setGrabando] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 🔹 Cargar historial y activar realtime
+  // Carga inicial + realtime
   useEffect(() => {
     if (!user || !destino) return;
 
-    const cargarHistorial = async () => {
+    const cargar = async () => {
       const { data, error } = await supabase
         .from("mensajes")
         .select("*")
@@ -42,13 +46,12 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         .order("created_at", { ascending: true });
 
       if (error) {
-        console.error("❌ Error cargando historial:", error);
+        console.error("Error cargando historial:", error);
         return;
       }
 
       setMensajes(data || []);
 
-      // marcar como leídos los que vengan del otro
       const ids = (data || [])
         .filter(
           (m) =>
@@ -63,9 +66,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       }
     };
 
-    cargarHistorial();
+    cargar();
 
-    // 🔹 Suscripción en tiempo real
     const canal = supabase
       .channel(`chat_${user.username}_${destino}`)
       .on(
@@ -80,7 +82,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               nuevo.destinatario_username === user.username);
 
           if (!pertenece) return;
-
           setMensajes((prev) =>
             prev.some((m) => m.id === nuevo.id) ? prev : [...prev, nuevo]
           );
@@ -93,14 +94,12 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [user, destino]);
 
-  // 🔹 Auto-scroll al final
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current)
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
   }, [mensajes]);
 
-  // 🔹 Adjuntar archivo
+  // Adjuntar imagen
   const onPickFile = (f?: File | null) => {
     if (!f) return setArchivo(null);
     if (f.size > MAX_MB * 1024 * 1024) {
@@ -112,25 +111,51 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
   const quitarAdjunto = () => setArchivo(null);
 
-  // 🔹 Enviar mensaje
+  // 🎤 Grabar audio
+  const toggleGrabacion = async () => {
+    if (grabando) {
+      mediaRecorder?.stop();
+      setGrabando(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        const chunks: BlobPart[] = [];
+
+        recorder.ondataavailable = (e) => chunks.push(e.data);
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "audio/webm" });
+          setAudioBlob(blob);
+        };
+
+        recorder.start();
+        setMediaRecorder(recorder);
+        setGrabando(true);
+      } catch {
+        alert("No se pudo acceder al micrófono.");
+      }
+    }
+  };
+
   const enviarMensaje = async () => {
-    if (!user || (!nuevoMensaje.trim() && !archivo)) return;
+    if (!user || (!nuevoMensaje.trim() && !archivo && !audioBlob)) return;
 
     try {
       setSubiendo(true);
       let imagen_url: string | null = null;
+      let audio_url: string | null = null;
 
-      // 1️⃣ Subir imagen (si hay)
+      const pair =
+        user.username < destino
+          ? `${user.username}__${destino}`
+          : `${destino}__${user.username}`;
+
+      // Subir imagen
       if (archivo) {
-        const pair =
-          user.username < destino
-            ? `${user.username}__${destino}`
-            : `${destino}__${user.username}`;
-
         const fileName = `${Date.now()}-${archivo.name}`;
         const filePath = `${pair}/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
+        const { error: errUp } = await supabase.storage
           .from("chat_uploads")
           .upload(filePath, archivo, {
             cacheControl: "3600",
@@ -138,24 +163,45 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             contentType: archivo.type || "application/octet-stream",
           });
 
-        if (uploadError) {
-          console.error("❌ Upload error:", uploadError);
-          alert("No se pudo enviar el mensaje/imagen. Reintentá.");
+        if (errUp) {
+          console.error("Upload error:", errUp);
+          alert("No se pudo enviar la imagen.");
           setSubiendo(false);
           return;
         }
 
-        // 🔹 Obtener URL pública correcta
-        const { data: publicData } = supabase.storage
+        const { data: pub } = supabase.storage
           .from("chat_uploads")
           .getPublicUrl(filePath);
-
-        imagen_url = publicData.publicUrl;
-        console.log("✅ Imagen subida:", imagen_url);
+        imagen_url = pub.publicUrl;
       }
 
-      // 2️⃣ Insertar mensaje
-      const contenido = nuevoMensaje.trim() || null;
+      // Subir audio
+      if (audioBlob) {
+        const audioName = `${Date.now()}.webm`;
+        const audioPath = `${pair}/${audioName}`;
+        const { error: errAudio } = await supabase.storage
+          .from("chat_uploads")
+          .upload(audioPath, audioBlob, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: "audio/webm",
+          });
+
+        if (errAudio) {
+          console.error("Upload audio error:", errAudio);
+          alert("No se pudo enviar el audio.");
+          setSubiendo(false);
+          return;
+        }
+
+        const { data: pub } = supabase.storage
+          .from("chat_uploads")
+          .getPublicUrl(audioPath);
+        audio_url = pub.publicUrl;
+      }
+
+      const contenido = nuevoMensaje.trim() || "";
 
       const { data: inserted, error } = await supabase
         .from("mensajes")
@@ -165,19 +211,19 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             destinatario_username: destino,
             contenido,
             imagen_url,
+            audio_url,
             leido: false,
           },
         ])
         .select("*");
 
       if (error) {
-        console.error("❌ Insert error:", error);
-        alert("No se pudo enviar el mensaje/imagen. Reintentá.");
+        console.error("Insert error:", error);
+        alert("No se pudo enviar el mensaje/imagen/audio.");
         setSubiendo(false);
         return;
       }
 
-      // 3️⃣ Evitar duplicados
       if (inserted && inserted.length) {
         setMensajes((prev) =>
           prev.some((m) => m.id === inserted[0].id)
@@ -186,9 +232,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         );
       }
 
-      // Reset campos
       setNuevoMensaje("");
       setArchivo(null);
+      setAudioBlob(null);
     } finally {
       setSubiendo(false);
       document.dispatchEvent(
@@ -205,12 +251,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         </div>
       ) : (
         <>
-          {/* 🔹 Header */}
+          {/* Header */}
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
               className="md:hidden text-gray-500 hover:text-red-500 mr-3"
-              aria-label="Volver"
             >
               <ArrowLeft size={20} />
             </button>
@@ -219,7 +264,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </h2>
           </div>
 
-          {/* 🔹 Lista de mensajes */}
+          {/* Mensajes */}
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2"
@@ -251,6 +296,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                           onClick={() => window.open(m.imagen_url!, "_blank")}
                         />
                       )}
+                      {m.audio_url && (
+                        <audio
+                          controls
+                          className="w-full mt-2 rounded-lg"
+                          src={m.audio_url}
+                        />
+                      )}
                       {m.contenido && <p>{m.contenido}</p>}
                       <p className="text-[10px] opacity-70 mt-1 text-right">
                         {new Date(m.created_at).toLocaleTimeString([], {
@@ -265,9 +317,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
-          {/* 🔹 Input inferior */}
+          {/* Input inferior */}
           <div className="border-t bg-white p-2 md:p-3">
-            {/* Previsualización adjunto */}
             {archivo && (
               <div className="mb-2 flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-sm">
                 <span className="truncate">{archivo.name}</span>
@@ -282,10 +333,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
 
             <div className="flex items-center gap-2">
-              {/* Adjuntar archivo */}
               <label
                 className="p-2 text-gray-500 hover:text-red-500 cursor-pointer"
-                title="Adjuntar archivo"
+                title="Adjuntar imagen"
               >
                 <Paperclip size={18} />
                 <input
@@ -296,7 +346,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 />
               </label>
 
-              {/* Tomar foto */}
               <label
                 className="p-2 text-gray-500 hover:text-red-500 cursor-pointer"
                 title="Sacar foto"
@@ -311,7 +360,18 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 />
               </label>
 
-              {/* Campo de texto */}
+              <button
+                onClick={toggleGrabacion}
+                className={`p-2 rounded-full ${
+                  grabando
+                    ? "text-red-600 animate-pulse"
+                    : "text-gray-500 hover:text-red-500"
+                }`}
+                title={grabando ? "Detener grabación" : "Grabar audio"}
+              >
+                🎤
+              </button>
+
               <input
                 type="text"
                 className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
@@ -323,7 +383,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 }
               />
 
-              {/* Botón enviar */}
               <button
                 disabled={subiendo}
                 onClick={enviarMensaje}
@@ -340,6 +399,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         </>
       )}
     </div>
+  );
+};
+
+export default ChatRoom;
+
   );
 };
 
