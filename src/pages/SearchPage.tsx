@@ -5,10 +5,8 @@ import { CONFIG } from "../config/constants";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 import SearchBox from "../components/SearchBox";
-import EmptyState from "../components/EmptyState";
-
-// 🔹 Importamos el componente de resultado de cliente
 import ClientResult from "../components/ClientResult";
+import EmptyState from "../components/EmptyState";
 
 const SearchPage: React.FC = () => {
   const {
@@ -26,15 +24,13 @@ const SearchPage: React.FC = () => {
   const lastSearchRef = useRef<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // 👇 Recuperamos el usuario logueado desde localStorage
+  // Recuperamos el usuario logueado desde localStorage
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
   const handleSearch = async () => {
     setLocalError(null);
-
     if (!searchTerm) return;
 
-    // Evitar búsquedas repetidas
     if (lastSearchRef.current === searchTerm) {
       setLocalError("⚠️ Ya buscaste este cliente, prueba con otro distinto.");
       return;
@@ -42,13 +38,12 @@ const SearchPage: React.FC = () => {
 
     console.log("Intentando guardar en Supabase:", searchTerm);
 
-    // Guardar la búsqueda en Supabase
     const { data: inserted, error } = await supabase
       .from("busquedas_clientes")
       .insert([
         {
           cliente_numero: searchTerm,
-          created_by: currentUser.id, // 👈 guardamos el usuario logueado
+          created_by: currentUser.id,
         },
       ])
       .select();
@@ -61,7 +56,6 @@ const SearchPage: React.FC = () => {
       lastSearchRef.current = searchTerm;
     }
 
-    // Ejecutar la búsqueda en el Excel (hook)
     handleExcelSearch();
   };
 
@@ -100,25 +94,7 @@ const SearchPage: React.FC = () => {
           {/* 🧾 Resultado del cliente */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             {searchResult ? (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                  Cliente Encontrado
-                </h3>
-                <p className="text-sm text-gray-600 mb-1">
-                  <strong>N°:</strong> {searchResult.numero}
-                </p>
-                <p className="text-sm text-gray-600 mb-1">
-                  <strong>Razón Social:</strong>{" "}
-                  {searchResult.razon_social || "No disponible"}
-                </p>
-                <p className="text-sm text-gray-600 mb-4">
-                  <strong>Deuda:</strong>{" "}
-                  {searchResult.deuda || "Sin deuda registrada"}
-                </p>
-
-                {/* ✅ Resto del resultado del cliente */}
-                <ClientResult cliente={searchResult} />
-              </div>
+              <ClientResult cliente={searchResult} />
             ) : hasSearched ? (
               <EmptyState type="not-found" searchTerm={searchTerm} />
             ) : (
