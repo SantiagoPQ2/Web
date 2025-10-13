@@ -47,8 +47,9 @@ const CoordsPage: React.FC = () => {
               Cliente {clienteEncontrado.cliente}
             </h3>
           </div>
-          <p><strong>Coord X:</strong> {clienteEncontrado.coordX}</p>
           <p><strong>Coord Y:</strong> {clienteEncontrado.coordY}</p>
+          <p><strong>Coord X:</strong> {clienteEncontrado.coordX}</p>
+          <p><strong>Dirección:</strong> {clienteEncontrado.direccion || "Sin información"}</p>
         </div>
       )}
 
@@ -62,3 +63,4 @@ const CoordsPage: React.FC = () => {
 };
 
 export default CoordsPage;
+
