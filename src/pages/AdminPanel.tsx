@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
 import { supabase } from "../config/supabase";
-import { useUser } from "../context/AuthProvider";
+import { useAuth } from "../context/AuthContext";
 import { Navigate } from "react-router-dom";
 import { Upload, Trash2, Save } from "lucide-react";
 
