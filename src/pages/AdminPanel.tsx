@@ -10,8 +10,8 @@ interface TableInfo {
 }
 
 const AdminPanel: React.FC = () => {
-  const { user } = useUser();
-  const esAdmin = user?.rol === "admin";
+  const { user } = useAuth();
+  const esAdmin = user?.role === "admin";
 
   const [tablas, setTablas] = useState<TableInfo[]>([]);
   const [tablaSeleccionada, setTablaSeleccionada] = useState<string>("");
@@ -19,29 +19,34 @@ const AdminPanel: React.FC = () => {
   const [cargando, setCargando] = useState(false);
   const [editando, setEditando] = useState<Record<number, any>>({});
 
-  // Si no es admin, lo redirige
+  // 🔒 Si no es admin, redirige
   if (!esAdmin) return <Navigate to="/home" replace />;
 
-  // Obtener listado de tablas disponibles
+  // 🧾 Cargar listado de tablas (puede venir de un RPC o lista fija)
   useEffect(() => {
     const fetchTables = async () => {
-      const { data, error } = await supabase.rpc("get_tablas_disponibles"); // opcional si querés hacer un RPC con las tablas que querés mostrar
-      if (!error && data) setTablas(data);
-      else {
-        // fallback manual
-        setTablas([
-          { name: "usuarios_app" },
-          { name: "top_5" },
-          { name: "coordenadas" },
-          { name: "visitas_planificadas" },
-          { name: "resumenes_diarios" },
-        ]);
+      try {
+        // Si tenés un RPC para traer nombres de tablas, podés usarlo acá
+        const { data, error } = await supabase.rpc("get_tablas_disponibles");
+        if (!error && data) setTablas(data);
+        else {
+          // Fallback manual
+          setTablas([
+            { name: "usuarios_app" },
+            { name: "top_5" },
+            { name: "coordenadas" },
+            { name: "visitas_planificadas" },
+            { name: "resumenes_diarios" },
+          ]);
+        }
+      } catch (e) {
+        console.error("Error cargando tablas", e);
       }
     };
     fetchTables();
   }, []);
 
-  // Obtener datos de la tabla seleccionada
+  // 📥 Cargar datos de una tabla
   const cargarTabla = async (tabla: string) => {
     setCargando(true);
     const { data, error } = await supabase.from(tabla).select("*").limit(1000);
@@ -50,7 +55,7 @@ const AdminPanel: React.FC = () => {
     setCargando(false);
   };
 
-  // Manejar carga CSV
+  // 📤 Subir CSV e insertar datos
   const handleUpload = async (file: File) => {
     if (!tablaSeleccionada) return alert("Selecciona una tabla primero");
     Papa.parse(file, {
@@ -66,7 +71,7 @@ const AdminPanel: React.FC = () => {
     });
   };
 
-  // Eliminar fila
+  // ❌ Eliminar fila
   const eliminarFila = async (id: any) => {
     if (!tablaSeleccionada) return;
     if (!window.confirm("¿Seguro que deseas eliminar esta fila?")) return;
@@ -75,7 +80,7 @@ const AdminPanel: React.FC = () => {
     else setDatos(datos.filter((d) => d.id !== id));
   };
 
-  // Editar celda local
+  // ✏️ Editar celda localmente
   const handleChange = (id: number, campo: string, valor: any) => {
     setEditando({
       ...editando,
@@ -83,7 +88,7 @@ const AdminPanel: React.FC = () => {
     });
   };
 
-  // Guardar cambios
+  // 💾 Guardar cambios
   const guardarCambios = async (id: number) => {
     if (!tablaSeleccionada) return;
     const cambios = editando[id];
@@ -104,8 +109,8 @@ const AdminPanel: React.FC = () => {
     <div className="max-w-7xl mx-auto px-6 py-8">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">Panel de Administración</h1>
 
-      {/* Selección de tabla */}
-      <div className="mb-6 flex gap-4 items-center">
+      {/* 🔹 Selector de tabla + botón de carga CSV */}
+      <div className="mb-6 flex gap-4 items-center flex-wrap">
         <select
           value={tablaSeleccionada}
           onChange={(e) => {
@@ -134,9 +139,9 @@ const AdminPanel: React.FC = () => {
         </label>
       </div>
 
-      {/* Tabla */}
+      {/* 📊 Tabla con edición inline */}
       {cargando ? (
-        <p>Cargando datos...</p>
+        <p className="text-gray-600">Cargando datos...</p>
       ) : (
         tablaSeleccionada &&
         datos.length > 0 && (
