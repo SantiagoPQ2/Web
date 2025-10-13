@@ -12,6 +12,8 @@ import {
   Compass,
   Plus,
   X,
+  Settings as SettingsIcon,
+  Wrench,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useLocation, Link } from "react-router-dom";
@@ -33,7 +35,6 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🔹 Función para mostrar el nombre de la página actual
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
@@ -56,12 +57,13 @@ const Navigation: React.FC = () => {
         return "Chat";
       case "/settings":
         return "Configuración";
+      case "/admin":
+        return "Panel Admin";
       default:
         return "VaFood SRL - AR";
     }
   };
 
-  // 🔹 Menús por rol (tu versión original)
   let menuItems: { name: string; path: string; icon: any; description: string }[] = [];
 
   if (user?.role === "vendedor") {
@@ -72,7 +74,7 @@ const Navigation: React.FC = () => {
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con supervisores" },
-      { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
+      { name: "Settings", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
     ];
   } else if (user?.role === "supervisor") {
     menuItems = [
@@ -83,7 +85,7 @@ const Navigation: React.FC = () => {
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con vendedores" },
-      { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
+      { name: "Settings", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
     ];
   } else if (user?.role === "logistica") {
     menuItems = [
@@ -91,10 +93,9 @@ const Navigation: React.FC = () => {
       { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas de clientes" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con administración" },
-      { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
+      { name: "Settings", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
     ];
-  } else {
-    // admin
+  } else if (user?.role === "admin") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
       { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
@@ -104,17 +105,17 @@ const Navigation: React.FC = () => {
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Información", path: "/informacion", icon: Info, description: "Resumen, Quiz y Clientes del Día" },
       { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
+      { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Administrar tablas, CSVs y registros" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna general" },
-      { name: "Settings", path: "/settings", icon: User, description: "Configurar perfil y cerrar sesión" },
+      { name: "Settings", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
     ];
   }
 
   return (
     <>
-      {/* HEADER SUPERIOR */}
+      {/* HEADER */}
       <header className="w-full bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
-          {/* IZQUIERDA: menú + logo */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -129,15 +130,12 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* DERECHA: notificaciones + usuario */}
           <div className="flex items-center gap-4 relative">
             <button
               className="relative p-2 text-gray-600 hover:text-red-600 transition"
               aria-label="Notificaciones"
             >
               <Bell size={20} />
-              {/* Ejemplo de burbuja roja */}
-              {/* <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span> */}
             </button>
 
             <div className="relative" ref={userMenuRef}>
@@ -178,7 +176,7 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
-      {/* SIDEBAR DESPLEGABLE */}
+      {/* SIDEBAR */}
       {sidebarOpen && (
         <>
           <div
