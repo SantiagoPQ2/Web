@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Informacion from "./pages/Informacion";
 import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
+import AdminPanel from "./pages/AdminPanel";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
@@ -61,7 +62,7 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
       </Routes>
     );
-  } else {
+  } else if (role === "admin") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -74,6 +75,14 @@ function ProtectedApp() {
         <Route path="/supervisor" element={<SupervisorPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<AdminPanel />} />
+      </Routes>
+    );
+  } else {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/informacion" element={<Informacion />} />
       </Routes>
     );
   }
