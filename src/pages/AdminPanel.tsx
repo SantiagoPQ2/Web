@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Navigate } from "react-router-dom";
-import { Upload, Trash2, Save, Filter, Calendar } from "lucide-react";
+import { Upload, Trash2, Save, Filter, FileDown } from "lucide-react";
 
 interface TableInfo {
   name: string;
@@ -11,7 +12,15 @@ interface TableInfo {
 
 const AdminPanel: React.FC = () => {
   const { user } = useAuth();
-  const esAdmin = user?.role?.toLowerCase().trim() === "administrador";
+
+  if (!user) return <p className="p-6 text-center text-gray-600">Cargando usuario...</p>;
+  const esAdmin = user?.role?.toLowerCase().trim() === "admin";
+  if (!esAdmin)
+    return (
+      <p className="p-6 text-center text-gray-600">
+        Acceso restringido — solo disponible para administradores.
+      </p>
+    );
 
   const [tablas, setTablas] = useState<TableInfo[]>([]);
   const [tablaSeleccionada, setTablaSeleccionada] = useState<string>("");
@@ -21,9 +30,7 @@ const AdminPanel: React.FC = () => {
   const [cargando, setCargando] = useState(false);
   const [editando, setEditando] = useState<Record<number, any>>({});
 
-  if (!esAdmin) return <Navigate to="/home" replace />;
-
-  // 🔹 Tablas disponibles
+  // Cargar listado de tablas disponibles
   useEffect(() => {
     setTablas([
       { name: "usuarios_app" },
@@ -32,15 +39,21 @@ const AdminPanel: React.FC = () => {
       { name: "visitas_planificadas" },
       { name: "resumenes_diarios" },
     ]);
+
+    // Rango inicial: últimos 7 días
+    const hoy = new Date();
+    const hace7 = new Date();
+    hace7.setDate(hoy.getDate() - 7);
+    setFechaDesde(hace7.toISOString().slice(0, 10));
+    setFechaHasta(hoy.toISOString().slice(0, 10));
   }, []);
 
-  // 🔍 Buscar por fecha
+  // Filtrar por fecha
   const filtrarPorFecha = async () => {
     if (!tablaSeleccionada) return alert("Selecciona una tabla primero");
     if (!fechaDesde || !fechaHasta) return alert("Selecciona un rango de fechas");
 
     setCargando(true);
-
     const { data, error } = await supabase
       .from(tablaSeleccionada)
       .select("*")
@@ -54,7 +67,7 @@ const AdminPanel: React.FC = () => {
     setCargando(false);
   };
 
-  // 📤 Subir CSV
+  // Subir CSV
   const handleUpload = async (file: File) => {
     if (!tablaSeleccionada) return alert("Selecciona una tabla primero");
     Papa.parse(file, {
@@ -70,7 +83,16 @@ const AdminPanel: React.FC = () => {
     });
   };
 
-  // ✏️ Edición
+  // Exportar a XLSX
+  const exportarXLSX = () => {
+    if (!datos.length) return alert("No hay datos para exportar");
+    const ws = XLSX.utils.json_to_sheet(datos);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tablaSeleccionada || "Datos");
+    XLSX.writeFile(wb, `${tablaSeleccionada || "export"}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Edición
   const handleChange = (id: number, campo: string, valor: any) => {
     setEditando({
       ...editando,
@@ -93,7 +115,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // ❌ Eliminar
+  // Eliminar
   const eliminarFila = async (id: any) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta fila?")) return;
     const { error } = await supabase.from(tablaSeleccionada).delete().eq("id", id);
@@ -112,9 +134,7 @@ const AdminPanel: React.FC = () => {
         </h2>
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tabla
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tabla</label>
             <select
               value={tablaSeleccionada}
               onChange={(e) => setTablaSeleccionada(e.target.value)}
@@ -130,9 +150,7 @@ const AdminPanel: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fecha Desde
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
             <input
               type="date"
               value={fechaDesde}
@@ -142,9 +160,7 @@ const AdminPanel: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fecha Hasta
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
             <input
               type="date"
               value={fechaHasta}
@@ -170,6 +186,13 @@ const AdminPanel: React.FC = () => {
               className="hidden"
             />
           </label>
+
+          <button
+            onClick={exportarXLSX}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
+          >
+            <FileDown size={18} /> Exportar XLSX
+          </button>
         </div>
       </div>
 
