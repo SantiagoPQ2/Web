@@ -4,7 +4,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Navigate } from "react-router-dom";
-import { Upload, Trash2, Save, Filter, FileDown } from "lucide-react";
+import { Upload, Trash2, Save, Filter, FileDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface TableInfo {
   name: string;
@@ -12,7 +12,6 @@ interface TableInfo {
 
 const AdminPanel: React.FC = () => {
   const { user } = useAuth();
-
   if (!user) return <p className="p-6 text-center text-gray-600">Cargando usuario...</p>;
   const esAdmin = user?.role?.toLowerCase().trim() === "admin";
   if (!esAdmin)
@@ -30,7 +29,13 @@ const AdminPanel: React.FC = () => {
   const [cargando, setCargando] = useState(false);
   const [editando, setEditando] = useState<Record<number, any>>({});
 
-  // Cargar listado de tablas disponibles
+  // Paginación
+  const [paginaActual, setPaginaActual] = useState(1);
+  const registrosPorPagina = 15;
+  const totalPaginas = Math.ceil(datos.length / registrosPorPagina);
+  const datosPagina = datos.slice((paginaActual - 1) * registrosPorPagina, paginaActual * registrosPorPagina);
+
+  // Cargar tablas
   useEffect(() => {
     setTablas([
       { name: "usuarios_app" },
@@ -40,7 +45,6 @@ const AdminPanel: React.FC = () => {
       { name: "resumenes_diarios" },
     ]);
 
-    // Rango inicial: últimos 7 días
     const hoy = new Date();
     const hace7 = new Date();
     hace7.setDate(hoy.getDate() - 7);
@@ -48,7 +52,7 @@ const AdminPanel: React.FC = () => {
     setFechaHasta(hoy.toISOString().slice(0, 10));
   }, []);
 
-  // Filtrar por fecha
+  // Filtrar
   const filtrarPorFecha = async () => {
     if (!tablaSeleccionada) return alert("Selecciona una tabla primero");
     if (!fechaDesde || !fechaHasta) return alert("Selecciona un rango de fechas");
@@ -63,7 +67,10 @@ const AdminPanel: React.FC = () => {
       .limit(1000);
 
     if (error) alert("Error al filtrar datos: " + error.message);
-    else setDatos(data || []);
+    else {
+      setDatos(data || []);
+      setPaginaActual(1);
+    }
     setCargando(false);
   };
 
@@ -83,7 +90,7 @@ const AdminPanel: React.FC = () => {
     });
   };
 
-  // Exportar a XLSX
+  // Exportar
   const exportarXLSX = () => {
     if (!datos.length) return alert("No hay datos para exportar");
     const ws = XLSX.utils.json_to_sheet(datos);
@@ -129,9 +136,30 @@ const AdminPanel: React.FC = () => {
 
       {/* FILTROS */}
       <div className="bg-white border rounded-xl shadow-sm p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Filter size={18} /> Filtros de búsqueda
-        </h2>
+        <div className="flex justify-between items-center flex-wrap gap-4 mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Filter size={18} /> Filtros de búsqueda
+          </h2>
+          <div className="flex gap-3">
+            <label className="flex items-center gap-2 cursor-pointer bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg">
+              <Upload size={18} />
+              Subir CSV
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => e.target.files && handleUpload(e.target.files[0])}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={exportarXLSX}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
+            >
+              <FileDown size={18} /> Exportar XLSX
+            </button>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tabla</label>
@@ -175,24 +203,6 @@ const AdminPanel: React.FC = () => {
           >
             Procesar
           </button>
-
-          <label className="flex items-center gap-2 cursor-pointer bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg">
-            <Upload size={18} />
-            Subir CSV
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => e.target.files && handleUpload(e.target.files[0])}
-              className="hidden"
-            />
-          </label>
-
-          <button
-            onClick={exportarXLSX}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
-          >
-            <FileDown size={18} /> Exportar XLSX
-          </button>
         </div>
       </div>
 
@@ -203,7 +213,7 @@ const AdminPanel: React.FC = () => {
         datos.length > 0 && (
           <div className="overflow-auto border rounded-lg shadow-sm bg-white">
             <table className="min-w-full border-collapse text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   {Object.keys(datos[0]).map((col) => (
                     <th key={col} className="border px-3 py-2 text-gray-600 text-left">
@@ -214,7 +224,7 @@ const AdminPanel: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {datos.map((fila) => (
+                {datosPagina.map((fila) => (
                   <tr key={fila.id} className="hover:bg-gray-50">
                     {Object.entries(fila).map(([campo, valor]) => (
                       <td key={campo} className="border px-3 py-2">
@@ -247,6 +257,27 @@ const AdminPanel: React.FC = () => {
                 ))}
               </tbody>
             </table>
+
+            {/* Paginación */}
+            <div className="flex justify-center items-center gap-4 py-3 bg-gray-50 border-t">
+              <button
+                onClick={() => setPaginaActual((p) => Math.max(p - 1, 1))}
+                disabled={paginaActual === 1}
+                className="p-2 text-gray-600 hover:text-red-600 disabled:opacity-40"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm text-gray-700">
+                Página {paginaActual} de {totalPaginas}
+              </span>
+              <button
+                onClick={() => setPaginaActual((p) => Math.min(p + 1, totalPaginas))}
+                disabled={paginaActual === totalPaginas}
+                className="p-2 text-gray-600 hover:text-red-600 disabled:opacity-40"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
           </div>
         )
       )}
