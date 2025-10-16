@@ -35,7 +35,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // ---------- SCROLL ----------
+  // --------- Scroll helpers ---------
   const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -59,7 +59,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ---------- CARGA + REALTIME ----------
+  // --------- Carga inicial + realtime ---------
   useEffect(() => {
     if (!user || !destino) return;
 
@@ -137,7 +137,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [user, destino]);
 
-  // ---------- ADJUNTOS ----------
+  // --------- Adjuntos ---------
   const onPickFile = (f?: File | null) => {
     if (!f) return setArchivo(null);
     if (f.size > MAX_MB * 1024 * 1024) {
@@ -148,7 +148,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
   const quitarAdjunto = () => setArchivo(null);
 
-  // ---------- AUDIO ----------
+  // --------- Audio ---------
   const stopMicStream = () => {
     if (micStream) {
       micStream.getTracks().forEach((t) => t.stop());
@@ -181,7 +181,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
   };
 
-  // ---------- ENVIAR ----------
+  // --------- Enviar ---------
   const enviarMensaje = async () => {
     if (!user) return;
     const texto = nuevoMensaje.trim();
@@ -284,7 +284,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
 
   return (
-    {/* 👇 clave: ocupar el alto disponible del <main>, no 100vh */}
     <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50">
       {!destino ? (
         <div className="m-auto text-gray-400 text-sm">
@@ -292,7 +291,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         </div>
       ) : (
         <>
-          {/* Header del chat */}
+          {/* Header */}
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
@@ -305,7 +304,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </h2>
           </div>
 
-          {/* Lista de mensajes (área con scroll) */}
+          {/* Mensajes (scroll area) */}
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 min-h-0"
@@ -324,9 +323,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                   >
                     <div
                       className={`p-3 max-w-[80%] md:max-w-[65%] rounded-2xl shadow-sm break-words ${
-                        soyYo
-                          ? "bg-red-500 text-white"
-                          : "bg-gray-200 text-gray-800"
+                        soyYo ? "bg-red-500 text-white" : "bg-gray-200 text-gray-800"
                       }`}
                     >
                       {m.imagen_url && (
@@ -406,9 +403,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               <button
                 onClick={toggleGrabacion}
                 className={`p-2 rounded-full shrink-0 ${
-                  grabando
-                    ? "text-red-600 animate-pulse"
-                    : "text-gray-500 hover:text-red-500"
+                  grabando ? "text-red-600 animate-pulse" : "text-gray-500 hover:text-red-500"
                 }`}
                 title={grabando ? "Detener grabación" : "Grabar audio"}
               >
@@ -421,18 +416,14 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 placeholder="Escribí un mensaje…"
                 value={nuevoMensaje}
                 onChange={(e) => setNuevoMensaje(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && !subiendo && enviarMensaje()
-                }
+                onKeyDown={(e) => e.key === "Enter" && !subiendo && enviarMensaje()}
               />
 
               <button
                 disabled={subiendo}
                 onClick={enviarMensaje}
                 className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm text-white ${
-                  subiendo
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-red-500 hover:bg-red-600"
+                  subiendo ? "bg-gray-400 cursor-not-allowed" : "bg-red-500 hover:bg-red-600"
                 }`}
               >
                 {subiendo ? "Enviando…" : "Enviar"}
