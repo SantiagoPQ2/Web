@@ -39,26 +39,28 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
     if (!el) return;
-    const doScroll = () =>
+    requestAnimationFrame(() => {
       el.scrollTo({
         top: el.scrollHeight,
         behavior: smooth ? "smooth" : "auto",
       });
-    // esperar al próximo frame por si aún no se pintó
-    requestAnimationFrame(doScroll);
+    });
   };
 
-  // siempre que cambie el chat, arrancá abajo del todo
   useLayoutEffect(() => {
-    // pequeño delay para dar tiempo a que se pinte la lista
     const t = setTimeout(() => scrollToBottom(false), 50);
     return () => clearTimeout(t);
   }, [destino]);
 
-  // cuando cambia la lista, llevá abajo
   useEffect(() => {
     scrollToBottom(true);
   }, [mensajes]);
+
+  useEffect(() => {
+    const onResize = () => scrollToBottom(false);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // ---------- CARGA INICIAL + REALTIME ----------
   useEffect(() => {
@@ -83,7 +85,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       if (!mounted) return;
       setMensajes(data || []);
 
-      // marcar leídos los que vengan para mí
       const ids = (data || [])
         .filter(
           (m) =>
@@ -97,13 +98,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         await supabase.from("mensajes").update({ leido: true }).in("id", ids);
       }
 
-      // asegurá scroll al final tras la carga inicial
       setTimeout(() => scrollToBottom(false), 10);
     };
 
     cargar();
 
-    // realtime
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
@@ -140,13 +139,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       }
     };
   }, [user, destino]);
-
-  // cuando el teclado móvil abre/cierra o cambia el alto, mantené el scroll
-  useEffect(() => {
-    const onResize = () => scrollToBottom(false);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   // ---------- ADJUNTOS ----------
   const onPickFile = (f?: File | null) => {
@@ -285,7 +277,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       setNuevoMensaje("");
       setArchivo(null);
       setAudioBlob(null);
-      // asegurá que quede scrolleado abajo
       setTimeout(() => scrollToBottom(true), 10);
     } finally {
       setSubiendo(false);
@@ -296,7 +287,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
 
   return (
-    <div className="flex h-[100dvh] min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50 overflow-hidden">
+    // Contenedor de altura completa; sin overflow en root para que el footer no se oculte
+    <div className="flex h-screen md:h-[100dvh] min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50">
       {!destino ? (
         <div className="m-auto text-gray-400 text-sm">
           Seleccioná un contacto para comenzar a chatear 💬
@@ -316,7 +308,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </h2>
           </div>
 
-          {/* Mensajes */}
+          {/* Mensajes (zona scrollable) */}
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 min-h-0"
@@ -346,7 +338,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                           alt="adjunto"
                           className="rounded-lg mb-2 max-w-[260px] md:max-w-[360px] cursor-pointer"
                           onClick={() => window.open(m.imagen_url!, "_blank")}
-                          onLoad={() => scrollToBottom(true)} // al cargar imagen, llevar abajo
+                          onLoad={() => scrollToBottom(true)}
                         />
                       )}
                       {m.audio_url && (
@@ -371,8 +363,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
-          {/* Barra inferior (responsive móvil) */}
-          <div className="sticky bottom-0 left-0 right-0 border-t bg-white p-2 md:p-3 pb-[env(safe-area-inset-bottom)]">
+          {/* Barra inferior SIEMPRE visible (no sticky) */}
+          <div className="border-t bg-white p-2 md:p-3 pb-[env(safe-area-inset-bottom)] shrink-0 z-10">
             {archivo && (
               <div className="mb-2 flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-sm">
                 <span className="truncate">{archivo.name}</span>
@@ -454,6 +446,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       )}
     </div>
   );
+};
+
+export default ChatRoom;
+
 };
 
 export default ChatRoom;
