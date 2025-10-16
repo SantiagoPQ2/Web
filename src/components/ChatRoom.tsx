@@ -35,16 +35,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // ---------- SCROLL HELPERS ----------
+  // ---------- SCROLL ----------
   const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
     if (!el) return;
-    requestAnimationFrame(() => {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: smooth ? "smooth" : "auto",
-      });
-    });
+    requestAnimationFrame(() =>
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" })
+    );
   };
 
   useLayoutEffect(() => {
@@ -62,7 +59,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ---------- CARGA INICIAL + REALTIME ----------
+  // ---------- CARGA + REALTIME ----------
   useEffect(() => {
     if (!user || !destino) return;
 
@@ -179,7 +176,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       recorder.start();
       setMediaRecorder(recorder);
       setGrabando(true);
-    } catch (e) {
+    } catch {
       alert("No se pudo acceder al micrófono.");
     }
   };
@@ -287,15 +284,15 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
 
   return (
-    // Contenedor de altura completa; sin overflow en root para que el footer no se oculte
-    <div className="flex h-screen md:h-[100dvh] min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50">
+    {/* 👇 clave: ocupar el alto disponible del <main>, no 100vh */}
+    <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50">
       {!destino ? (
         <div className="m-auto text-gray-400 text-sm">
           Seleccioná un contacto para comenzar a chatear 💬
         </div>
       ) : (
         <>
-          {/* Header */}
+          {/* Header del chat */}
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
@@ -308,7 +305,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             </h2>
           </div>
 
-          {/* Mensajes (zona scrollable) */}
+          {/* Lista de mensajes (área con scroll) */}
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 min-h-0"
@@ -363,7 +360,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
-          {/* Barra inferior SIEMPRE visible (no sticky) */}
+          {/* Barra inferior visible siempre */}
           <div className="border-t bg-white p-2 md:p-3 pb-[env(safe-area-inset-bottom)] shrink-0 z-10">
             {archivo && (
               <div className="mb-2 flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-sm">
