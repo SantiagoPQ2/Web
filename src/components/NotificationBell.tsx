@@ -2,96 +2,88 @@ import React, { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { supabase } from "../config/supabase";
 
-interface Notificacion {
-  id: number;
-  titulo: string;
-  mensaje: string;
-  leido: boolean;
-  created_at: string;
-}
+const NotificationBell = ({ username }: { username: string }) => {
+  const [notificaciones, setNotificaciones] = useState<any[]>([]);
+  const [abierto, setAbierto] = useState(false);
 
-const NotificationBell: React.FC<{ username: string }> = ({ username }) => {
-  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
-  const [open, setOpen] = useState(false);
+  const cargarNotificaciones = async () => {
+    const { data, error } = await supabase
+      .from("notificaciones")
+      .select("*")
+      .eq("usuario_username", username)
+      .order("created_at", { ascending: false });
+    if (!error) setNotificaciones(data || []);
+  };
+
+  const marcarLeidas = async () => {
+    await supabase
+      .from("notificaciones")
+      .update({ leida: true })
+      .eq("usuario_username", username);
+    cargarNotificaciones();
+  };
 
   useEffect(() => {
-    if (!username) return;
-    fetchNotificaciones();
+    cargarNotificaciones();
 
-    // 🔄 Escucha en tiempo real
-    const channel = supabase
+    // Realtime listener para nuevas notificaciones
+    const sub = supabase
       .channel("notificaciones")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones" },
         (payload) => {
-          const nueva = payload.new as Notificacion;
-          if (nueva.usuario_username === username) {
-            setNotificaciones((prev) => [nueva, ...prev]);
-          }
+          if (payload.new.usuario_username === username) cargarNotificaciones();
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(sub);
   }, [username]);
 
-  const fetchNotificaciones = async () => {
-    const { data } = await supabase
-      .from("notificaciones")
-      .select("*")
-      .eq("usuario_username", username)
-      .order("created_at", { ascending: false });
-    setNotificaciones(data || []);
-  };
-
-  const marcarLeido = async (id: number) => {
-    await supabase.from("notificaciones").update({ leido: true }).eq("id", id);
-    setNotificaciones((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, leido: true } : n))
-    );
-  };
-
-  const noLeidas = notificaciones.filter((n) => !n.leido).length;
+  const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
-        className="relative p-2 hover:bg-gray-200 rounded-full transition"
+        className="relative p-2"
+        onClick={() => {
+          setAbierto(!abierto);
+          if (!abierto) marcarLeidas();
+        }}
       >
-        <Bell className="h-6 w-6 text-gray-700" />
-        {noLeidas > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {noLeidas}
+        <Bell size={22} />
+        {sinLeer > 0 && (
+          <span className="absolute top-0 right-0 bg-red-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+            {sinLeer}
           </span>
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white shadow-lg rounded-lg border z-50 max-h-80 overflow-y-auto">
+      {abierto && (
+        <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border p-3 z-50">
+          <h4 className="font-semibold mb-2">Notificaciones</h4>
           {notificaciones.length === 0 ? (
-            <div className="p-3 text-center text-gray-500 text-sm">
-              No hay notificaciones
-            </div>
+            <p className="text-sm text-gray-500">Sin notificaciones</p>
           ) : (
-            notificaciones.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => marcarLeido(n.id)}
-                className={`p-3 border-b cursor-pointer ${
-                  n.leido ? "bg-gray-50" : "bg-blue-50"
-                }`}
-              >
-                <p className="font-semibold text-sm">{n.titulo}</p>
-                <p className="text-xs text-gray-600">{n.mensaje}</p>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  {new Date(n.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))
+            <ul className="max-h-64 overflow-y-auto">
+              {notificaciones.map((n) => (
+                <li
+                  key={n.id}
+                  className={`text-sm p-2 rounded-md ${
+                    n.leida ? "text-gray-500" : "text-black font-medium"
+                  }`}
+                >
+                  <strong>{n.titulo}</strong>
+                  <br />
+                  {n.mensaje}
+                  <br />
+                  <span className="text-xs text-gray-400">
+                    {new Date(n.created_at).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}
