@@ -30,11 +30,31 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [subiendo, setSubiendo] = useState(false);
   const [grabando, setGrabando] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Helpers
+  const logAndAlert = (title: string, err?: any) => {
+    if (err) console.error(title, err);
+    // pistas útiles de RLS/constraints
+    const hint =
+      err?.message?.includes("policy") || err?.hint
+        ? "\n(Revisá las RLS/policies de la tabla `mensajes` para permitir INSERT al rol de tu sesión)."
+        : "";
+    alert(`${title}${hint ? "\n" + hint : ""}`);
+  };
+
+  const autoScroll = () => {
+    if (scrollRef.current)
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  };
 
   // Carga inicial + realtime
   useEffect(() => {
     if (!user || !destino) return;
+
+    let mounted = true;
 
     const cargar = async () => {
       const { data, error } = await supabase
@@ -49,9 +69,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         console.error("Error cargando historial:", error);
         return;
       }
+      if (!mounted) return;
 
       setMensajes(data || []);
 
+      // Marcar como leídos los que corresponden
       const ids = (data || [])
         .filter(
           (m) =>
@@ -68,7 +90,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
     cargar();
 
-    const canal = supabase
+    // Evitar múltiples canales
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const ch = supabase
       .channel(`chat_${user.username}_${destino}`)
       .on(
         "postgres_changes",
@@ -80,8 +108,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               nuevo.destinatario_username === destino) ||
             (nuevo.remitente_username === destino &&
               nuevo.destinatario_username === user.username);
-
           if (!pertenece) return;
+
           setMensajes((prev) =>
             prev.some((m) => m.id === nuevo.id) ? prev : [...prev, nuevo]
           );
@@ -89,15 +117,18 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       )
       .subscribe();
 
+    channelRef.current = ch;
+
     return () => {
-      supabase.removeChannel(canal);
+      mounted = false;
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [user, destino]);
 
-  useEffect(() => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [mensajes]);
+  useEffect(autoScroll, [mensajes]);
 
   // Adjuntar imagen
   const onPickFile = (f?: File | null) => {
@@ -108,40 +139,53 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     }
     setArchivo(f);
   };
-
   const quitarAdjunto = () => setArchivo(null);
 
   // 🎤 Grabar audio
+  const stopMicStream = () => {
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      setMicStream(null);
+    }
+  };
+
   const toggleGrabacion = async () => {
     if (grabando) {
       mediaRecorder?.stop();
       setGrabando(false);
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const recorder = new MediaRecorder(stream);
-        const chunks: BlobPart[] = [];
+      stopMicStream();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
 
-        recorder.ondataavailable = (e) => chunks.push(e.data);
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: "audio/webm" });
-          setAudioBlob(blob);
-        };
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        setAudioBlob(blob);
+      };
 
-        recorder.start();
-        setMediaRecorder(recorder);
-        setGrabando(true);
-      } catch {
-        alert("No se pudo acceder al micrófono.");
-      }
+      setMicStream(stream);
+      recorder.start();
+      setMediaRecorder(recorder);
+      setGrabando(true);
+    } catch (e) {
+      logAndAlert("No se pudo acceder al micrófono.", e);
     }
   };
 
   const enviarMensaje = async () => {
-    if (!user || (!nuevoMensaje.trim() && !archivo && !audioBlob)) return;
+    if (!user) return;
+
+    const texto = nuevoMensaje.trim();
+    const sinTextoNiMedia = !texto && !archivo && !audioBlob;
+    if (sinTextoNiMedia) return; // nada para mandar
 
     try {
       setSubiendo(true);
+
       let imagen_url: string | null = null;
       let audio_url: string | null = null;
 
@@ -150,9 +194,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           ? `${user.username}__${destino}`
           : `${destino}__${user.username}`;
 
-      // Subir imagen
+      // Subir imagen (si la hay)
       if (archivo) {
-        const fileName = `${Date.now()}-${archivo.name}`;
+        const safeName = archivo.name.replace(/[^\w.\-]/g, "_");
+        const fileName = `${Date.now()}-${safeName}`;
         const filePath = `${pair}/${fileName}`;
 
         const { error: errUp } = await supabase.storage
@@ -164,10 +209,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           });
 
         if (errUp) {
-          console.error("Upload error:", errUp);
-          alert("No se pudo enviar la imagen.");
-          setSubiendo(false);
-          return;
+          return logAndAlert("No se pudo enviar la imagen.", errUp);
         }
 
         const { data: pub } = supabase.storage
@@ -176,7 +218,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         imagen_url = pub.publicUrl;
       }
 
-      // Subir audio
+      // Subir audio (si lo hay)
       if (audioBlob) {
         const audioName = `${Date.now()}.webm`;
         const audioPath = `${pair}/${audioName}`;
@@ -189,10 +231,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           });
 
         if (errAudio) {
-          console.error("Upload audio error:", errAudio);
-          alert("No se pudo enviar el audio.");
-          setSubiendo(false);
-          return;
+          return logAndAlert("No se pudo enviar el audio.", errAudio);
         }
 
         const { data: pub } = supabase.storage
@@ -201,9 +240,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         audio_url = pub.publicUrl;
       }
 
-      const contenido = nuevoMensaje.trim() || "";
+      // Si no hay texto, mandá NULL (evita problemas con constraints/checks)
+      const contenido: string | null = texto.length ? texto : null;
 
-      const { data: inserted, error } = await supabase
+      const { data, error } = await supabase
         .from("mensajes")
         .insert([
           {
@@ -215,26 +255,25 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             leido: false,
           },
         ])
-        .select("*");
+        .select("*")
+        .single();
 
       if (error) {
-        console.error("Insert error:", error);
-        alert("No se pudo enviar el mensaje/imagen/audio.");
-        setSubiendo(false);
-        return;
+        return logAndAlert("No se pudo enviar el mensaje/imagen/audio.", error);
       }
 
-      if (inserted && inserted.length) {
+      if (data) {
         setMensajes((prev) =>
-          prev.some((m) => m.id === inserted[0].id)
-            ? prev
-            : [...prev, inserted[0] as Mensaje]
+          prev.some((m) => m.id === data.id) ? prev : [...prev, data as Mensaje]
         );
       }
 
+      // Limpieza UI
       setNuevoMensaje("");
       setArchivo(null);
       setAudioBlob(null);
+    } catch (e) {
+      logAndAlert("Error inesperado al enviar.", e);
     } finally {
       setSubiendo(false);
       document.dispatchEvent(
