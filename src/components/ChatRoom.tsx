@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Paperclip, Camera, ArrowLeft, X } from "lucide-react";
@@ -31,26 +31,36 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [grabando, setGrabando] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Helpers
-  const logAndAlert = (title: string, err?: any) => {
-    if (err) console.error(title, err);
-    // pistas útiles de RLS/constraints
-    const hint =
-      err?.message?.includes("policy") || err?.hint
-        ? "\n(Revisá las RLS/policies de la tabla `mensajes` para permitir INSERT al rol de tu sesión)."
-        : "";
-    alert(`${title}${hint ? "\n" + hint : ""}`);
+  // ---------- SCROLL HELPERS ----------
+  const scrollToBottom = (smooth = false) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const doScroll = () =>
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? "smooth" : "auto",
+      });
+    // esperar al próximo frame por si aún no se pintó
+    requestAnimationFrame(doScroll);
   };
 
-  const autoScroll = () => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  };
+  // siempre que cambie el chat, arrancá abajo del todo
+  useLayoutEffect(() => {
+    // pequeño delay para dar tiempo a que se pinte la lista
+    const t = setTimeout(() => scrollToBottom(false), 50);
+    return () => clearTimeout(t);
+  }, [destino]);
 
-  // Carga inicial + realtime
+  // cuando cambia la lista, llevá abajo
+  useEffect(() => {
+    scrollToBottom(true);
+  }, [mensajes]);
+
+  // ---------- CARGA INICIAL + REALTIME ----------
   useEffect(() => {
     if (!user || !destino) return;
 
@@ -69,11 +79,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         console.error("Error cargando historial:", error);
         return;
       }
-      if (!mounted) return;
 
+      if (!mounted) return;
       setMensajes(data || []);
 
-      // Marcar como leídos los que corresponden
+      // marcar leídos los que vengan para mí
       const ids = (data || [])
         .filter(
           (m) =>
@@ -86,11 +96,14 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       if (ids.length) {
         await supabase.from("mensajes").update({ leido: true }).in("id", ids);
       }
+
+      // asegurá scroll al final tras la carga inicial
+      setTimeout(() => scrollToBottom(false), 10);
     };
 
     cargar();
 
-    // Evitar múltiples canales
+    // realtime
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
@@ -128,9 +141,14 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [user, destino]);
 
-  useEffect(autoScroll, [mensajes]);
+  // cuando el teclado móvil abre/cierra o cambia el alto, mantené el scroll
+  useEffect(() => {
+    const onResize = () => scrollToBottom(false);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
-  // Adjuntar imagen
+  // ---------- ADJUNTOS ----------
   const onPickFile = (f?: File | null) => {
     if (!f) return setArchivo(null);
     if (f.size > MAX_MB * 1024 * 1024) {
@@ -141,7 +159,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
   const quitarAdjunto = () => setArchivo(null);
 
-  // 🎤 Grabar audio
+  // ---------- AUDIO ----------
   const stopMicStream = () => {
     if (micStream) {
       micStream.getTracks().forEach((t) => t.stop());
@@ -160,28 +178,25 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
-
       recorder.ondataavailable = (e) => chunks.push(e.data);
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm" });
         setAudioBlob(blob);
       };
-
       setMicStream(stream);
       recorder.start();
       setMediaRecorder(recorder);
       setGrabando(true);
     } catch (e) {
-      logAndAlert("No se pudo acceder al micrófono.", e);
+      alert("No se pudo acceder al micrófono.");
     }
   };
 
+  // ---------- ENVIAR ----------
   const enviarMensaje = async () => {
     if (!user) return;
-
     const texto = nuevoMensaje.trim();
-    const sinTextoNiMedia = !texto && !archivo && !audioBlob;
-    if (sinTextoNiMedia) return; // nada para mandar
+    if (!texto && !archivo && !audioBlob) return;
 
     try {
       setSubiendo(true);
@@ -194,54 +209,50 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           ? `${user.username}__${destino}`
           : `${destino}__${user.username}`;
 
-      // Subir imagen (si la hay)
       if (archivo) {
         const safeName = archivo.name.replace(/[^\w.\-]/g, "_");
-        const fileName = `${Date.now()}-${safeName}`;
-        const filePath = `${pair}/${fileName}`;
-
-        const { error: errUp } = await supabase.storage
+        const filePath = `${pair}/${Date.now()}-${safeName}`;
+        const { error } = await supabase.storage
           .from("chat_uploads")
           .upload(filePath, archivo, {
             cacheControl: "3600",
             upsert: false,
             contentType: archivo.type || "application/octet-stream",
           });
-
-        if (errUp) {
-          return logAndAlert("No se pudo enviar la imagen.", errUp);
+        if (error) {
+          console.error("Upload image error:", error);
+          alert("No se pudo enviar la imagen.");
+          setSubiendo(false);
+          return;
         }
-
         const { data: pub } = supabase.storage
           .from("chat_uploads")
           .getPublicUrl(filePath);
         imagen_url = pub.publicUrl;
       }
 
-      // Subir audio (si lo hay)
       if (audioBlob) {
-        const audioName = `${Date.now()}.webm`;
-        const audioPath = `${pair}/${audioName}`;
-        const { error: errAudio } = await supabase.storage
+        const audioPath = `${pair}/${Date.now()}.webm`;
+        const { error } = await supabase.storage
           .from("chat_uploads")
           .upload(audioPath, audioBlob, {
             cacheControl: "3600",
             upsert: false,
             contentType: "audio/webm",
           });
-
-        if (errAudio) {
-          return logAndAlert("No se pudo enviar el audio.", errAudio);
+        if (error) {
+          console.error("Upload audio error:", error);
+          alert("No se pudo enviar el audio.");
+          setSubiendo(false);
+          return;
         }
-
         const { data: pub } = supabase.storage
           .from("chat_uploads")
           .getPublicUrl(audioPath);
         audio_url = pub.publicUrl;
       }
 
-      // Si no hay texto, mandá NULL (evita problemas con constraints/checks)
-      const contenido: string | null = texto.length ? texto : null;
+      const contenido: string | null = texto || null;
 
       const { data, error } = await supabase
         .from("mensajes")
@@ -259,7 +270,10 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         .single();
 
       if (error) {
-        return logAndAlert("No se pudo enviar el mensaje/imagen/audio.", error);
+        console.error("Insert error:", error);
+        alert("No se pudo enviar el mensaje/imagen/audio.");
+        setSubiendo(false);
+        return;
       }
 
       if (data) {
@@ -268,12 +282,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         );
       }
 
-      // Limpieza UI
       setNuevoMensaje("");
       setArchivo(null);
       setAudioBlob(null);
-    } catch (e) {
-      logAndAlert("Error inesperado al enviar.", e);
+      // asegurá que quede scrolleado abajo
+      setTimeout(() => scrollToBottom(true), 10);
     } finally {
       setSubiendo(false);
       document.dispatchEvent(
@@ -283,7 +296,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50 overflow-hidden">
+    <div className="flex h-[100dvh] min-h-0 flex-col bg-gradient-to-br from-gray-50 to-blue-50 overflow-hidden">
       {!destino ? (
         <div className="m-auto text-gray-400 text-sm">
           Seleccioná un contacto para comenzar a chatear 💬
@@ -294,11 +307,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           <div className="flex items-center p-3 border-b bg-white shadow-sm">
             <button
               onClick={volverSidebar}
-              className="md:hidden text-gray-500 hover:text-red-500 mr-3"
+              className="md:hidden text-gray-500 hover:text-red-500 mr-3 shrink-0"
             >
               <ArrowLeft size={20} />
             </button>
-            <h2 className="font-semibold text-gray-700 text-sm">
+            <h2 className="font-semibold text-gray-700 text-sm truncate">
               Chat con {destino}
             </h2>
           </div>
@@ -306,7 +319,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
           {/* Mensajes */}
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2"
+            className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 min-h-0"
           >
             {mensajes.length === 0 ? (
               <p className="text-center text-gray-400 text-sm mt-4">
@@ -333,6 +346,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                           alt="adjunto"
                           className="rounded-lg mb-2 max-w-[260px] md:max-w-[360px] cursor-pointer"
                           onClick={() => window.open(m.imagen_url!, "_blank")}
+                          onLoad={() => scrollToBottom(true)} // al cargar imagen, llevar abajo
                         />
                       )}
                       {m.audio_url && (
@@ -340,6 +354,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                           controls
                           className="w-full mt-2 rounded-lg"
                           src={m.audio_url}
+                          onLoadedMetadata={() => scrollToBottom(true)}
                         />
                       )}
                       {m.contenido && <p>{m.contenido}</p>}
@@ -356,8 +371,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             )}
           </div>
 
-          {/* Input inferior */}
-          <div className="border-t bg-white p-2 md:p-3">
+          {/* Barra inferior (responsive móvil) */}
+          <div className="sticky bottom-0 left-0 right-0 border-t bg-white p-2 md:p-3 pb-[env(safe-area-inset-bottom)]">
             {archivo && (
               <div className="mb-2 flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2 text-sm">
                 <span className="truncate">{archivo.name}</span>
@@ -371,9 +386,9 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               </div>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full">
               <label
-                className="p-2 text-gray-500 hover:text-red-500 cursor-pointer"
+                className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
                 title="Adjuntar imagen"
               >
                 <Paperclip size={18} />
@@ -386,7 +401,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               </label>
 
               <label
-                className="p-2 text-gray-500 hover:text-red-500 cursor-pointer"
+                className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
                 title="Sacar foto"
               >
                 <Camera size={18} />
@@ -401,7 +416,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
               <button
                 onClick={toggleGrabacion}
-                className={`p-2 rounded-full ${
+                className={`p-2 rounded-full shrink-0 ${
                   grabando
                     ? "text-red-600 animate-pulse"
                     : "text-gray-500 hover:text-red-500"
@@ -413,7 +428,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
               <input
                 type="text"
-                className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                className="min-w-0 flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
                 placeholder="Escribí un mensaje…"
                 value={nuevoMensaje}
                 onChange={(e) => setNuevoMensaje(e.target.value)}
@@ -425,7 +440,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               <button
                 disabled={subiendo}
                 onClick={enviarMensaje}
-                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm text-white ${
+                className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm text-white ${
                   subiendo
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-red-500 hover:bg-red-600"
