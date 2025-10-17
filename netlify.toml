@@ -1,3 +1,20 @@
+#############################################
+# 🏗️ CONFIGURACIÓN DE BUILD Y FUNCIONES
+#############################################
+[build]
+  command = "npm run build"
+  functions = "netlify/functions"
+  publish = "dist"
+
+[functions]
+  included_files = ["netlify/functions/*.py"]
+
+[functions."procesar_planilla"]
+  runtime = "python3.11"
+
+#############################################
+# 🚫 CONTROL DE CACHE (tus headers originales)
+#############################################
 [[headers]]
   for = "/*"
   [headers.values]
