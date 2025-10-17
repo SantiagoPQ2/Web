@@ -9,16 +9,26 @@ import pandas as pd
 import pdfplumber
 
 # ───────────────────────────────
-# Función principal de Netlify
+# FUNCIÓN PRINCIPAL PARA NETLIFY
 # ───────────────────────────────
 def handler(event, context):
     try:
-        # Decodificar el PDF recibido (base64)
-        body = event.get("body")
-        if event.get("isBase64Encoded"):
-            pdf_bytes = base64.b64decode(body)
+        # Decodificar el cuerpo JSON recibido
+        if isinstance(event.get("body"), (bytes, bytearray)):
+            body_json = json.loads(event["body"].decode("utf-8"))
+        elif isinstance(event.get("body"), str):
+            body_json = json.loads(event["body"])
         else:
-            pdf_bytes = body.encode("latin1")
+            raise ValueError("Cuerpo de solicitud vacío o inválido")
+
+        base64_data = body_json.get("body")
+        is_base64 = body_json.get("isBase64Encoded", False)
+
+        if not base64_data:
+            raise ValueError("No se recibió ningún archivo PDF en la solicitud")
+
+        # Decodificar el PDF
+        pdf_bytes = base64.b64decode(base64_data) if is_base64 else base64_data.encode()
 
         # Guardar PDF temporalmente
         tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
@@ -29,7 +39,7 @@ def handler(event, context):
         tmp_xlsx = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
         run_extraction(tmp_pdf.name, tmp_xlsx.name)
 
-        # Leer Excel para devolver al frontend
+        # Leer Excel y devolverlo al frontend
         with open(tmp_xlsx.name, "rb") as f:
             excel_bytes = f.read()
 
@@ -40,19 +50,22 @@ def handler(event, context):
                 "Content-Disposition": "attachment; filename=resumen_planilla_carga.xlsx"
             },
             "isBase64Encoded": True,
-            "body": base64.b64encode(excel_bytes).decode("utf-8")
+            "body": base64.b64encode(excel_bytes).decode("utf-8"),
         }
 
     except Exception as e:
+        import traceback
+        print("ERROR:", traceback.format_exc())
         return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
+            "statusCode": 400,
+            "body": json.dumps({"error": str(e)}),
         }
 
 
 # ───────────────────────────────
-# Lógica interna (tu código original adaptado)
+# LÓGICA DE PROCESAMIENTO DEL PDF
 # ───────────────────────────────
+
 X_TOL = 1.7
 Y_TOL = 1.7
 BULTOS_WINDOW_LEFT = 70
@@ -154,7 +167,12 @@ def parse_planilla_page(page, x_tol: float, y_tol: float):
         if not mb:
             continue
         bultos = int(mb.group(1))
-        rows.append({"Transporte": transporte, "Codigo de articulo": sku, "Descripcion": desc_text, "Bultos": bultos})
+        rows.append({
+            "Transporte": transporte,
+            "Codigo de articulo": sku,
+            "Descripcion": desc_text,
+            "Bultos": bultos
+        })
     return rows
 
 def run_extraction(pdf_path: str, out_xlsx: str):
