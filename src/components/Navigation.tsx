@@ -187,6 +187,7 @@ const Navigation: React.FC = () => {
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Administrar tablas, CSVs y registros" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna general" },
+      { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF a Excel" },
       { name: "Settings", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
     ];
   }
