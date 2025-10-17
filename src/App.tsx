@@ -13,9 +13,11 @@ import Informacion from "./pages/Informacion";
 import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
+import PlanillaCarga from "./pages/PlanillaCarga";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
+
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -63,21 +65,22 @@ function ProtectedApp() {
       </Routes>
     );
   } else if (role === "admin") {
-    allowedRoutes = (
-      <Routes>
-        <Route path="/" element={<SearchPage />} />
-        <Route path="/bonificaciones" element={<Bonificaciones />} />
-        <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-        <Route path="/coordenadas" element={<CoordsPage />} />
-        <Route path="/notas-credito" element={<NotasCredito />} />
-        <Route path="/gps-logger" element={<GpsLogger />} />
-        <Route path="/informacion" element={<Informacion />} />
-        <Route path="/supervisor" element={<SupervisorPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/admin" element={<AdminPanel />} />
-      </Routes>
-    );
+  allowedRoutes = (
+    <Routes>
+      <Route path="/" element={<SearchPage />} />
+      <Route path="/bonificaciones" element={<Bonificaciones />} />
+      <Route path="/rechazos/nuevo" element={<RechazosForm />} />
+      <Route path="/coordenadas" element={<CoordsPage />} />
+      <Route path="/notas-credito" element={<NotasCredito />} />
+      <Route path="/gps-logger" element={<GpsLogger />} />
+      <Route path="/informacion" element={<Informacion />} />
+      <Route path="/supervisor" element={<SupervisorPage />} />
+      <Route path="/chat" element={<ChatPage />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/admin" element={<AdminPanel />} />
+      <Route path="/planilla-carga" element={<PlanillaCarga />} />
+    </Routes>
+  );
   } else {
     allowedRoutes = (
       <Routes>
