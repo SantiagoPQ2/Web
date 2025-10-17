@@ -7,6 +7,7 @@ const PlanillaCarga: React.FC = () => {
   const [downloading, setDownloading] = useState(false);
   const [excelUrl, setExcelUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<boolean>(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -14,6 +15,8 @@ const PlanillaCarga: React.FC = () => {
       setFile(selectedFile);
       setProgress(0);
       setError(null);
+      setSuccess(false);
+      setExcelUrl(null);
     } else {
       setError("Por favor seleccioná un archivo PDF válido.");
     }
@@ -24,29 +27,45 @@ const PlanillaCarga: React.FC = () => {
     setProgress(5);
     setError(null);
     setExcelUrl(null);
+    setSuccess(false);
 
     try {
-      // Simular progreso mientras sube y procesa
+      // Simula progreso mientras sube
       const simulateProgress = setInterval(() => {
         setProgress((p) => (p < 90 ? p + 5 : p));
       }, 400);
 
-      const formData = new FormData();
-      formData.append("file", file);
+      // Leemos el archivo PDF como Base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64data = (reader.result as string).split(",")[1];
 
-      const response = await fetch("/.netlify/functions/procesar_planilla", {
-        method: "POST",
-        body: formData,
-      });
+          const response = await fetch("/.netlify/functions/procesar_planilla", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              body: base64data,
+              isBase64Encoded: true,
+            }),
+          });
 
-      clearInterval(simulateProgress);
+          clearInterval(simulateProgress);
 
-      if (!response.ok) throw new Error("Error al procesar el archivo");
+          if (!response.ok) throw new Error("Error al procesar el archivo");
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      setExcelUrl(url);
-      setProgress(100);
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          setExcelUrl(url);
+          setProgress(100);
+          setSuccess(true);
+        } catch (err) {
+          console.error(err);
+          setError("Hubo un error al procesar el archivo.");
+        }
+      };
+
+      reader.readAsDataURL(file);
     } catch (err) {
       console.error(err);
       setError("Hubo un error al procesar el archivo.");
@@ -89,6 +108,11 @@ const PlanillaCarga: React.FC = () => {
       )}
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
+      {success && (
+        <p className="text-green-600 mb-4 font-medium">
+          ✅ Archivo procesado con éxito. Ya podés descargar el Excel.
+        </p>
+      )}
 
       <button
         onClick={handleUpload}
@@ -113,7 +137,11 @@ const PlanillaCarga: React.FC = () => {
             onClick={handleDownload}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
           >
-            {downloading ? <Loader className="animate-spin" size={18} /> : <Download size={18} />}
+            {downloading ? (
+              <Loader className="animate-spin" size={18} />
+            ) : (
+              <Download size={18} />
+            )}
             Descargar Excel
           </button>
         </div>
