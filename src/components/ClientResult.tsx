@@ -12,7 +12,7 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Softys: ["Softy"],
   Molinos: ["Molino", "Snack"],
   QuesoRallado: ["rallado"],
-  QuesoRallado: ["Manto","yerba"],
+  Yerba: ["Manto","yerba"],
   Otros: [], // fallback
 };
 
