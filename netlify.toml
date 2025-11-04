@@ -1,40 +1,26 @@
 #############################################
-# 🏗️ CONFIGURACIÓN DE BUILD Y FUNCIONES
+# 🏗️ BUILD & FUNCTIONS
 #############################################
-
 [build]
   command = "npm run build"
   functions = "netlify/functions"
   publish = "dist"
 
 #############################################
-# ⚙️ CONFIGURACIÓN DE FUNCIONES SERVERLESS
+# ⚙️ FUNCTIONS SETTINGS
 #############################################
-
-[functions]
-  included_files = [
-    "netlify/functions/*.py",
-    "netlify/functions/requirements.txt"
-  ]
-
-# Forzamos a usar runtime de Python 3.11 en la función principal
+# La función Python usa runtime 3.11
 [functions."procesar_planilla"]
   runtime = "python3.11"
-  included_files = ["netlify/functions/requirements.txt"]
 
-#############################################
-# 🧠 CONFIGURACIÓN OPCIONAL (LOGS Y TIMEOUTS)
-#############################################
-
-# Permite funciones más largas (PDFs grandes)
+# (Opcional) más recursos para PDFs pesados
 [functions.settings]
   timeout = 50
   memory = 1024
 
 #############################################
-# 🚫 CONTROL DE CACHE (tus headers originales)
+# 🚫 CACHE HEADERS (tus originales)
 #############################################
-
 [[headers]]
   for = "/*"
   [headers.values]
@@ -49,13 +35,3 @@
   for = "/assets/*"
   [headers.values]
   Cache-Control = "public, max-age=31536000, immutable"
-
-#############################################
-# ✅ DEBUG OPCIONAL PARA VERIFICAR DETECCIÓN
-#############################################
-
-# Esto genera logs detallados de funciones en el build (muy útil la primera vez)
-[build.environment]
-  NETLIFY_USE_PYTHON_VERSION = "3.11"
-  PYTHONPATH = "netlify/functions"
-  LOG_LEVEL = "debug"
