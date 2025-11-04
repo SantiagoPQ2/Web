@@ -4,7 +4,7 @@ import { ClienteData } from "../types";
 
 // 🔑 Diccionario de categorías (rellenalo con tus keywords)
 const PROMO_CATEGORIES: Record<string, string[]> = {
-  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta"],
+  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta", "Cremoso"],
   Peñaflor: ["dada", "frizze", "vino", "cerveza", "SMF", "gordons", "MSD", "trapiche", "Alma Mora", "Alaris", "Navarro", "San Telmo"],
   Hamburguesas: ["hamburguesa", "paty"],
   Salchichas: ["VSS", "ICB"],
