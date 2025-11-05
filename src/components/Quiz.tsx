@@ -25,73 +25,66 @@ const Quiz: React.FC = () => {
         .toUpperCase()
         .slice(0, 3);
 
-      // ✅ Traigo top 5 del día
+      // ✅ Traigo top 5 del día (cliente + razón social + categoría)
       const { data: top5, error: errTop } = await supabase
         .from("top_5")
-        .select("cliente, categoria")
+        .select("cliente, razon_social, categoria")
         .eq("vendedor_username", currentUser.username)
         .eq("dia", hoy);
 
-      if (errTop) console.error("Error cargando top5:", errTop);
-
+      if (errTop) console.error("Error cargando top_5:", errTop);
       if (!top5 || top5.length === 0) {
         setPreguntas([]);
         setLoading(false);
         return;
       }
 
-      const clientesHoyIds = top5.map((c) => String(c.cliente));
-
-      // ✅ Traigo razón social de los clientes involucrados
-      const { data: clientesData } = await supabase
-        .from("clientes")
-        .select("cliente, razon_social")
-        .in("cliente", clientesHoyIds);
-
-      const mapRazonSocial = new Map(
-        (clientesData || []).map((c) => [String(c.cliente), c.razon_social])
+      // ✅ Clientes correctos con sus nombres
+      const clientesHoy = top5.map(
+        (c) =>
+          `Cliente (${c.cliente}) - ${c.razon_social || "Sin nombre registrado"}`
       );
 
-      // ✅ Traigo otros clientes (para opciones distractoras)
+      // ✅ Para opciones falsas, traigo otros clientes del top_5 (sin repetir)
       const { data: otrosClientes } = await supabase
         .from("top_5")
-        .select("cliente")
+        .select("cliente, razon_social")
         .limit(100);
 
-      const incorrectos = otrosClientes
-        ?.map((c) => String(c.cliente))
-        .filter((c) => !clientesHoyIds.includes(c))
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 5) || [];
+      const incorrectos =
+        otrosClientes
+          ?.filter(
+            (c) =>
+              !top5.map((t) => t.cliente).includes(c.cliente) &&
+              c.razon_social
+          )
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 5)
+          .map(
+            (c) =>
+              `Cliente (${c.cliente}) - ${
+                c.razon_social || "Sin nombre registrado"
+              }`
+          ) || [];
 
-      const opcionesClientes = [...clientesHoyIds, ...incorrectos].sort(
+      const opcionesClientes = [...clientesHoy, ...incorrectos].sort(
         () => Math.random() - 0.5
       );
-
-      // ✅ Construyo opciones formateadas: "Cliente (id) - Razón Social"
-      const formatear = (id: string) => {
-        const nombre = mapRazonSocial.get(id);
-        return nombre ? `Cliente (${id}) - ${nombre}` : `Cliente (${id})`;
-      };
-
-      const opcionesFormateadas = opcionesClientes.map(formatear);
-      const correctasFormateadas = clientesHoyIds.map(formatear);
 
       // ✅ Pregunta principal
       const preguntasGen: Pregunta[] = [
         {
           id: "q1",
           texto: "¿Qué clientes debes visitar hoy?",
-          opciones: opcionesFormateadas,
-          correctas: correctasFormateadas,
+          opciones: opcionesClientes,
+          correctas: clientesHoy,
         },
       ];
 
-      // ✅ Agrego 1 sola pregunta de categoría
+      // ✅ Agrego una pregunta de categoría
       const elegido = top5.sort(() => Math.random() - 0.5)[0];
       if (elegido) {
-        const nombreElegido =
-          mapRazonSocial.get(String(elegido.cliente)) || elegido.cliente;
+        const nombreElegido = elegido.razon_social || elegido.cliente;
         const categorias = [
           "QUESOS Y FIAMBRES",
           "HAMBURGUESAS",
@@ -111,7 +104,7 @@ const Quiz: React.FC = () => {
         });
       }
 
-      // ✅ Traigo Llaves & Desarrollos del mes
+      // ✅ Llaves & Desarrollos del mes
       const { data: devs } = await supabase
         .from("desarrollos")
         .select("categoria, a_evaluar, objetivo, avance, diferencia")
@@ -139,6 +132,7 @@ const Quiz: React.FC = () => {
         });
       }
 
+      console.log("✅ Preguntas generadas:", preguntasGen);
       setPreguntas(preguntasGen);
       setLoading(false);
     };
@@ -234,7 +228,7 @@ const Quiz: React.FC = () => {
         </div>
       ))}
 
-      {!evaluado && (
+      {!evaluado && preguntas.length > 0 && (
         <button
           onClick={enviarRespuestas}
           className="w-full bg-red-600 text-white py-2 px-4 rounded mt-4"
