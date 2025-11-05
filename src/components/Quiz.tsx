@@ -26,11 +26,13 @@ const Quiz: React.FC = () => {
         .slice(0, 3);
 
       // ✅ Traigo top 5 del día
-      const { data: top5 } = await supabase
+      const { data: top5, error: errTop } = await supabase
         .from("top_5")
         .select("cliente, categoria")
         .eq("vendedor_username", currentUser.username)
         .eq("dia", hoy);
+
+      if (errTop) console.error("Error cargando top5:", errTop);
 
       if (!top5 || top5.length === 0) {
         setPreguntas([]);
@@ -38,38 +40,58 @@ const Quiz: React.FC = () => {
         return;
       }
 
-      const clientesHoy = top5.map((c) => String(c.cliente));
+      const clientesHoyIds = top5.map((c) => String(c.cliente));
 
-      // ✅ Traigo clientes para distractores
+      // ✅ Traigo razón social de los clientes involucrados
+      const { data: clientesData } = await supabase
+        .from("clientes")
+        .select("cliente, razon_social")
+        .in("cliente", clientesHoyIds);
+
+      const mapRazonSocial = new Map(
+        (clientesData || []).map((c) => [String(c.cliente), c.razon_social])
+      );
+
+      // ✅ Traigo otros clientes (para opciones distractoras)
       const { data: otrosClientes } = await supabase
         .from("top_5")
         .select("cliente")
         .limit(100);
 
-      // ✅ Me aseguro que sean distintos
       const incorrectos = otrosClientes
         ?.map((c) => String(c.cliente))
-        .filter((c) => !clientesHoy.includes(c))
+        .filter((c) => !clientesHoyIds.includes(c))
         .sort(() => Math.random() - 0.5)
         .slice(0, 5) || [];
 
-      const opcionesClientes = [...clientesHoy, ...incorrectos].sort(
+      const opcionesClientes = [...clientesHoyIds, ...incorrectos].sort(
         () => Math.random() - 0.5
       );
+
+      // ✅ Construyo opciones formateadas: "Cliente (id) - Razón Social"
+      const formatear = (id: string) => {
+        const nombre = mapRazonSocial.get(id);
+        return nombre ? `Cliente (${id}) - ${nombre}` : `Cliente (${id})`;
+      };
+
+      const opcionesFormateadas = opcionesClientes.map(formatear);
+      const correctasFormateadas = clientesHoyIds.map(formatear);
 
       // ✅ Pregunta principal
       const preguntasGen: Pregunta[] = [
         {
           id: "q1",
           texto: "¿Qué clientes debes visitar hoy?",
-          opciones: opcionesClientes,
-          correctas: clientesHoy,
+          opciones: opcionesFormateadas,
+          correctas: correctasFormateadas,
         },
       ];
 
       // ✅ Agrego 1 sola pregunta de categoría
       const elegido = top5.sort(() => Math.random() - 0.5)[0];
       if (elegido) {
+        const nombreElegido =
+          mapRazonSocial.get(String(elegido.cliente)) || elegido.cliente;
         const categorias = [
           "QUESOS Y FIAMBRES",
           "HAMBURGUESAS",
@@ -83,7 +105,7 @@ const Quiz: React.FC = () => {
 
         preguntasGen.push({
           id: `cat-${elegido.cliente}`,
-          texto: `¿Qué categoría debes ofrecerle al cliente ${elegido.cliente}?`,
+          texto: `¿Qué categoría debes ofrecerle al cliente ${nombreElegido}?`,
           opciones,
           correctas: [elegido.categoria],
         });
