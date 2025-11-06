@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useMemo } from "react";
+// src/pages/Mapa.tsx
+import React, { useEffect, useMemo, useState } from "react";
+import "leaflet/dist/leaflet.css"; // ✅ Import local: evita conflictos con Tailwind
 import { supabase } from "../config/supabase";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useNavigate } from "react-router-dom";
 
-// Icono de marcador
+// Icono de marcador Leaflet
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconSize: [25, 41],
@@ -20,31 +22,27 @@ interface Coordenada {
   created_by: string;
   vendedor_name: string;
 }
-
 interface Usuario {
   id: string;
   name: string;
 }
 
-// 👇 Corrige el render del mapa y centra los puntos visibles
-const FixMapView = ({ coordenadas }: { coordenadas: Coordenada[] }) => {
+// Corrige render + centra en puntos visibles
+const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
   const map = useMap();
-
   useEffect(() => {
-    // Forzar a Leaflet a redibujar correctamente
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 200);
-
-    // Si hay coordenadas, ajusta el zoom automáticamente
-    if (coordenadas.length > 0) {
+    // Recalcula tamaño luego de montar / filtrar
+    map.invalidateSize();
+    if (puntos.length > 0) {
       const bounds = L.latLngBounds(
-        coordenadas.map((c) => [c.lat, c.lng]) as [number, number][]
+        puntos.map((p) => [p.lat, p.lng]) as [number, number][]
       );
       map.fitBounds(bounds, { padding: [60, 60] });
+    } else {
+      // Centro por defecto (Córdoba) si no hay puntos
+      map.setView([-31.4201, -64.1888], 11);
     }
-  }, [map, coordenadas]);
-
+  }, [map, puntos]);
   return null;
 };
 
@@ -54,86 +52,68 @@ const Mapa: React.FC = () => {
 
   const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [vendedores, setVendedores] = useState<Usuario[]>([]);
-  const [vendedorSeleccionado, setVendedorSeleccionado] = useState<string>("");
-  const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState("");
+  const [fechaSeleccionada, setFechaSeleccionada] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // 🔒 Redirigir si no es admin
+  // 🔒 Solo admin
   useEffect(() => {
-    if (currentUser?.role !== "admin") {
-      navigate("/informacion");
-    }
+    if (currentUser?.role !== "admin") navigate("/informacion");
   }, [currentUser, navigate]);
 
-  // Cargar lista de vendedores
+  // Vendedores
   useEffect(() => {
-    const fetchVendedores = async () => {
+    (async () => {
       const { data, error } = await supabase
         .from("usuarios_app")
         .select("id, name, role")
         .eq("role", "vendedor");
-
-      if (error) console.error("Error cargando vendedores:", error);
-      else setVendedores(data || []);
-    };
-    fetchVendedores();
+      if (!error) setVendedores(data || []);
+    })();
   }, []);
 
-  // Cargar coordenadas según filtros
+  // Coordenadas (con filtros)
   useEffect(() => {
-    const fetchCoordenadas = async () => {
+    (async () => {
       setLoading(true);
 
-      const { data: usuarios } = await supabase
+      const { data: users } = await supabase
         .from("usuarios_app")
         .select("id, name");
+      const usersMap = new Map((users || []).map((u) => [u.id, u.name]));
 
-      const userMap = new Map((usuarios || []).map((u) => [u.id, u.name]));
-
-      let query = supabase.from("coordenadas").select("*");
-
-      if (vendedorSeleccionado)
-        query = query.eq("created_by", vendedorSeleccionado);
-
-      if (fechaSeleccionada)
-        query = query
+      let q = supabase.from("coordenadas").select("*");
+      if (vendedorSeleccionado) q = q.eq("created_by", vendedorSeleccionado);
+      if (fechaSeleccionada) {
+        q = q
           .gte("created_at", `${fechaSeleccionada} 00:00:00`)
           .lte("created_at", `${fechaSeleccionada} 23:59:59`);
-
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
-
-      if (error) {
-        console.error("Error cargando coordenadas:", error);
-        setCoordenadas([]);
-        setLoading(false);
-        return;
       }
-
-      const mapped = (data || []).map((c: any) => ({
-        id: c.id,
-        nombre: c.nombre,
-        lat: c.lat,
-        lng: c.lng,
-        created_at: c.created_at,
-        created_by: c.created_by,
-        vendedor_name: userMap.get(c.created_by) || "Desconocido",
-      }));
-
-      setCoordenadas(mapped);
+      const { data, error } = await q.order("created_at", { ascending: false });
+      if (error) {
+        setCoordenadas([]);
+      } else {
+        const mapped =
+          (data || []).map((c: any) => ({
+            id: c.id,
+            nombre: c.nombre,
+            lat: c.lat,
+            lng: c.lng,
+            created_at: c.created_at,
+            created_by: c.created_by,
+            vendedor_name: usersMap.get(c.created_by) || "Desconocido",
+          })) || [];
+        setCoordenadas(mapped);
+      }
       setLoading(false);
-    };
-
-    fetchCoordenadas();
+    })();
   }, [vendedorSeleccionado, fechaSeleccionada]);
 
-  // Calcular centro base
-  const center = useMemo(() => {
-    return coordenadas.length > 0
-      ? [coordenadas[0].lat, coordenadas[0].lng]
-      : [-31.4201, -64.1888]; // Córdoba como valor por defecto
-  }, [coordenadas]);
+  // Clave para remount limpio del mapa al cambiar filtros
+  const mapKey = useMemo(
+    () => `${vendedorSeleccionado || "all"}_${fechaSeleccionada || "any"}`,
+    [vendedorSeleccionado, fechaSeleccionada]
+  );
 
   return (
     <div className="p-6 space-y-4">
@@ -159,28 +139,35 @@ const Mapa: React.FC = () => {
           value={fechaSeleccionada}
           onChange={(e) => setFechaSeleccionada(e.target.value)}
           className="border p-2 rounded w-full md:w-auto"
+          placeholder="yyyy-mm-dd"
         />
       </div>
 
       {/* Mapa */}
-      {loading ? (
-        <p>Cargando coordenadas...</p>
-      ) : coordenadas.length === 0 ? (
-        <p className="italic text-gray-500">No hay puntos para mostrar.</p>
-      ) : (
-        <div className="rounded-lg overflow-hidden shadow-lg">
+      <div
+        className="
+          rounded-lg overflow-hidden shadow-lg
+          w-full
+        "
+        style={{ height: "70vh" }} // ✅ alto real del wrapper
+      >
+        {loading ? (
+          <div className="w-full h-full flex items-center justify-center text-gray-600">
+            Cargando coordenadas...
+          </div>
+        ) : (
           <MapContainer
-            center={center as [number, number]}
+            key={mapKey} // ✅ remount limpio en cada cambio de filtro
+            center={[-31.4201, -64.1888]}
             zoom={11}
-            className="w-full h-[70vh] z-0"
+            className="w-full h-full" // ✅ el mapa ocupa todo el wrapper
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {/* Corrige tiles y centra el mapa */}
-            <FixMapView coordenadas={coordenadas} />
+            <FixMapView puntos={coordenadas} />
 
             {coordenadas.map((c) => (
               <Marker key={c.id} position={[c.lat, c.lng]} icon={markerIcon}>
@@ -201,8 +188,8 @@ const Mapa: React.FC = () => {
               </Marker>
             ))}
           </MapContainer>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
