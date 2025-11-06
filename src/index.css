@@ -2,11 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* =========================================================
-   🎨 Estilos personalizados para VaFood
-   ========================================================= */
-
-/* 🎯 Paleta institucional */
+/* Variables CSS personalizadas para VaFood */
 :root {
   --vafood-primary: #991b1b;
   --vafood-primary-light: #dc2626;
@@ -14,7 +10,7 @@
   --vafood-accent: #fef2f2;
 }
 
-/* ✨ Animaciones personalizadas */
+/* Animaciones personalizadas */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -30,18 +26,12 @@
   animation: fadeIn 0.3s ease-out;
 }
 
-/* 🧭 Enlaces o botones con transición suave */
-a,
-button {
-  transition: all 0.2s ease;
-}
-
-/* ✍️ Texto con saltos de línea */
+/* Estilos para texto con saltos de línea */
 .whitespace-pre-line {
   white-space: pre-line;
 }
 
-/* ♿ Accesibilidad: animaciones reducidas */
+/* Mejoras de accesibilidad */
 @media (prefers-reduced-motion: reduce) {
   .animate-fadeIn {
     animation: none;
@@ -52,7 +42,7 @@ button {
   }
 }
 
-/* 🔲 Estados de focus visibles */
+/* Estilos para estados de focus mejorados */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
@@ -60,7 +50,7 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
-/* 🌈 Gradiente y sombra institucional */
+/* Estilos específicos para VaFood */
 .vafood-gradient {
   background: linear-gradient(
     135deg,
@@ -74,60 +64,7 @@ select:focus-visible {
     0 2px 4px -1px rgba(153, 27, 27, 0.06);
 }
 
-/* 📱 Diseño responsivo */
-@media (max-width: 640px) {
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-}
-
-/* =========================================================
-   🧱 Ajustes generales del layout
-   ========================================================= */
-
-/* Fondo principal */
-body {
-  @apply bg-gradient-to-br from-blue-50 to-slate-100 text-slate-800;
-}
-
-/* Tarjetas o paneles */
-.card {
-  @apply bg-white rounded-xl shadow-md p-6;
-}
-
-/* Encabezados uniformes */
-h1,
-h2,
-h3 {
-  @apply font-bold text-slate-800;
-}
-
-/* Botones principales */
-.btn-primary {
-  @apply bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg px-4 py-2;
-}
-
-/* Botones secundarios */
-.btn-secondary {
-  @apply bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-lg px-4 py-2;
-}
-
-/* Inputs y selects uniformes */
-.input,
-.select {
-  @apply w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition;
-}
-
-/* Listas de registros (para Mapa y otros módulos) */
-.list-card {
-  @apply border border-slate-200 rounded-lg p-4 hover:shadow-md hover:border-red-300 transition;
-}
-
-/* =========================================================
-   🧩 PWA / Layout en modo standalone
-   ========================================================= */
-
+/* Mejoras para PWA */
 @media (display-mode: standalone) {
   body {
     user-select: none;
@@ -140,3 +77,62 @@ h3 {
     background: transparent;
   }
 }
+
+/* Estilos responsivos para móviles */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ----------- LEAFLET PERSONALIZADO ----------- */
+/* ⚠️ El CSS base de Leaflet ahora se importa dentro del componente Mapa.tsx */
+
+/* Contenedor principal del mapa */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.5rem;
+  overflow: hidden; /* ✅ elimina scroll infinito */
+  z-index: 0;
+}
+
+/* Evita que los tiles o íconos se deformen */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow {
+  transform: translate3d(0, 0, 0);
+}
+
+/* Los tiles son imágenes: evita que Tailwind los limite */
+.leaflet-container img {
+  max-width: none !important; /* ✅ corrige mosaicos */
+}
+
+/* Popups */
+.leaflet-popup-content {
+  margin: 8px 12px;
+  font-size: 0.9rem;
+  color: #333;
+  line-height: 1.3;
+}
+
+.leaflet-popup {
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Sombra y estilo de controles */
+.leaflet-control-zoom {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+}
+
+/* Tamaño del mapa en pantallas móviles */
+@media (max-width: 768px) {
+  .leaflet-container {
+    height: 60vh !important;
+  }
+}
+/* ----------- FIN DE LEAFLET ----------- */
