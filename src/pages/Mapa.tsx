@@ -1,26 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import "leaflet-routing-machine";
-import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 import { supabase } from "../config/supabase";
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
+  Polyline,
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
 import { useNavigate } from "react-router-dom";
 
-// Icono clásico de marcador
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
 
-// Tipos
 interface Coordenada {
   id: string;
   nombre: string;
@@ -30,14 +27,15 @@ interface Coordenada {
   created_by: string;
   vendedor_name: string;
 }
+
 interface Usuario {
   id: string;
   name: string;
 }
 
-// Corrige render del mapa al montar
 const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
   const map = useMap();
+
   useEffect(() => {
     map.invalidateSize();
     if (puntos.length > 0) {
@@ -48,32 +46,6 @@ const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
     } else {
       map.setView([-31.4201, -64.1888], 11);
     }
-  }, [map, puntos]);
-  return null;
-};
-
-// 🔵 Nuevo componente: RoutingMachine
-const RoutingMachine = ({ puntos }: { puntos: [number, number][] }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!map || puntos.length < 2) return;
-
-    const routing = L.Routing.control({
-      waypoints: puntos.map(([lat, lng]) => L.latLng(lat, lng)),
-      lineOptions: {
-        styles: [{ color: "blue", weight: 4 }],
-      },
-      routeWhileDragging: false,
-      addWaypoints: false,
-      draggableWaypoints: false,
-      fitSelectedRoutes: true,
-      show: false,
-    }).addTo(map);
-
-    return () => {
-      map.removeControl(routing);
-    };
   }, [map, puntos]);
 
   return null;
@@ -90,12 +62,12 @@ const Mapa: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [ordenAsc, setOrdenAsc] = useState(true);
 
-  // Solo admins
+  // 🔒 Solo admin
   useEffect(() => {
     if (currentUser?.role !== "admin") navigate("/informacion");
   }, [currentUser, navigate]);
 
-  // Traer vendedores
+  // Cargar lista de vendedores
   useEffect(() => {
     const fetchVendedores = async () => {
       const { data, error } = await supabase
@@ -108,7 +80,7 @@ const Mapa: React.FC = () => {
     fetchVendedores();
   }, []);
 
-  // Traer coordenadas filtradas
+  // Cargar coordenadas
   useEffect(() => {
     const fetchCoordenadas = async () => {
       setLoading(true);
@@ -170,7 +142,7 @@ const Mapa: React.FC = () => {
     setOrdenAsc(!ordenAsc);
   };
 
-  const puntosRuta = useMemo(() => {
+  const polylinePositions = useMemo(() => {
     return coordenadas.map((c) => [c.lat, c.lng]) as [number, number][];
   }, [coordenadas]);
 
@@ -231,14 +203,18 @@ const Mapa: React.FC = () => {
 
               <FixMapView puntos={coordenadas} />
 
-              {/* 🔵 Routing por calles */}
-              {vendedorSeleccionado && fechaSeleccionada && (
-                <RoutingMachine puntos={puntosRuta} />
+              {/* Línea entre los puntos */}
+              {polylinePositions.length > 1 && (
+                <Polyline positions={polylinePositions} color="blue" />
               )}
 
               {/* Marcadores */}
               {coordenadas.map((c, index) => (
-                <Marker key={c.id} position={[c.lat, c.lng]} icon={markerIcon}>
+                <Marker
+                  key={c.id}
+                  position={[c.lat, c.lng]}
+                  icon={markerIcon}
+                >
                   <Popup>
                     <div className="text-sm">
                       <p>
@@ -289,9 +265,7 @@ const Mapa: React.FC = () => {
                   <tr key={c.id} className="hover:bg-blue-50">
                     <td className="px-2 py-1 border">{i + 1}</td>
                     <td className="px-2 py-1 border">{c.nombre}</td>
-                    <td className="px-2 py-1 border">
-                      {formatHora(c.created_at)}
-                    </td>
+                    <td className="px-2 py-1 border">{formatHora(c.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
