@@ -1,22 +1,23 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "../config/supabase";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useNavigate } from "react-router-dom";
 
-// Icono de marcador estándar Leaflet
+// Icono de marcador
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
 
-interface Punto {
+interface Coordenada {
   id: string;
   nombre: string;
   lat: number;
   lng: number;
   created_at: string;
+  created_by: string;
   vendedor_name: string;
 }
 
@@ -25,11 +26,33 @@ interface Usuario {
   name: string;
 }
 
+// 👇 Corrige el render del mapa y centra los puntos visibles
+const FixMapView = ({ coordenadas }: { coordenadas: Coordenada[] }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    // Forzar a Leaflet a redibujar correctamente
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
+
+    // Si hay coordenadas, ajusta el zoom automáticamente
+    if (coordenadas.length > 0) {
+      const bounds = L.latLngBounds(
+        coordenadas.map((c) => [c.lat, c.lng]) as [number, number][]
+      );
+      map.fitBounds(bounds, { padding: [60, 60] });
+    }
+  }, [map, coordenadas]);
+
+  return null;
+};
+
 const Mapa: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const [puntos, setPuntos] = useState<Punto[]>([]);
+  const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [vendedores, setVendedores] = useState<Usuario[]>([]);
   const [vendedorSeleccionado, setVendedorSeleccionado] = useState<string>("");
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
@@ -42,61 +65,75 @@ const Mapa: React.FC = () => {
     }
   }, [currentUser, navigate]);
 
-  // 🧭 Cargar vendedores y coordenadas
+  // Cargar lista de vendedores
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-
-      // Traer todos los vendedores
-      const { data: usuarios } = await supabase
+    const fetchVendedores = async () => {
+      const { data, error } = await supabase
         .from("usuarios_app")
         .select("id, name, role")
         .eq("role", "vendedor");
 
-      setVendedores(usuarios || []);
+      if (error) console.error("Error cargando vendedores:", error);
+      else setVendedores(data || []);
+    };
+    fetchVendedores();
+  }, []);
 
-      // Traer todas las coordenadas
+  // Cargar coordenadas según filtros
+  useEffect(() => {
+    const fetchCoordenadas = async () => {
+      setLoading(true);
+
+      const { data: usuarios } = await supabase
+        .from("usuarios_app")
+        .select("id, name");
+
+      const userMap = new Map((usuarios || []).map((u) => [u.id, u.name]));
+
       let query = supabase.from("coordenadas").select("*");
 
+      if (vendedorSeleccionado)
+        query = query.eq("created_by", vendedorSeleccionado);
+
       if (fechaSeleccionada)
-        query = query.gte("created_at", `${fechaSeleccionada} 00:00:00`).lte("created_at", `${fechaSeleccionada} 23:59:59`);
+        query = query
+          .gte("created_at", `${fechaSeleccionada} 00:00:00`)
+          .lte("created_at", `${fechaSeleccionada} 23:59:59`);
 
-      if (vendedorSeleccionado) {
-        const vendedorId = vendedorSeleccionado;
-        query = query.eq("created_by", vendedorId);
-      }
-
-      const { data: coords, error } = await query.order("created_at", { ascending: false });
+      const { data, error } = await query.order("created_at", {
+        ascending: false,
+      });
 
       if (error) {
         console.error("Error cargando coordenadas:", error);
-        setPuntos([]);
+        setCoordenadas([]);
         setLoading(false);
         return;
       }
 
-      // Vincular vendedor a coordenadas
-      const usuariosMap = new Map((usuarios || []).map((u) => [u.id, u.name]));
-      const mapped = (coords || []).map((c) => ({
+      const mapped = (data || []).map((c: any) => ({
         id: c.id,
         nombre: c.nombre,
         lat: c.lat,
         lng: c.lng,
         created_at: c.created_at,
-        vendedor_name: usuariosMap.get(c.created_by) || "Desconocido",
+        created_by: c.created_by,
+        vendedor_name: userMap.get(c.created_by) || "Desconocido",
       }));
 
-      setPuntos(mapped);
+      setCoordenadas(mapped);
       setLoading(false);
     };
 
-    fetchData();
-  }, [fechaSeleccionada, vendedorSeleccionado]);
+    fetchCoordenadas();
+  }, [vendedorSeleccionado, fechaSeleccionada]);
 
-  const center =
-    puntos.length > 0
-      ? [puntos[0].lat, puntos[0].lng]
-      : [-31.4201, -64.1888]; // Centro por defecto (Córdoba)
+  // Calcular centro base
+  const center = useMemo(() => {
+    return coordenadas.length > 0
+      ? [coordenadas[0].lat, coordenadas[0].lng]
+      : [-31.4201, -64.1888]; // Córdoba como valor por defecto
+  }, [coordenadas]);
 
   return (
     <div className="p-6 space-y-4">
@@ -127,8 +164,8 @@ const Mapa: React.FC = () => {
 
       {/* Mapa */}
       {loading ? (
-        <p>Cargando puntos...</p>
-      ) : puntos.length === 0 ? (
+        <p>Cargando coordenadas...</p>
+      ) : coordenadas.length === 0 ? (
         <p className="italic text-gray-500">No hay puntos para mostrar.</p>
       ) : (
         <div className="rounded-lg overflow-hidden shadow-lg">
@@ -142,19 +179,22 @@ const Mapa: React.FC = () => {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
-            {puntos.map((p) => (
-              <Marker key={p.id} position={[p.lat, p.lng]} icon={markerIcon}>
+            {/* Corrige tiles y centra el mapa */}
+            <FixMapView coordenadas={coordenadas} />
+
+            {coordenadas.map((c) => (
+              <Marker key={c.id} position={[c.lat, c.lng]} icon={markerIcon}>
                 <Popup>
                   <div className="text-sm">
                     <p>
-                      <strong>Cliente:</strong> {p.nombre}
+                      <strong>Cliente:</strong> {c.nombre}
                     </p>
                     <p>
-                      <strong>Vendedor:</strong> {p.vendedor_name}
+                      <strong>Vendedor:</strong> {c.vendedor_name}
                     </p>
                     <p>
                       <strong>Fecha:</strong>{" "}
-                      {new Date(p.created_at).toLocaleString("es-AR")}
+                      {new Date(c.created_at).toLocaleString("es-AR")}
                     </p>
                   </div>
                 </Popup>
