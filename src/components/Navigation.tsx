@@ -19,9 +19,6 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, Link } from "react-router-dom";
 import { supabase } from "../config/supabase";
 
-// -------------------------------
-// COMPONENTE PRINCIPAL
-// -------------------------------
 const Navigation: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -139,6 +136,10 @@ const Navigation: React.FC = () => {
         return "Configuración";
       case "/admin":
         return "Panel Admin";
+      case "/planilla-carga":
+        return "Planilla de Carga";
+      case "/mapa":
+        return "Mapa de Visitas";
       default:
         return "VaFood SRL - AR";
     }
@@ -185,6 +186,7 @@ const Navigation: React.FC = () => {
       { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas de clientes" },
       { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Ver puntos y rutas de vendedores" }, // ✅ NUEVO
       { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Administrar tablas, CSVs y registros" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna general" },
       { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF a Excel" },
@@ -211,7 +213,9 @@ const Navigation: React.FC = () => {
             </button>
             <div className="flex items-center">
               <img src="/image.png" alt="VaFood" className="h-8 w-8 object-contain mr-2" />
-              <h1 className="text-lg font-semibold text-gray-800">{getCurrentPageName()}</h1>
+              <h1 className="text-lg font-semibold text-gray-800">
+                {getCurrentPageName()}
+              </h1>
             </div>
           </div>
 
@@ -235,7 +239,7 @@ const Navigation: React.FC = () => {
               </button>
 
               {notisAbiertas && (
-                <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border p-3 z-50">
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-lg border p-3 z-50 animate-fadeIn">
                   <h4 className="font-semibold mb-2">Notificaciones</h4>
                   {notificaciones.length === 0 ? (
                     <p className="text-sm text-gray-500">Sin notificaciones</p>
@@ -310,7 +314,7 @@ const Navigation: React.FC = () => {
             onClick={() => setSidebarOpen(false)}
           ></div>
 
-          <div className="fixed top-0 left-0 w-72 bg-white h-full shadow-xl z-50 flex flex-col p-4 overflow-y-auto animate-slideIn">
+          <div className="fixed top-0 left-0 w-72 bg-white h-full shadow-xl z-50 flex flex-col p-4 overflow-y-auto animate-fadeIn">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800">Menú</h2>
               <button
