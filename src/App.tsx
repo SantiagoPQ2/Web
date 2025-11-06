@@ -1,5 +1,10 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation,
+} from "react-router-dom";
 import Navigation from "./components/Navigation";
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
@@ -14,10 +19,10 @@ import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
+import Mapa from "./pages/Mapa"; // 🧭 NUEVA PÁGINA
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
-
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -65,22 +70,23 @@ function ProtectedApp() {
       </Routes>
     );
   } else if (role === "admin") {
-  allowedRoutes = (
-    <Routes>
-      <Route path="/" element={<SearchPage />} />
-      <Route path="/bonificaciones" element={<Bonificaciones />} />
-      <Route path="/rechazos/nuevo" element={<RechazosForm />} />
-      <Route path="/coordenadas" element={<CoordsPage />} />
-      <Route path="/notas-credito" element={<NotasCredito />} />
-      <Route path="/gps-logger" element={<GpsLogger />} />
-      <Route path="/informacion" element={<Informacion />} />
-      <Route path="/supervisor" element={<SupervisorPage />} />
-      <Route path="/chat" element={<ChatPage />} />
-      <Route path="/settings" element={<Settings />} />
-      <Route path="/admin" element={<AdminPanel />} />
-      <Route path="/planilla-carga" element={<PlanillaCarga />} />
-    </Routes>
-  );
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/bonificaciones" element={<Bonificaciones />} />
+        <Route path="/rechazos/nuevo" element={<RechazosForm />} />
+        <Route path="/coordenadas" element={<CoordsPage />} />
+        <Route path="/notas-credito" element={<NotasCredito />} />
+        <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/informacion" element={<Informacion />} />
+        <Route path="/supervisor" element={<SupervisorPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/planilla-carga" element={<PlanillaCarga />} />
+        <Route path="/mapa" element={<Mapa />} /> {/* ✅ NUEVA PÁGINA */}
+      </Routes>
+    );
   } else {
     allowedRoutes = (
       <Routes>
@@ -104,7 +110,9 @@ function ProtectedApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="text-center text-sm text-gray-600">
               <p>VaFood - Sistema de consulta de clientes</p>
-              <p className="mt-1">Consulte situación y promociones de clientes</p>
+              <p className="mt-1">
+                Consulte situación y promociones de clientes
+              </p>
             </div>
           </div>
         </footer>
