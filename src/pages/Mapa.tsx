@@ -50,33 +50,90 @@ const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
   return null;
 };
 
-// 🚗 Nuevo: ruteo real usando OSRM API (sin plugin externo)
+/**
+ * 🚗 Ruteo real usando OSRM, tramo a tramo.
+ * - puntos: [[lat, lng], ...]
+ * - Hace fetch A→B, B→C, … para evitar URLs gigantes.
+ * - Si algo falla, cae a una polyline recta (vuelo de pájaro) como fallback.
+ */
 const RoutingLine = ({ puntos }: { puntos: [number, number][] }) => {
-  const map = useMap();
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
 
   useEffect(() => {
-    if (!puntos || puntos.length < 2) return;
+    if (!puntos || puntos.length < 2) {
+      setRouteCoords([]);
+      return;
+    }
 
-    const fetchRoute = async () => {
-      const coordsStr = puntos.map((p) => p.reverse().join(",")).join(";");
-      const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+    const fetchSegment = async (
+      a: [number, number],
+      b: [number, number]
+    ): Promise<[number, number][]> => {
+      // OSRM espera lng,lat
+      const aStr = `${a[1]},${a[0]}`;
+      const bStr = `${b[1]},${b[0]}`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${aStr};${bStr}?overview=full&geometries=geojson`;
 
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`OSRM ${res.status}`);
+      const data = await res.json();
+
+      const coords = data?.routes?.[0]?.geometry?.coordinates as
+        | [number, number][]
+        | undefined;
+      if (!coords) throw new Error("OSRM sin geometry");
+
+      // De [lng,lat] a [lat,lng]
+      return coords.map((c) => [c[1], c[0]]);
+    };
+
+    const fetchAll = async () => {
       try {
-        const res = await fetch(url);
-        const data = await res.json();
-        const route = data.routes?.[0]?.geometry?.coordinates || [];
-        const formatted = route.map((c: [number, number]) => [c[1], c[0]]);
-        setRouteCoords(formatted);
+        const merged: [number, number][][] = [];
+
+        // Pedimos tramo a tramo (secuencial → menos riesgo de rate limit)
+        for (let i = 0; i < puntos.length - 1; i++) {
+          const a = puntos[i];
+          const b = puntos[i + 1];
+
+          // Evitar llamadas inútiles si dos puntos son idénticos
+          if (a[0] === b[0] && a[1] === b[1]) continue;
+
+          // Pequeño delay para ser amable con el servidor público
+          // (evita rate limit cuando hay muchos tramos)
+          // eslint-disable-next-line no-await-in-loop
+          const seg = await fetchSegment(a, b);
+          merged.push(seg);
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((r) => setTimeout(r, 120));
+        }
+
+        // Aplastar segmentos en una sola lista, evitando duplicados consecutivos
+        const flat: [number, number][] = [];
+        for (const seg of merged) {
+          for (const pt of seg) {
+            const prev = flat[flat.length - 1];
+            if (!prev || prev[0] !== pt[0] || prev[1] !== pt[1]) flat.push(pt);
+          }
+        }
+
+        // Si por algún motivo no obtuvimos nada, fallback a línea recta
+        if (flat.length === 0) {
+          setRouteCoords(puntos);
+        } else {
+          setRouteCoords(flat);
+        }
       } catch (err) {
-        console.error("Error al obtener ruta:", err);
+        console.error("OSRM routing error:", err);
+        // Fallback a línea recta
+        setRouteCoords(puntos);
       }
     };
 
-    fetchRoute();
+    fetchAll();
   }, [puntos]);
 
-  return routeCoords.length > 0 ? (
+  return routeCoords.length > 1 ? (
     <Polyline positions={routeCoords} color="blue" weight={4} />
   ) : null;
 };
@@ -147,11 +204,12 @@ const Mapa: React.FC = () => {
     fetchCoordenadas();
   }, [vendedorSeleccionado, fechaSeleccionada]);
 
-  const puntosRuta = useMemo(() => {
-    return coordenadas.map((c) => [c.lat, c.lng]) as [number, number][];
-  }, [coordenadas]);
+  const puntosRuta = useMemo(
+    () => coordenadas.map((c) => [c.lat, c.lng]) as [number, number][],
+    [coordenadas]
+  );
 
-  const center = useMemo(() => {
+  const center = useMemo<[number, number]>(() => {
     return coordenadas.length > 0
       ? [coordenadas[0].lat, coordenadas[0].lng]
       : [-31.4201, -64.1888];
@@ -207,7 +265,7 @@ const Mapa: React.FC = () => {
             <p className="p-4">Cargando coordenadas...</p>
           ) : (
             <MapContainer
-              center={center as [number, number]}
+              center={center}
               zoom={12}
               className="w-full h-[70vh]"
             >
@@ -218,8 +276,8 @@ const Mapa: React.FC = () => {
 
               <FixMapView puntos={coordenadas} />
 
-              {/* 🚗 Trazo real por calles */}
-              {vendedorSeleccionado && fechaSeleccionada && (
+              {/* 🚗 Trazo real por calles (solo cuando hay filtro por vendedor y día) */}
+              {vendedorSeleccionado && fechaSeleccionada && puntosRuta.length > 1 && (
                 <RoutingLine puntos={puntosRuta} />
               )}
 
