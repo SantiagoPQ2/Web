@@ -2,9 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Leaflet (para el mapa) */
-@import "leaflet/dist/leaflet.css";
-
 /* Variables CSS personalizadas para VaFood */
 :root {
   --vafood-primary: #991b1b;
@@ -90,16 +87,18 @@ select:focus-visible {
 }
 
 /* ----------- LEAFLET PERSONALIZADO ----------- */
+/* ⚠️ El CSS base de Leaflet ahora se importa dentro del componente Mapa.tsx */
 
-/* Corrige que los íconos del mapa se desplacen */
+/* Contenedor principal del mapa */
 .leaflet-container {
   width: 100%;
   height: 100%;
   border-radius: 0.5rem;
+  overflow: hidden; /* ✅ elimina scroll infinito */
   z-index: 0;
 }
 
-/* Fuerza a Leaflet a redibujar correctamente los tiles */
+/* Evita que los tiles o íconos se deformen */
 .leaflet-pane,
 .leaflet-tile,
 .leaflet-marker-icon,
@@ -107,7 +106,12 @@ select:focus-visible {
   transform: translate3d(0, 0, 0);
 }
 
-/* Evita que los popups salgan fuera del borde */
+/* Los tiles son imágenes: evita que Tailwind los limite */
+.leaflet-container img {
+  max-width: none !important; /* ✅ corrige mosaicos */
+}
+
+/* Popups */
 .leaflet-popup-content {
   margin: 8px 12px;
   font-size: 0.9rem;
@@ -115,27 +119,20 @@ select:focus-visible {
   line-height: 1.3;
 }
 
-/* Animación suave al abrir el popup */
 .leaflet-popup {
   animation: fadeIn 0.2s ease-out;
 }
 
-/* Sombra más suave en los controles */
+/* Sombra y estilo de controles */
 .leaflet-control-zoom {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   border-radius: 6px;
 }
 
-/* Ajusta tamaño del mapa en móvil */
+/* Tamaño del mapa en pantallas móviles */
 @media (max-width: 768px) {
   .leaflet-container {
     height: 60vh !important;
   }
 }
-
-/* Corrige el bug de mapas cortados al recargar */
-.leaflet-container img {
-  max-width: none !important;
-}
-
 /* ----------- FIN DE LEAFLET ----------- */
