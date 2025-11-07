@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { supabase } from "../config/supabase";
 import {
@@ -12,7 +12,7 @@ import {
 import L from "leaflet";
 import { useNavigate } from "react-router-dom";
 
-// 🔹 Marcador clásico de Leaflet
+// 🔹 Marcador clásico de Leaflet (evita issues de assets en build)
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconSize: [25, 41],
@@ -31,13 +31,16 @@ interface Coordenada {
 interface Usuario {
   id: string;
   name: string;
+  role?: string;
 }
 
-// Corrige render del mapa
+// ================== Fix de vista ==================
 const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
   const map = useMap();
   useEffect(() => {
-    map.invalidateSize();
+    // Asegura que Leaflet calcule tamaño correcto tras render
+    setTimeout(() => map.invalidateSize(), 0);
+
     if (puntos.length > 0) {
       const bounds = L.latLngBounds(
         puntos.map((p) => [p.lat, p.lng]) as [number, number][]
@@ -50,20 +53,40 @@ const FixMapView = ({ puntos }: { puntos: Coordenada[] }) => {
   return null;
 };
 
+// ================== Router OSRM seguro ==================
 /**
- * 🚗 Ruteo real usando OSRM, tramo a tramo.
- * - puntos: [[lat, lng], ...]
- * - Hace fetch A→B, B→C, … para evitar URLs gigantes.
- * - Si algo falla, cae a una polyline recta (vuelo de pájaro) como fallback.
+ * - Hace fetch tramo a tramo (A→B, B→C, …) con cancelación entre filtros.
+ * - Convierte [lng,lat] → [lat,lng], cachea por "vendorId|fecha|hashCoords".
+ * - Fallback a línea recta si falla cualquier tramo.
  */
 const RoutingLine = ({ puntos }: { puntos: [number, number][] }) => {
   const [routeCoords, setRouteCoords] = useState<[number, number][]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Cache en memoria por sesión
+  const cacheRef = useRef<Map<string, [number, number][]>>(new Map());
 
   useEffect(() => {
     if (!puntos || puntos.length < 2) {
       setRouteCoords([]);
       return;
     }
+
+    // Clave de cache simple con redondeo (reduce ruido por decimales)
+    const key = puntos
+      .map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`)
+      .join("|");
+
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setRouteCoords(cached);
+      return;
+    }
+
+    // Cancelar petición anterior (si existiera)
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const fetchSegment = async (
       a: [number, number],
@@ -74,7 +97,7 @@ const RoutingLine = ({ puntos }: { puntos: [number, number][] }) => {
       const bStr = `${b[1]},${b[0]}`;
       const url = `https://router.project-osrm.org/route/v1/driving/${aStr};${bStr}?overview=full&geometries=geojson`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) throw new Error(`OSRM ${res.status}`);
       const data = await res.json();
 
@@ -91,24 +114,23 @@ const RoutingLine = ({ puntos }: { puntos: [number, number][] }) => {
       try {
         const merged: [number, number][][] = [];
 
-        // Pedimos tramo a tramo (secuencial → menos riesgo de rate limit)
         for (let i = 0; i < puntos.length - 1; i++) {
           const a = puntos[i];
           const b = puntos[i + 1];
 
-          // Evitar llamadas inútiles si dos puntos son idénticos
+          // Evitar tramos idénticos
           if (a[0] === b[0] && a[1] === b[1]) continue;
 
-          // Pequeño delay para ser amable con el servidor público
-          // (evita rate limit cuando hay muchos tramos)
           // eslint-disable-next-line no-await-in-loop
           const seg = await fetchSegment(a, b);
           merged.push(seg);
+
+          // Pequeño delay contra rate-limit
           // eslint-disable-next-line no-await-in-loop
-          await new Promise((r) => setTimeout(r, 120));
+          await new Promise((r) => setTimeout(r, 110));
         }
 
-        // Aplastar segmentos en una sola lista, evitando duplicados consecutivos
+        // Aplastar segmentos y evitar duplicados consecutivos
         const flat: [number, number][] = [];
         for (const seg of merged) {
           for (const pt of seg) {
@@ -117,27 +139,27 @@ const RoutingLine = ({ puntos }: { puntos: [number, number][] }) => {
           }
         }
 
-        // Si por algún motivo no obtuvimos nada, fallback a línea recta
-        if (flat.length === 0) {
-          setRouteCoords(puntos);
-        } else {
-          setRouteCoords(flat);
-        }
+        const finalCoords = flat.length > 1 ? flat : puntos;
+        cacheRef.current.set(key, finalCoords);
+        setRouteCoords(finalCoords);
       } catch (err) {
+        if ((err as any)?.name === "AbortError") return; // filtros cambiaron
         console.error("OSRM routing error:", err);
-        // Fallback a línea recta
-        setRouteCoords(puntos);
+        setRouteCoords(puntos); // fallback
       }
     };
 
     fetchAll();
+    // cleanup al cambiar dependencias
+    return () => controller.abort();
   }, [puntos]);
 
   return routeCoords.length > 1 ? (
-    <Polyline positions={routeCoords} color="blue" weight={4} />
+    <Polyline pathOptions={{ color: "blue", weight: 4 }} positions={routeCoords} />
   ) : null;
 };
 
+// ================== Componente principal ==================
 const Mapa: React.FC = () => {
   const navigate = useNavigate();
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -157,23 +179,26 @@ const Mapa: React.FC = () => {
   // Cargar vendedores
   useEffect(() => {
     const fetchVendedores = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("usuarios_app")
         .select("id, name, role")
         .eq("role", "vendedor");
+      if (error) console.error(error);
       setVendedores(data || []);
     };
     fetchVendedores();
   }, []);
 
-  // Cargar coordenadas
+  // Cargar coordenadas (con coerción a número)
   useEffect(() => {
     const fetchCoordenadas = async () => {
       setLoading(true);
 
-      const { data: usuarios } = await supabase
+      const { data: usuarios, error: eUsers } = await supabase
         .from("usuarios_app")
         .select("id, name");
+      if (eUsers) console.error(eUsers);
+
       const userMap = new Map((usuarios || []).map((u) => [u.id, u.name]));
 
       let query = supabase.from("coordenadas").select("*");
@@ -184,14 +209,17 @@ const Mapa: React.FC = () => {
           .gte("created_at", `${fechaSeleccionada} 00:00:00`)
           .lte("created_at", `${fechaSeleccionada} 23:59:59`);
 
-      const { data } = await query.order("created_at", { ascending: true });
+      const { data, error } = await query.order("created_at", {
+        ascending: true,
+      });
+      if (error) console.error(error);
 
-      const mapped =
+      const mapped: Coordenada[] =
         (data || []).map((c: any) => ({
           id: c.id,
           nombre: c.nombre,
-          lat: c.lat,
-          lng: c.lng,
+          lat: Number(c.lat),
+          lng: Number(c.lng),
           created_at: c.created_at,
           created_by: c.created_by,
           vendedor_name: userMap.get(c.created_by) || "Desconocido",
@@ -204,10 +232,9 @@ const Mapa: React.FC = () => {
     fetchCoordenadas();
   }, [vendedorSeleccionado, fechaSeleccionada]);
 
-  const puntosRuta = useMemo(
-    () => coordenadas.map((c) => [c.lat, c.lng]) as [number, number][],
-    [coordenadas]
-  );
+  const puntosRuta = useMemo<[number, number][]>(() => {
+    return coordenadas.map((c) => [c.lat, c.lng]);
+  }, [coordenadas]);
 
   const center = useMemo<[number, number]>(() => {
     return coordenadas.length > 0
@@ -264,11 +291,7 @@ const Mapa: React.FC = () => {
           {loading ? (
             <p className="p-4">Cargando coordenadas...</p>
           ) : (
-            <MapContainer
-              center={center}
-              zoom={12}
-              className="w-full h-[70vh]"
-            >
+            <MapContainer center={center} zoom={12} className="w-full h-[70vh]">
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -276,10 +299,10 @@ const Mapa: React.FC = () => {
 
               <FixMapView puntos={coordenadas} />
 
-              {/* 🚗 Trazo real por calles (solo cuando hay filtro por vendedor y día) */}
-              {vendedorSeleccionado && fechaSeleccionada && puntosRuta.length > 1 && (
-                <RoutingLine puntos={puntosRuta} />
-              )}
+              {/* 🚗 Ruta por calles (solo si hay filtro + puntos suficientes) */}
+              {vendedorSeleccionado &&
+                fechaSeleccionada &&
+                puntosRuta.length > 1 && <RoutingLine puntos={puntosRuta} />}
 
               {coordenadas.map((c, index) => (
                 <Marker key={c.id} position={[c.lat, c.lng]} icon={markerIcon}>
