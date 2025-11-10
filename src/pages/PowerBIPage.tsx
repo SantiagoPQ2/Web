@@ -15,7 +15,7 @@ const PowerBIPage: React.FC = () => {
 
   // ✅ Link válido generado desde Power BI (embed seguro)
   const reportUrl =
-    "https://app.powerbi.com/reportEmbed?reportId=8ed1df82-fd77-47a6-aea7-bc4bd68c298a&autoAuth=true&ctid=78b9b159-c25f-4af4-a2bb-c8f20ab43386";
+    "https://app.powerbi.com/view?r=eyJrIjoiNTA2MWIwNzEtYjQxYy00ZmMzLThjZjQtZDJjODRlM2JhNjM5IiwidCI6Ijc4YjliMTU5LWMyNWYtNGFmNC1hMmJiLWM4ZjIwYWI0MzM4NiIsImMiOjR9";
 
   return (
     <div className="p-6 space-y-4">
