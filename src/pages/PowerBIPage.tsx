@@ -6,40 +6,45 @@ const PowerBIPage: React.FC = () => {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const [loading, setLoading] = useState(true);
 
-  // 🚫 Solo admins pueden acceder
+  // 🔐 Solo admins pueden acceder
   useEffect(() => {
     if (user?.role !== "admin") {
       navigate("/informacion");
     }
   }, [user, navigate]);
 
-  // ✅ Link válido generado desde Power BI (embed seguro)
+  // ✅ Link de Power BI (modo "Publicar en la web", no pide login)
   const reportUrl =
     "https://app.powerbi.com/view?r=eyJrIjoiNTA2MWIwNzEtYjQxYy00ZmMzLThjZjQtZDJjODRlM2JhNjM5IiwidCI6Ijc4YjliMTU5LWMyNWYtNGFmNC1hMmJiLWM4ZjIwYWI0MzM4NiIsImMiOjR9";
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
+    <div className="p-4 md:p-6 space-y-4 w-full h-screen flex flex-col">
+      <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
         📊 Dashboard Power BI
       </h1>
 
-      {/* Loader simple mientras el iframe carga */}
+      {/* Loader simple mientras se carga el iframe */}
       {loading && (
-        <div className="flex items-center justify-center h-[80vh]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-red-600 border-opacity-70"></div>
+        <div className="flex items-center justify-center flex-1">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-red-600 border-opacity-70" />
         </div>
       )}
 
-      <iframe
-        title="Dashboard Power BI"
-        src={reportUrl}
-        className={`w-full h-[85vh] rounded-xl shadow-lg border ${
-          loading ? "hidden" : "block"
-        }`}
-        style={{ border: "none" }}
-        allowFullScreen
-        onLoad={() => setLoading(false)} // 🔹 Oculta el spinner al cargar
-      ></iframe>
+      <div className="flex-1 w-full">
+        <iframe
+          title="Dashboard Power BI"
+          src={reportUrl}
+          className={`w-full h-full rounded-lg shadow-lg border-0 ${
+            loading ? "hidden" : "block"
+          }`}
+          style={{
+            minHeight: "80vh",
+            height: "calc(100vh - 120px)", // ocupa casi toda la pantalla
+          }}
+          allowFullScreen
+          onLoad={() => setLoading(false)} // Oculta el spinner al cargar
+        ></iframe>
+      </div>
     </div>
   );
 };
