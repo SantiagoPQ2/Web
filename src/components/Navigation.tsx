@@ -14,7 +14,7 @@ import {
   X,
   Settings as SettingsIcon,
   Wrench,
-  BarChart3, // 📊 Ícono para Power BI
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useLocation, Link } from "react-router-dom";
@@ -29,7 +29,9 @@ const Navigation: React.FC = () => {
   const [notisAbiertas, setNotisAbiertas] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // ---------------------------------
   // Cerrar menú usuario al hacer click fuera
+  // ---------------------------------
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -43,7 +45,9 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // ---------------------------------
   // Cargar notificaciones
+  // ---------------------------------
   const cargarNotificaciones = async () => {
     if (!user?.username) return;
     const { data } = await supabase
@@ -83,7 +87,9 @@ const Navigation: React.FC = () => {
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
+  // ---------------------------------
   // Nombres de páginas
+  // ---------------------------------
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
@@ -119,15 +125,135 @@ const Navigation: React.FC = () => {
     }
   };
 
+  // ---------------------------------
   // MENÚS POR ROL
-  let menuItems: {
-    name: string;
-    path: string;
-    icon: any;
-    description: string;
-  }[] = [];
+  // ---------------------------------
+  let menuItems: { name: string; path: string; icon: any; description: string }[] = [];
 
-  if (user?.role === "admin") {
+  if (user?.role === "vendedor") {
+    menuItems = [
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas de crédito",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen, Quiz y Clientes del Día",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna con supervisores",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configurar perfil y cerrar sesión",
+      },
+    ];
+  } else if (user?.role === "supervisor") {
+    menuItems = [
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas de crédito",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Supervisor",
+        path: "/supervisor",
+        icon: Compass,
+        description: "Ver agenda y reuniones del día",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna con vendedores",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configurar perfil y cerrar sesión",
+      },
+    ];
+  } else if (user?.role === "logistica") {
+    menuItems = [
+      {
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar nuevo rechazo",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas de clientes",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen, Quiz y Clientes del Día",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna con administración",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configurar perfil y cerrar sesión",
+      },
+    ];
+  } else if (user?.role === "admin") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -176,7 +302,7 @@ const Navigation: React.FC = () => {
         path: "/powerbi",
         icon: BarChart3,
         description: "Ver panel de indicadores Power BI",
-      }, // ✅ NUEVO
+      },
       {
         name: "Panel Admin",
         path: "/admin",
@@ -196,22 +322,21 @@ const Navigation: React.FC = () => {
         description: "Convertir PDF a Excel",
       },
       {
-        name: "Settings",
+        name: "Configuración",
         path: "/settings",
         icon: SettingsIcon,
         description: "Configurar perfil y cerrar sesión",
       },
     ];
-  } else if (user?.role === "vendedor") {
-    // otros roles iguales a tu versión anterior...
   }
 
+  // ---------------------------------
   // RENDER
+  // ---------------------------------
   return (
     <>
       <header className="w-full bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
-          {/* Menú lateral + título */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -232,7 +357,7 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* Notificaciones + usuario */}
+          {/* Notificaciones + Usuario */}
           <div className="flex items-center gap-4 relative">
             <div className="relative">
               <button
@@ -282,11 +407,12 @@ const Navigation: React.FC = () => {
               )}
             </div>
 
-            {/* Usuario */}
+            {/* Menú usuario */}
             <div className="relative" ref={userMenuRef}>
               <button
-                onClick={() => setIsUserMenuOpen((p) => !p)}
+                onClick={() => setIsUserMenuOpen((prev) => !prev)}
                 className="flex items-center gap-2 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition"
+                aria-label="Menú de usuario"
               >
                 <div className="flex items-center justify-center w-8 h-8 rounded-full bg-red-500 text-white font-semibold">
                   {user?.username?.[0]?.toUpperCase() || "U"}
@@ -328,7 +454,7 @@ const Navigation: React.FC = () => {
             onClick={() => setSidebarOpen(false)}
           ></div>
 
-          <div className="fixed top-0 left-0 w-72 bg-white h-full shadow-xl z-50 flex flex-col p-4 overflow-y-auto animate-fadeIn">
+          <div className="fixed top-0 left-0 w-full max-w-xs sm:w-72 bg-white h-full shadow-xl z-50 flex flex-col p-4 overflow-y-auto animate-fadeIn">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-800">Menú</h2>
               <button
@@ -339,7 +465,7 @@ const Navigation: React.FC = () => {
               </button>
             </div>
 
-            <nav className="space-y-2">
+            <nav className="space-y-2 overflow-y-auto">
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
