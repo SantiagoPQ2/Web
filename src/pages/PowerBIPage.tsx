@@ -1,30 +1,44 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const PowerBIPage: React.FC = () => {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const [loading, setLoading] = useState(true);
 
-  // Solo permitir acceso a admins
+  // 🚫 Solo admins pueden acceder
   useEffect(() => {
     if (user?.role !== "admin") {
-      navigate("/informacion"); // redirige si no es admin
+      navigate("/informacion");
     }
   }, [user, navigate]);
 
+  // ✅ Link válido generado desde Power BI (embed seguro)
   const reportUrl =
-    "https://app.powerbi.com/links/IwwtVSlEqt?ctid=78b9b159-c25f-4af4-a2bb-c8f20ab43386&pbi_source=linkShare";
+    "https://app.powerbi.com/reportEmbed?reportId=8ed1df82-fd77-47a6-aea7-bc4bd68c298a&autoAuth=true&ctid=78b9b159-c25f-4af4-a2bb-c8f20ab43386";
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold">📊 Dashboard Power BI</h1>
+      <h1 className="text-2xl font-bold flex items-center gap-2">
+        📊 Dashboard Power BI
+      </h1>
+
+      {/* Loader simple mientras el iframe carga */}
+      {loading && (
+        <div className="flex items-center justify-center h-[80vh]">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-red-600 border-opacity-70"></div>
+        </div>
+      )}
 
       <iframe
         title="Dashboard Power BI"
         src={reportUrl}
-        className="w-full h-[85vh] rounded-xl shadow-lg border"
+        className={`w-full h-[85vh] rounded-xl shadow-lg border ${
+          loading ? "hidden" : "block"
+        }`}
         style={{ border: "none" }}
         allowFullScreen
+        onLoad={() => setLoading(false)} // 🔹 Oculta el spinner al cargar
       ></iframe>
     </div>
   );
