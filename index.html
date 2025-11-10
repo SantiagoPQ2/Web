@@ -3,16 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/image.png" />
-    
-    <!-- ✅ Permite rotación y zoom en móviles -->
+
+    <!-- ✅ Viewport: mantiene zoom y rotación -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=yes"
     />
 
     <title>VaFood - Consulta de Clientes</title>
-    
-    <!-- PWA Configuration -->
+
+    <!-- ✅ PWA: el link debe ir antes de los metadatos de Apple -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- ✅ PWA / iOS meta -->
     <meta name="theme-color" content="#991b1b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -22,7 +25,7 @@
       href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIlYYh3ciO92VqeQku-_BrLP_6fm-NQj7dwg&s"
     />
 
-    <!-- Meta tags for better SEO -->
+    <!-- ✅ SEO -->
     <meta
       name="description"
       content="VaFood - Sistema de consulta de información de clientes"
@@ -36,7 +39,7 @@
   <body>
     <div id="root"></div>
 
-    <!-- Tu script principal -->
+    <!-- ✅ Service worker de Vite (reinstala el PWA si está activado) -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
