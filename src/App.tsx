@@ -19,7 +19,8 @@ import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
-import Mapa from "./pages/Mapa"; // 🧭 NUEVA PÁGINA
+import Mapa from "./pages/Mapa";
+import PowerBIPage from "./pages/PowerBIPage"; // ✅ NUEVA PAGE
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
@@ -84,7 +85,8 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/planilla-carga" element={<PlanillaCarga />} />
-        <Route path="/mapa" element={<Mapa />} /> {/* ✅ NUEVA PÁGINA */}
+        <Route path="/mapa" element={<Mapa />} />
+        <Route path="/powerbi" element={<PowerBIPage />} /> {/* ✅ NUEVA */}
       </Routes>
     );
   } else {
