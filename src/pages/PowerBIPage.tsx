@@ -13,23 +13,26 @@ const PowerBIPage: React.FC = () => {
     }
   }, [user, navigate]);
 
-  // ✅ Link de Power BI (modo "Publicar en la web", no pide login)
+  // ✅ Link público de Power BI (modo "Publicar en la web")
+  //    + parámetros para ocultar barras y paneles
   const reportUrl =
-    "https://app.powerbi.com/view?r=eyJrIjoiNTA2MWIwNzEtYjQxYy00ZmMzLThjZjQtZDJjODRlM2JhNjM5IiwidCI6Ijc4YjliMTU5LWMyNWYtNGFmNC1hMmJiLWM4ZjIwYWI0MzM4NiIsImMiOjR9";
+    "https://app.powerbi.com/view?r=eyJrIjoiNTA2MWIwNzEtYjQxYy00ZmMzLThjZjQtZDJjODRlM2JhNjM5IiwidCI6Ijc4YjliMTU5LWMyNWYtNGFmNC1hMmJiLWM4ZjIwYWI0MzM4NiIsImMiOjR9&navContentPaneEnabled=false&filterPaneEnabled=false";
 
   return (
-    <div className="p-4 md:p-6 space-y-4 w-full h-screen flex flex-col">
+    <div className="p-4 md:p-6 space-y-4 w-full h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Título */}
       <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
         📊 Dashboard Power BI
       </h1>
 
-      {/* Loader simple mientras se carga el iframe */}
+      {/* Loader mientras se carga */}
       {loading && (
         <div className="flex items-center justify-center flex-1">
           <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-red-600 border-opacity-70" />
         </div>
       )}
 
+      {/* Iframe del dashboard */}
       <div className="flex-1 w-full">
         <iframe
           title="Dashboard Power BI"
@@ -42,7 +45,7 @@ const PowerBIPage: React.FC = () => {
             height: "calc(100vh - 120px)", // ocupa casi toda la pantalla
           }}
           allowFullScreen
-          onLoad={() => setLoading(false)} // Oculta el spinner al cargar
+          onLoad={() => setLoading(false)} // Oculta el loader al cargar
         ></iframe>
       </div>
     </div>
