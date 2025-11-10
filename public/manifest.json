@@ -6,38 +6,26 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-
-  /* 🔹 Permite girar el dispositivo libremente */
+  "display_override": ["standalone", "fullscreen"],
   "orientation": "any",
-
-  /* 🔹 Mantiene colores del tema */
   "background_color": "#ffffff",
   "theme_color": "#991b1b",
-
-  /* 🔹 Idioma y categorías */
   "lang": "es",
   "categories": ["food", "business", "productivity"],
-
-  /* 🔹 Compatibilidad moderna con navegadores nuevos */
-  "display_override": ["standalone", "fullscreen", "window-controls-overlay"],
-
-  /* 🔹 Íconos para launcher e instalación */
   "icons": [
     {
-      "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIlYYh3ciO92VqeQku-_BrLP_6fm-NQj7dwg&s",
+      "src": "/image.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIlYYh3ciO92VqeQku-_BrLP_6fm-NQj7dwg&s",
+      "src": "/image.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-
-  /* 🔹 Acceso rápido desde íconos del sistema */
   "shortcuts": [
     {
       "name": "Buscar Cliente",
@@ -46,7 +34,7 @@
       "url": "/?action=search",
       "icons": [
         {
-          "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIlYYh3ciO92VqeQku-_BrLP_6fm-NQj7dwg&s",
+          "src": "/image.png",
           "sizes": "192x192"
         }
       ]
