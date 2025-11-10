@@ -20,7 +20,7 @@ import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
-import PowerBIPage from "./pages/PowerBIPage"; // ✅ NUEVA PAGE
+import PowerBIPage from "./pages/PowerBIPage";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
@@ -86,7 +86,7 @@ function ProtectedApp() {
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/planilla-carga" element={<PlanillaCarga />} />
         <Route path="/mapa" element={<Mapa />} />
-        <Route path="/powerbi" element={<PowerBIPage />} /> {/* ✅ NUEVA */}
+        <Route path="/powerbi" element={<PowerBIPage />} />
       </Routes>
     );
   } else {
@@ -101,16 +101,16 @@ function ProtectedApp() {
   const isChat = location.pathname === "/chat";
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
       <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
       {!isChat && (
-        <footer className="bg-white border-t border-gray-200 mt-12">
+        <footer className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 mt-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="text-center text-sm text-gray-600">
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
               <p>VaFood - Sistema de consulta de clientes</p>
               <p className="mt-1">
                 Consulte situación y promociones de clientes
