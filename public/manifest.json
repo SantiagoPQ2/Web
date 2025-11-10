@@ -1,15 +1,27 @@
 {
+  "id": "/",
   "name": "VaFood",
   "short_name": "VaFood",
   "description": "Aplicación de consulta de datos de clientes VaFood",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+
+  /* 🔹 Permite girar el dispositivo libremente */
+  "orientation": "any",
+
+  /* 🔹 Mantiene colores del tema */
   "background_color": "#ffffff",
   "theme_color": "#991b1b",
-  "orientation": "portrait-primary",
-  "scope": "/",
+
+  /* 🔹 Idioma y categorías */
   "lang": "es",
   "categories": ["food", "business", "productivity"],
+
+  /* 🔹 Compatibilidad moderna con navegadores nuevos */
+  "display_override": ["standalone", "fullscreen", "window-controls-overlay"],
+
+  /* 🔹 Íconos para launcher e instalación */
   "icons": [
     {
       "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTIlYYh3ciO92VqeQku-_BrLP_6fm-NQj7dwg&s",
@@ -24,6 +36,8 @@
       "purpose": "any maskable"
     }
   ],
+
+  /* 🔹 Acceso rápido desde íconos del sistema */
   "shortcuts": [
     {
       "name": "Buscar Cliente",
