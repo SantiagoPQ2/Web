@@ -136,3 +136,79 @@ select:focus-visible {
   }
 }
 /* ----------- FIN DE LEAFLET ----------- */
+
+
+/* ---------------- MODO OSCURO GLOBAL ---------------- */
+@layer base {
+  /* Colores generales */
+  body {
+    @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300;
+  }
+
+  /* Tarjetas y paneles */
+  .card,
+  .panel,
+  .box,
+  .container-box {
+    @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow transition-colors duration-300;
+  }
+
+  /* Textos */
+  h1, h2, h3, h4, h5, h6, p, span, strong, label {
+    @apply text-gray-900 dark:text-gray-100 transition-colors duration-300;
+  }
+
+  /* Inputs */
+  input, select, textarea {
+    @apply border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded transition-colors duration-300;
+  }
+
+  /* Botones */
+  button {
+    @apply transition-colors duration-300;
+  }
+  button.bg-white {
+    @apply dark:bg-gray-700 dark:text-gray-100;
+  }
+
+  /* Tablas */
+  table {
+    @apply w-full text-sm border-collapse dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  thead {
+    @apply bg-gray-100 dark:bg-gray-700;
+  }
+
+  th, td {
+    @apply border border-gray-200 dark:border-gray-700 p-2;
+  }
+
+  /* Scrollbar en modo oscuro */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-400 dark:bg-gray-700 rounded;
+  }
+
+  /* Popups o modales */
+  .modal {
+    @apply bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300;
+  }
+
+  /* Leaflet ajustes */
+  .leaflet-popup-content {
+    @apply text-gray-900 dark:text-gray-100;
+  }
+
+  .leaflet-control-zoom {
+    @apply dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  /* Transiciones suaves */
+  * {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 0.3s;
+  }
+}
