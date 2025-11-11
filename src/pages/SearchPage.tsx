@@ -63,7 +63,7 @@ const SearchPage: React.FC = () => {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* 🌀 Loading */}
       {loading && (
-        <div className="bg-white rounded-lg shadow-sm p-8">
+        <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
           <LoadingSpinner message={CONFIG.MESSAGES.LOADING} />
         </div>
       )}
@@ -79,7 +79,7 @@ const SearchPage: React.FC = () => {
       {data && !loading && !error && (
         <div className="space-y-6">
           {/* 🔍 Caja de búsqueda */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Buscar Cliente
             </h2>
@@ -92,7 +92,7 @@ const SearchPage: React.FC = () => {
           </div>
 
           {/* 🧾 Resultado del cliente */}
-          <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
             {searchResult ? (
               <ClientResult cliente={searchResult} />
             ) : hasSearched ? (
