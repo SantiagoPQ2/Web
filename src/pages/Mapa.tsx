@@ -262,7 +262,7 @@ const Mapa: React.FC = () => {
 
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold mb-4">Mapa de Visitas</h1>
+      
 
       {/* Filtros */}
       <div className="flex flex-wrap gap-4 mb-4">
