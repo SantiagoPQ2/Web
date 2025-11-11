@@ -2,7 +2,6 @@ import React from "react";
 import { User, FileText, List, Info, ChevronDown, Building } from "lucide-react";
 import { ClienteData } from "../types";
 
-// 🔑 Diccionario de categorías (rellenalo con tus keywords)
 const PROMO_CATEGORIES: Record<string, string[]> = {
   Fiambres: ["fiambres", "jamon", "mortadela", "salame", "nuyun", "paleta", "Cremoso", "Queso"],
   Peñaflor: ["dada", "frizze", "vino", "cerveza", "SMF", "gordons", "MSD", "trapiche", "Alma Mora", "Alaris", "Navarro", "San Telmo", "Cazador", "Trapiche"],
@@ -13,16 +12,15 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Molinos: ["Molino", "Snack"],
   QuesoRallado: ["rallado"],
   Yerba: ["Manto","yerba"],
-  Otros: [], // fallback
+  Otros: [],
 };
 
-// 👉 Función para categorizar promos
 function categorizePromos(promosRaw: string | undefined) {
   if (!promosRaw) return {};
 
   const promos = promosRaw
     .split("\n")
-    .map((p) => p.replace(/^[-–•]\s*/, "").trim()) // limpio guiones
+    .map((p) => p.replace(/^[-–•]\s*/, "").trim())
     .filter((p) => p.length > 0);
 
   const categorized: Record<string, string[]> = {};
@@ -41,11 +39,8 @@ function categorizePromos(promosRaw: string | undefined) {
     categorized[foundCategory].push(promo);
   }
 
-  // 🚫 Elimino categorías vacías
   Object.keys(categorized).forEach((cat) => {
-    if (categorized[cat].length === 0) {
-      delete categorized[cat];
-    }
+    if (categorized[cat].length === 0) delete categorized[cat];
   });
 
   return categorized;
@@ -56,48 +51,48 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
   const categories = Object.keys(categorizedPromos);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-6 animate-fadeIn">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-6 animate-fadeIn transition-colors duration-300">
       {/* Encabezado cliente */}
       <div className="flex items-center mb-6">
-        <div className="bg-red-100 rounded-full p-2 mr-3">
-          <User className="h-6 w-6 text-red-700" />
+        <div className="bg-red-100 dark:bg-red-900/40 rounded-full p-2 mr-3">
+          <User className="h-6 w-6 text-red-700 dark:text-red-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-800">Cliente Encontrado</h2>
-          <p className="text-red-700 font-medium">N° {cliente.numero}</p>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Cliente Encontrado</h2>
+          <p className="text-red-700 dark:text-red-400 font-medium">N° {cliente.numero}</p>
         </div>
       </div>
 
       <div className="space-y-6">
         {/* Razón Social */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 transition-colors duration-300">
           <div className="flex items-center mb-2">
-            <Building className="h-5 w-5 text-gray-600 mr-2" />
-            <h3 className="font-semibold text-gray-800">Razón Social</h3>
+            <Building className="h-5 w-5 text-gray-600 dark:text-gray-300 mr-2" />
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Razón Social</h3>
           </div>
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-gray-700 dark:text-gray-200 leading-relaxed">
             {cliente.razon_social || "No disponible"}
           </p>
         </div>
 
         {/* Deuda */}
-        <div className="bg-gray-50 rounded-lg p-4">
+        <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 transition-colors duration-300">
           <div className="flex items-center mb-2">
-            <Info className="h-5 w-5 text-gray-600 mr-2" />
-            <h3 className="font-semibold text-gray-800">Deuda</h3>
+            <Info className="h-5 w-5 text-gray-600 dark:text-gray-300 mr-2" />
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Deuda</h3>
           </div>
-          <p className="text-gray-700 leading-relaxed">
+          <p className="text-gray-700 dark:text-gray-200 leading-relaxed">
             {cliente.columnaB || "Sin información"}
           </p>
         </div>
 
         {/* Situación */}
-        <div className="bg-red-50 rounded-lg p-4">
+        <div className="bg-red-50 dark:bg-red-900/40 rounded-lg p-4 transition-colors duration-300">
           <div className="flex items-center mb-2">
-            <List className="h-5 w-5 text-red-700 mr-2" />
-            <h3 className="font-semibold text-gray-800">Situación</h3>
+            <List className="h-5 w-5 text-red-700 dark:text-red-400 mr-2" />
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100">Situación</h3>
           </div>
-          <p className="whitespace-pre-line text-gray-700">
+          <p className="whitespace-pre-line text-gray-700 dark:text-gray-200">
             {cliente.columnaC || "Sin información"}
           </p>
         </div>
@@ -106,25 +101,25 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
         {categories.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center mb-2">
-              <FileText className="h-5 w-5 text-red-800 mr-2" />
-              <h3 className="font-semibold text-gray-800">Promos</h3>
+              <FileText className="h-5 w-5 text-red-800 dark:text-red-400 mr-2" />
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100">Promos</h3>
             </div>
 
             {categories.map((cat) => (
               <div
                 key={cat}
-                className="bg-red-100 border border-red-300 rounded-lg p-4"
+                className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-800 rounded-lg p-4 transition-colors duration-300"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-bold text-red-700">{cat}</h4>
-                  <ChevronDown className="h-4 w-4 text-red-700" />
+                  <h4 className="font-bold text-red-700 dark:text-red-400">{cat}</h4>
+                  <ChevronDown className="h-4 w-4 text-red-700 dark:text-red-400" />
                 </div>
 
                 <div className="space-y-2">
                   {categorizedPromos[cat].map((promo, i) => (
                     <div
                       key={i}
-                      className="bg-white border border-red-200 rounded p-2 text-sm text-gray-800"
+                      className="bg-white dark:bg-gray-700 border border-red-200 dark:border-red-700 rounded p-2 text-sm text-gray-800 dark:text-gray-100 transition-colors duration-300"
                     >
                       {promo}
                     </div>
@@ -137,12 +132,12 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
 
         {/* Si no hay promos */}
         {categories.length === 0 && (
-          <div className="bg-red-100 rounded-lg p-4">
+          <div className="bg-red-100 dark:bg-red-900/40 rounded-lg p-4 transition-colors duration-300">
             <div className="flex items-center mb-2">
-              <FileText className="h-5 w-5 text-red-800 mr-2" />
-              <h3 className="font-semibold text-gray-800">Promos</h3>
+              <FileText className="h-5 w-5 text-red-800 dark:text-red-400 mr-2" />
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100">Promos</h3>
             </div>
-            <p className="text-gray-700">Sin información</p>
+            <p className="text-gray-700 dark:text-gray-200">Sin información</p>
           </div>
         )}
       </div>
