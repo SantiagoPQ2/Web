@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
-import { MapPin, Phone, MessageCircle, ExternalLink } from "lucide-react";
+import { MapPin, MessageCircle } from "lucide-react";
 
 interface Visita {
   id: string;
-  cliente_nombre: string;
-  direccion: string;
+  cliente: string;
+  vendedor_id: number;
+  dia_visita: string;
   lat?: number;
-  lng?: number;
-  celular?: string;
-  turno: string; // Mañana / Tarde
-  vendedor_id: string;
+  lon?: number;
+  celular?: string | null;
 }
 
 export default function ClientesDelDia() {
@@ -20,32 +19,35 @@ export default function ClientesDelDia() {
 
   useEffect(() => {
     const fetchVisitas = async () => {
-      const hoy = new Date().toISOString().split("T")[0];
+      const dias = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
+      const hoy = dias[new Date().getDay()]; // Ej: "MIE"
+
       const { data, error } = await supabase
         .from("visitas_planificadas")
-        .select("*")
+        .select("id, cliente, vendedor_id, dia_visita, lat, lon, celular")
         .eq("vendedor_id", currentUser.id)
-        .eq("fecha", hoy);
+        .eq("dia_visita", hoy);
 
-      if (error) console.error(error);
-      else setVisitas(data || []);
+      if (error) {
+        console.error("Error cargando visitas:", error);
+      } else {
+        setVisitas(data || []);
+      }
     };
 
     fetchVisitas();
   }, [currentUser.id]);
 
-  const openMaps = (lat?: number, lng?: number) => {
-    if (lat && lng) {
-      const url = `https://www.google.com/maps?q=${lat},${lng}`;
-      window.open(url, "_blank");
+  const openMaps = (lat?: number, lon?: number) => {
+    if (lat && lon) {
+      window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank");
     }
   };
 
-  const openWhatsApp = (celular?: string) => {
-    if (celular) {
-      const cleanNumber = celular.replace(/\D/g, "");
-      window.open(`https://wa.me/${cleanNumber}`, "_blank");
-    }
+  const openWhatsApp = (celular?: string | null) => {
+    if (!celular) return;
+    const clean = celular.toString().replace(/\D/g, "");
+    window.open(`https://wa.me/${clean}`, "_blank");
   };
 
   return (
@@ -62,49 +64,62 @@ export default function ClientesDelDia() {
               onClick={() => setSelected(v)}
               className="p-3 border rounded hover:bg-gray-50 cursor-pointer transition"
             >
-              <p className="font-medium">{v.cliente_nombre}</p>
-              <p className="text-sm text-gray-600">{v.direccion}</p>
-              <p className="text-sm text-gray-700">Visita: {v.turno}</p>
+              <p className="font-medium">Cliente #{v.cliente}</p>
+              <p className="text-sm text-gray-600">
+                Día de visita: {v.dia_visita}
+              </p>
             </li>
           ))}
         </ul>
       )}
 
-      {/* Modal / Tarjeta expandible */}
       {selected && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-96 relative">
             <button
-              className="absolute top-2 right-3 text-gray-400 hover:text-gray-600"
               onClick={() => setSelected(null)}
+              className="absolute top-2 right-3 text-gray-400 hover:text-gray-600"
             >
               ✕
             </button>
+
             <h3 className="text-xl font-semibold mb-2">
-              {selected.cliente_nombre}
+              Cliente #{selected.cliente}
             </h3>
-            <p className="text-gray-600 mb-1">{selected.direccion}</p>
-            {selected.lat && selected.lng && (
-              <button
-                onClick={() => openMaps(selected.lat, selected.lng)}
-                className="flex items-center gap-2 text-blue-600 text-sm hover:underline"
-              >
-                <MapPin size={16} /> Ver en Google Maps
-              </button>
-            )}
 
-            {selected.celular && (
-              <button
-                onClick={() => openWhatsApp(selected.celular)}
-                className="flex items-center gap-2 mt-2 text-green-600 text-sm hover:underline"
-              >
-                <MessageCircle size={16} /> Contactar por WhatsApp
-              </button>
-            )}
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>
+                <span className="font-medium">Día:</span>{" "}
+                {selected.dia_visita}
+              </p>
+              <p>
+                <span className="font-medium">Latitud:</span>{" "}
+                {selected.lat || "—"}
+              </p>
+              <p>
+                <span className="font-medium">Longitud:</span>{" "}
+                {selected.lon || "—"}
+              </p>
+            </div>
 
-            <div className="mt-4 border-t pt-2 text-sm text-gray-500">
-              <p>Turno: {selected.turno}</p>
-              <p>ID visita: {selected.id}</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {selected.lat && selected.lon && (
+                <button
+                  onClick={() => openMaps(selected.lat, selected.lon)}
+                  className="flex items-center gap-2 text-blue-600 text-sm hover:underline"
+                >
+                  <MapPin size={16} /> Ver en Google Maps
+                </button>
+              )}
+
+              {selected.celular && (
+                <button
+                  onClick={() => openWhatsApp(selected.celular)}
+                  className="flex items-center gap-2 text-green-600 text-sm hover:underline"
+                >
+                  <MessageCircle size={16} /> Contactar por WhatsApp
+                </button>
+              )}
             </div>
           </div>
         </div>
