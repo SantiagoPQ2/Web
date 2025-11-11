@@ -5,7 +5,7 @@ import { MapPin, MessageCircle } from "lucide-react";
 interface Visita {
   id: string;
   cliente: string;
-  vendedor_id: number;
+  vendedor_username: string;
   dia_visita: string;
   lat?: number;
   lon?: number;
@@ -19,24 +19,33 @@ export default function ClientesDelDia() {
 
   useEffect(() => {
     const fetchVisitas = async () => {
+      // Mapear día actual (0 = domingo, 1 = lunes, etc.)
       const dias = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
-      const hoy = dias[new Date().getDay()]; // Ej: "MIE"
+      const hoy = dias[new Date().getDay()]; // Ejemplo: "MIE"
+
+      // 🔹 Si el usuario actual tiene username (como "vendedor_username")
+      const vendedor = currentUser.username || currentUser.user_name || currentUser.name;
+
+      if (!vendedor) {
+        console.warn("No hay vendedor logueado o username en localStorage.user");
+        return;
+      }
 
       const { data, error } = await supabase
         .from("visitas_planificadas")
-        .select("id, cliente, vendedor_id, dia_visita, lat, lon, celular")
-        .eq("vendedor_id", currentUser.id)
+        .select("id, cliente, vendedor_username, dia_visita, lat, lon, celular")
+        .eq("vendedor_username", vendedor)
         .eq("dia_visita", hoy);
 
       if (error) {
-        console.error("Error cargando visitas:", error);
+        console.error("Error al traer visitas:", error);
       } else {
         setVisitas(data || []);
       }
     };
 
     fetchVisitas();
-  }, [currentUser.id]);
+  }, []);
 
   const openMaps = (lat?: number, lon?: number) => {
     if (lat && lon) {
