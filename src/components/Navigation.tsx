@@ -146,6 +146,8 @@ const Navigation: React.FC = () => {
       { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
       { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
       { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Ver puntos y rutas de vendedores" },
+      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Ver panel de indicadores Power BI" },
       { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Ver agenda y reuniones del día" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna con vendedores" },
       { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configurar perfil y cerrar sesión" },
