@@ -21,10 +21,6 @@ const PowerBIPage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-4 w-full h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Título */}
-      <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-        📊 Dashboard Power BI
-      </h1>
 
       {/* Loader mientras se carga */}
       {loading && (
