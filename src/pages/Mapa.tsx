@@ -173,8 +173,10 @@ const Mapa: React.FC = () => {
 
   // Solo admins
   useEffect(() => {
-    if (currentUser?.role !== "admin") navigate("/informacion");
-  }, [currentUser, navigate]);
+  if (currentUser?.role !== "admin" && currentUser?.role !== "supervisor") {
+    navigate("/informacion");
+  }
+}, [currentUser, navigate]);
 
   // Cargar vendedores
   useEffect(() => {
