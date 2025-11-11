@@ -35,6 +35,7 @@ function ProtectedApp() {
   const role = user.role;
   let allowedRoutes;
 
+  // 🔹 VENDEDOR
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -47,7 +48,10 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
       </Routes>
     );
-  } else if (role === "supervisor") {
+  }
+
+  // 🔹 SUPERVISOR (ahora con acceso a Mapa y PowerBI)
+  else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -58,9 +62,14 @@ function ProtectedApp() {
         <Route path="/supervisor" element={<SupervisorPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/mapa" element={<Mapa />} />
+        <Route path="/powerbi" element={<PowerBIPage />} />
       </Routes>
     );
-  } else if (role === "logistica") {
+  }
+
+  // 🔹 LOGÍSTICA
+  else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
@@ -70,7 +79,10 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
       </Routes>
     );
-  } else if (role === "admin") {
+  }
+
+  // 🔹 ADMIN
+  else if (role === "admin") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -89,7 +101,10 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
       </Routes>
     );
-  } else {
+  }
+
+  // 🔹 POR DEFECTO
+  else {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
