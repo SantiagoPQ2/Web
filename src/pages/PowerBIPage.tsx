@@ -8,10 +8,11 @@ const PowerBIPage: React.FC = () => {
 
   // 🔐 Solo admins pueden acceder
   useEffect(() => {
-    if (user?.role !== "admin") {
-      navigate("/informacion");
-    }
-  }, [user, navigate]);
+  if (user?.role !== "admin" && user?.role !== "supervisor") {
+    navigate("/informacion");
+  }
+}, [user, navigate]);
+
 
   // ✅ Link público de Power BI (modo "Publicar en la web")
   //    + parámetros para ocultar barras y paneles
