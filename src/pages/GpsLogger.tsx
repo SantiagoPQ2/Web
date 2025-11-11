@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { supabase } from "../config/supabase"
-import { useAuth } from "../context/AuthContext" // 👈 usuario logueado
+import { useAuth } from "../context/AuthContext"
 
 export default function GpsLogger() {
   const { user } = useAuth()
@@ -10,7 +10,7 @@ export default function GpsLogger() {
   const [loading, setLoading] = useState(false)
 
   const savePoint = async () => {
-    if (loading) return // 🚫 evita doble click mientras guarda
+    if (loading) return
     setLoading(true)
 
     if (!navigator.geolocation) {
@@ -51,7 +51,7 @@ export default function GpsLogger() {
             console.log("✅ Coordenada guardada en Supabase:", newPoint, "por", user?.username)
           }
         } finally {
-          setLoading(false) // ✅ siempre se libera el botón
+          setLoading(false)
         }
       },
       (err) => {
@@ -63,7 +63,7 @@ export default function GpsLogger() {
   }
 
   return (
-    <div className="max-w-lg mx-auto p-6 bg-white shadow rounded space-y-4">
+    <div className="max-w-lg mx-auto p-6 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow rounded space-y-4 transition-colors duration-300">
       <h2 className="text-xl font-bold">📍 GPS Logger</h2>
 
       <input
@@ -85,7 +85,7 @@ export default function GpsLogger() {
       </button>
 
       {coords && (
-        <p className="text-gray-700">
+        <p>
           Última posición: <br />
           <b>X:</b> {coords.lat} <br />
           <b>Y:</b> {coords.lng}
