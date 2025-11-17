@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
+import * as XLSX from "xlsx";
 
 interface BajaItem {
   id: string;
@@ -35,6 +36,20 @@ const RevisarBajas: React.FC = () => {
     setItems((data || []) as BajaItem[]);
   };
 
+  const formatearFechaVista = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("es-AR");
+  };
+
+  const formatearFechaIso = (iso: string) => {
+    // YYYY-MM-DD para comparar con el value del input date
+    return new Date(iso).toISOString().slice(0, 10);
+  };
+
+  const filtrados = filtroFecha
+    ? items.filter((i) => formatearFechaIso(i.created_at) === filtroFecha)
+    : items;
+
   // Toggle aprobado
   const toggleAprobado = async (item: BajaItem) => {
     if (!user) return;
@@ -44,7 +59,6 @@ const RevisarBajas: React.FC = () => {
     }
 
     const nuevoValor = !item.aprobado;
-
     setLoading(true);
 
     const { error } = await supabase
@@ -63,7 +77,6 @@ const RevisarBajas: React.FC = () => {
       return;
     }
 
-    // Actualizo estado local sin recargar todo
     setItems((prev) =>
       prev.map((r) =>
         r.id === item.id
@@ -79,19 +92,34 @@ const RevisarBajas: React.FC = () => {
     );
   };
 
-  const formatearFechaVista = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString("es-AR");
-  };
+  // 🟢 Exportar a Excel (XLSX)
+  const exportarExcel = () => {
+    if (filtrados.length === 0) {
+      alert("No hay datos para exportar.");
+      return;
+    }
 
-  const formatearFechaIso = (iso: string) => {
-    // YYYY-MM-DD para comparar con el value del input date
-    return new Date(iso).toISOString().slice(0, 10);
-  };
+    const dataExport = filtrados.map((i) => ({
+      Fecha: formatearFechaVista(i.created_at),
+      Cliente: i.cliente,
+      "Razón Social": i.razon_social,
+      Motivo: i.motivo,
+      Detalle: i.detalle,
+      Vendedor: i.vendedor_nombre ?? "",
+      Aprobado: i.aprobado ? "Sí" : "No",
+      Supervisor: i.supervisor_nombre ?? "",
+    }));
 
-  const filtrados = filtroFecha
-    ? items.filter((i) => formatearFechaIso(i.created_at) === filtroFecha)
-    : items;
+    const ws = XLSX.utils.json_to_sheet(dataExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bajas");
+
+    const nombreArchivo = `bajas_cambio_ruta${
+      filtroFecha ? "_" + filtroFecha : ""
+    }.xlsx`;
+
+    XLSX.writeFile(wb, nombreArchivo);
+  };
 
   useEffect(() => {
     cargar();
@@ -99,9 +127,18 @@ const RevisarBajas: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-8 p-6 bg-white dark:bg-gray-900 shadow rounded">
-      <h2 className="text-2xl font-semibold mb-4">
-        Revisión de Bajas / Cambios de Ruta
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-semibold">
+          Revisión de Bajas / Cambios de Ruta
+        </h2>
+
+        <button
+          onClick={exportarExcel}
+          className="px-4 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+        >
+          Exportar XLSX
+        </button>
+      </div>
 
       {/* FILTRO POR FECHA */}
       <div className="mb-4 flex items-center gap-2">
@@ -140,7 +177,9 @@ const RevisarBajas: React.FC = () => {
         <tbody>
           {filtrados.map((item) => (
             <tr key={item.id} className="text-sm">
-              <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
+              <td className="p-2 border">
+                {formatearFechaVista(item.created_at)}
+              </td>
               <td className="p-2 border">{item.cliente}</td>
               <td className="p-2 border">{item.razon_social}</td>
               <td className="p-2 border">{item.motivo}</td>
