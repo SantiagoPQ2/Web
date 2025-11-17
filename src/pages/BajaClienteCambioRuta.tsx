@@ -21,28 +21,70 @@ const BajaClienteCambioRuta: React.FC = () => {
 
     setLoading(true);
 
-    const { error } = await supabase.from("bajas_cambio_ruta").insert([
-      {
-        cliente,
-        razon_social: razonSocial,
-        motivo,
-        detalle,
-        vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
-      },
-    ]);
+    // 1) Insertar la baja en la tabla principal
+    const { error: insertError } = await supabase
+      .from("bajas_cambio_ruta")
+      .insert([
+        {
+          cliente,
+          razon_social: razonSocial,
+          motivo,
+          detalle,
+          vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
+        },
+      ]);
+
+    if (insertError) {
+      console.error(insertError);
+      alert("Error al registrar la solicitud");
+      setLoading(false);
+      return;
+    }
+
+    // 2) Buscar todos los supervisores
+    const { data: supervisores, error: supError } = await supabase
+      .from("usuarios_app")
+      .select("username, name, role")
+      .eq("role", "supervisor");
+
+    if (supError) {
+      console.error("Error buscando supervisores:", supError);
+      // No cortamos acá: la baja ya se guardó. Solo avisamos.
+    } else if (supervisores && supervisores.length > 0) {
+      // 3) Armar el texto de la notificación
+      const titulo = "Nueva baja / cambio de ruta";
+      const mensaje = `${
+        user?.name ?? user?.username ?? "Un vendedor"
+      } cargó una solicitud para el cliente ${cliente} - ${razonSocial}. Motivo: ${motivo}${
+        detalle ? ` (Detalle: ${detalle})` : ""
+      }`;
+
+      // 4) Insertar una noti por cada supervisor
+      const notis = supervisores.map((s) => ({
+        usuario_username: s.username,
+        titulo,
+        mensaje,
+        leida: false,
+      }));
+
+      const { error: notiError } = await supabase
+        .from("notificaciones")
+        .insert(notis);
+
+      if (notiError) {
+        console.error("Error creando notificaciones:", notiError);
+        // Nuevamente, no rompemos el flujo, solo logueamos
+      }
+    }
 
     setLoading(false);
 
-    if (error) {
-      console.error(error);
-      alert("Error al registrar la solicitud");
-    } else {
-      alert("Solicitud registrada correctamente");
-      setCliente("");
-      setRazonSocial("");
-      setMotivo("");
-      setDetalle("");
-    }
+    // 5) Feedback y reset del formulario
+    alert("Solicitud registrada correctamente");
+    setCliente("");
+    setRazonSocial("");
+    setMotivo("");
+    setDetalle("");
   };
 
   return (
