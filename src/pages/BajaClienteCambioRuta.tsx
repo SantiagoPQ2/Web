@@ -1,70 +1,116 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 
-export default function BajaClienteCambioRuta() {
-  const [form, setForm] = useState({
-    cliente: "",
-    razon_social: "",
-    motivo: "",
-    detalle: ""
-  });
+const BajaClienteCambioRuta: React.FC = () => {
+  const { user } = useAuth();
+
+  const [cliente, setCliente] = useState("");
+  const [razonSocial, setRazonSocial] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [detalle, setDetalle] = useState("");
   const [loading, setLoading] = useState(false);
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
-  };
+  const motivos = ["Cierre", "Duplicado", "Cambio de ruta", "Otro"];
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.cliente || !form.razon_social || !form.motivo) return alert("Complete todos los campos obligatorios");
+  const handleSubmit = async () => {
+    if (!cliente || !razonSocial || !motivo) {
+      alert("Complete todos los campos obligatorios");
+      return;
+    }
 
     setLoading(true);
-    const { error } = await supabase.from("bajas_cambio_ruta").insert({
-      ...form,
-      vendedor_id: user.id,
-      vendedor_nombre: user.name
-    });
+
+    const { error } = await supabase.from("bajas_cambio_ruta").insert([
+      {
+        cliente,
+        razon_social: razonSocial,
+        motivo,
+        detalle,
+        vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
+      },
+    ]);
 
     setLoading(false);
-    if (error) alert("Error al guardar: " + error.message);
-    else {
-      alert("Enviado correctamente ✅");
-      setForm({ cliente: "", razon_social: "", motivo: "", detalle: "" });
+
+    if (error) {
+      console.error(error);
+      alert("Error al registrar la solicitud");
+    } else {
+      alert("Solicitud registrada correctamente");
+      setCliente("");
+      setRazonSocial("");
+      setMotivo("");
+      setDetalle("");
     }
   };
 
   return (
-    <div className="p-6 max-w-lg mx-auto bg-white rounded shadow">
-      <h2 className="text-xl font-bold mb-4 text-center">Baja Cliente - Cambio de Ruta</h2>
-      <form onSubmit={handleSubmit} className="space-y-3">
+    <div className="max-w-2xl mx-auto mt-10 p-6 bg-white dark:bg-gray-900 shadow rounded-lg">
+      <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">
+        Baja Cliente / Cambio de Ruta
+      </h2>
+
+      <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium">Cliente *</label>
-          <input type="text" name="cliente" value={form.cliente} onChange={handleChange} className="w-full border rounded p-2" />
+          <label className="text-sm font-medium">Cliente *</label>
+          <input
+            className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
+            value={cliente}
+            onChange={(e) => setCliente(e.target.value)}
+          />
         </div>
+
         <div>
-          <label className="block text-sm font-medium">Razón Social *</label>
-          <input type="text" name="razon_social" value={form.razon_social} onChange={handleChange} className="w-full border rounded p-2" />
+          <label className="text-sm font-medium">Razón Social *</label>
+          <input
+            className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
+            value={razonSocial}
+            onChange={(e) => setRazonSocial(e.target.value)}
+          />
         </div>
+
         <div>
-          <label className="block text-sm font-medium">Motivo *</label>
-          <select name="motivo" value={form.motivo} onChange={handleChange} className="w-full border rounded p-2">
-            <option value="">Seleccione</option>
-            <option value="Cierre">Cierre</option>
-            <option value="Duplicado">Duplicado</option>
-            <option value="Cambio de ruta">Cambio de ruta</option>
-            <option value="Otro">Otro</option>
+          <label className="text-sm font-medium">Motivo *</label>
+          <select
+            className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          >
+            <option value="">Seleccione...</option>
+            {motivos.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
           </select>
         </div>
+
         <div>
-          <label className="block text-sm font-medium">Detalle</label>
-          <textarea name="detalle" value={form.detalle} onChange={handleChange} className="w-full border rounded p-2" placeholder="Código duplicado, nueva ruta o comentario adicional" />
+          <label className="text-sm font-medium">
+            {motivo === "Duplicado"
+              ? "Código original del cliente"
+              : motivo === "Cambio de ruta"
+              ? "Nueva ruta"
+              : "Detalle adicional"}
+          </label>
+          <input
+            className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
+            value={detalle}
+            onChange={(e) => setDetalle(e.target.value)}
+          />
         </div>
-        <button disabled={loading} type="submit" className="bg-red-600 text-white w-full py-2 rounded hover:bg-red-700">
-          {loading ? "Guardando..." : "Guardar Registro"}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full bg-red-600 text-white p-3 rounded hover:bg-red-700 transition"
+        >
+          {loading ? "Guardando..." : "Enviar Solicitud"}
         </button>
-      </form>
+      </div>
     </div>
   );
-}
+};
+
+export default BajaClienteCambioRuta;
