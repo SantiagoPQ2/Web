@@ -5,7 +5,9 @@ import {
   Route,
   useLocation,
 } from "react-router-dom";
+
 import Navigation from "./components/Navigation";
+
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
 import RechazosForm from "./pages/RechazosForm";
@@ -21,6 +23,10 @@ import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
+
+import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
+import RevisarBajas from "./pages/RevisarBajas";
+
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
@@ -30,12 +36,15 @@ function ProtectedApp() {
   const hasUpdate = useVersionChecker(60000);
   const location = useLocation();
 
+  // No logueado = Login
   if (!user) return <Login />;
 
   const role = user.role;
   let allowedRoutes;
 
-  // 🔹 VENDEDOR
+  // ============================
+  // 🚀 1) VENDEDOR
+  // ============================
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -46,11 +55,16 @@ function ProtectedApp() {
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
+
+        {/* NUEVA PAGINA */}
+        <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
       </Routes>
     );
   }
 
-  // 🔹 SUPERVISOR (ahora con acceso a Mapa y PowerBI)
+  // ============================
+  // 🚀 2) SUPERVISOR
+  // ============================
   else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
@@ -64,11 +78,16 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
+
+        {/* NUEVA PAGINA SUPERVISION */}
+        <Route path="/revisar-bajas" element={<RevisarBajas />} />
       </Routes>
     );
   }
 
-  // 🔹 LOGÍSTICA
+  // ============================
+  // 🚀 3) LOGISTICA
+  // ============================
   else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
@@ -81,7 +100,9 @@ function ProtectedApp() {
     );
   }
 
-  // 🔹 ADMIN
+  // ============================
+  // 🚀 4) ADMIN
+  // ============================
   else if (role === "admin") {
     allowedRoutes = (
       <Routes>
@@ -99,26 +120,37 @@ function ProtectedApp() {
         <Route path="/planilla-carga" element={<PlanillaCarga />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
+
+        {/* ADMIN TAMBIÉN VE LA REVISIÓN */}
+        <Route path="/revisar-bajas" element={<RevisarBajas />} />
       </Routes>
     );
   }
 
-  // 🔹 POR DEFECTO
+  // ============================
+  // 🚀 5) DEFAULT / SEGURIDAD
+  // ============================
   else {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
-        <Route path="/informacion" element={<Informacion />} />
       </Routes>
     );
   }
 
   const isChat = location.pathname === "/chat";
 
+  // ============================
+  // 📌 ESTRUCTURA PRINCIPAL
+  // ============================
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
+
       <Navigation />
-      <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
+
+      <main className="flex-1 overflow-hidden">
+        {allowedRoutes}
+      </main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
@@ -127,9 +159,7 @@ function ProtectedApp() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="text-center text-sm text-gray-600 dark:text-gray-400">
               <p>VaFood - Sistema de consulta de clientes</p>
-              <p className="mt-1">
-                Consulte situación y promociones de clientes
-              </p>
+              <p className="mt-1">Consulte situación y promociones de clientes</p>
             </div>
           </div>
         </footer>
