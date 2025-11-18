@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../config/supabase";
+import { useNavigate } from "react-router-dom";
 
 interface Producto {
   id: string;
@@ -18,6 +19,7 @@ const CatalogoB2B: React.FC = () => {
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [carrito, setCarrito] = useState<Record<string, number>>({});
+  const navigate = useNavigate();
 
   useEffect(() => {
     cargarProductos();
@@ -63,10 +65,15 @@ const CatalogoB2B: React.FC = () => {
     <div style={{ padding: 20 }}>
       <h2>🛒 Catálogo B2B</h2>
 
+      <button onClick={() => navigate("/b2b/carrito")}>
+        Ver carrito ({Object.keys(carrito).length})
+      </button>
+
       <input
-        placeholder="Buscar..."
+        placeholder="Buscar producto..."
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}
+        style={{ marginTop: 10, width: "100%", padding: 8 }}
       />
 
       <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
