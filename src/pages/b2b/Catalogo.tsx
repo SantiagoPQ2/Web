@@ -19,6 +19,7 @@ const CatalogoB2B: React.FC = () => {
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [carrito, setCarrito] = useState<Record<string, number>>({});
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,19 +32,18 @@ const CatalogoB2B: React.FC = () => {
     if (data) setCarrito(JSON.parse(data));
   };
 
-  const guardarCarrito = (nuevoCarrito: any) => {
-    setCarrito(nuevoCarrito);
-    localStorage.setItem("carrito_b2b", JSON.stringify(nuevoCarrito));
+  const guardarCarrito = (nuevo: any) => {
+    setCarrito(nuevo);
+    localStorage.setItem("carrito_b2b", JSON.stringify(nuevo));
   };
 
   const cargarProductos = async () => {
     const { data, error } = await supabase
-      .schema("B2B")
       .from("z_productos")
       .select("*")
       .eq("activo", true);
 
-    if (error) console.error(error);
+    if (error) console.error("Error cargando productos:", error);
     if (data) setProductos(data);
   };
 
@@ -124,4 +124,3 @@ const CatalogoB2B: React.FC = () => {
 };
 
 export default CatalogoB2B;
-
