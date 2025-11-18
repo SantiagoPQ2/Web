@@ -23,7 +23,6 @@ import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
-
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
 
@@ -31,20 +30,25 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
 
+// === B2B ===
+import CatalogoB2B from "./pages/b2b/Catalogo";
+import CarritoB2B from "./pages/b2b/Carrito";
+import PedidosB2B from "./pages/b2b/Pedidos";
+
+
 function ProtectedApp() {
   const { user } = useAuth();
   const hasUpdate = useVersionChecker(60000);
   const location = useLocation();
 
-  // No logueado = Login
   if (!user) return <Login />;
 
   const role = user.role;
   let allowedRoutes;
 
-  // ============================
+  // -------------------------------------------------
   // 🚀 1) VENDEDOR
-  // ============================
+  // -------------------------------------------------
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -55,16 +59,14 @@ function ProtectedApp() {
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
-
-        {/* NUEVA PAGINA */}
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
       </Routes>
     );
   }
 
-  // ============================
+  // -------------------------------------------------
   // 🚀 2) SUPERVISOR
-  // ============================
+  // -------------------------------------------------
   else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
@@ -78,16 +80,14 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
-
-        {/* NUEVA PAGINA SUPERVISION */}
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
       </Routes>
     );
   }
 
-  // ============================
-  // 🚀 3) LOGISTICA
-  // ============================
+  // -------------------------------------------------
+  // 🚀 3) LOGÍSTICA
+  // -------------------------------------------------
   else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
@@ -100,9 +100,9 @@ function ProtectedApp() {
     );
   }
 
-  // ============================
-  // 🚀 4) ADMIN
-  // ============================
+  // -------------------------------------------------
+  // 🚀 4) ADMIN (incluye módulo B2B)
+  // -------------------------------------------------
   else if (role === "admin") {
     allowedRoutes = (
       <Routes>
@@ -120,16 +120,19 @@ function ProtectedApp() {
         <Route path="/planilla-carga" element={<PlanillaCarga />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
-
-        {/* ADMIN TAMBIÉN VE LA REVISIÓN */}
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
+
+        {/* === B2B === */}
+        <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
+        <Route path="/b2b/carrito" element={<CarritoB2B />} />
+        <Route path="/b2b/pedidos" element={<PedidosB2B />} />
       </Routes>
     );
   }
 
-  // ============================
-  // 🚀 5) DEFAULT / SEGURIDAD
-  // ============================
+  // -------------------------------------------------
+  // 🚀 DEFAULT
+  // -------------------------------------------------
   else {
     allowedRoutes = (
       <Routes>
@@ -140,9 +143,6 @@ function ProtectedApp() {
 
   const isChat = location.pathname === "/chat";
 
-  // ============================
-  // 📌 ESTRUCTURA PRINCIPAL
-  // ============================
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
 
@@ -179,3 +179,4 @@ function App() {
 }
 
 export default App;
+
