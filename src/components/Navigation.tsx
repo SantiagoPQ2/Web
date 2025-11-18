@@ -15,6 +15,9 @@ import {
   Settings as SettingsIcon,
   Wrench,
   BarChart3,
+  ShoppingCart,
+  Package,
+  Store,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -132,15 +135,23 @@ const Navigation: React.FC = () => {
         return "Baja / Cambio de Ruta";
       case "/revisar-bajas":
         return "Revisión de Bajas";
+
+      // === NUEVOS: B2B ===
+      case "/b2b/catalogo":
+        return "B2B - Catálogo";
+      case "/b2b/carrito":
+        return "B2B - Carrito";
+      case "/b2b/pedidos":
+        return "B2B - Pedidos";
+
       default:
         return "VaFood SRL - AR";
     }
   };
 
   // ---------------------------------------
-  // ITEMS MENU POR ROL
+  // MENU ITEMS POR ROL
   // ---------------------------------------
-
   let menuItems: {
     name: string;
     path: string;
@@ -148,7 +159,9 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
+  // -------------------------
   // VENDEDOR
+  // -------------------------
   if (user?.role === "vendedor") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
@@ -162,7 +175,9 @@ const Navigation: React.FC = () => {
     ];
   }
 
+  // -------------------------
   // SUPERVISOR
+  // -------------------------
   else if (user?.role === "supervisor") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
@@ -178,7 +193,9 @@ const Navigation: React.FC = () => {
     ];
   }
 
+  // -------------------------
   // LOGÍSTICA
+  // -------------------------
   else if (user?.role === "logistica") {
     menuItems = [
       { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
@@ -189,7 +206,9 @@ const Navigation: React.FC = () => {
     ];
   }
 
-  // ADMIN
+  // -------------------------
+  // ADMIN (incluye B2B)
+  // -------------------------
   else if (user?.role === "admin") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
@@ -204,6 +223,13 @@ const Navigation: React.FC = () => {
       { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
       { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF a Excel" },
+
+      // === NUEVO MÓDULO B2B ===
+      { name: "B2B - Catálogo", path: "/b2b/catalogo", icon: Store, description: "Catálogo de productos" },
+      { name: "B2B - Carrito", path: "/b2b/carrito", icon: ShoppingCart, description: "Carrito de compras" },
+      { name: "B2B - Pedidos", path: "/b2b/pedidos", icon: Package, description: "Pedidos realizados" },
+
+      // Ajuste final
       { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
@@ -371,3 +397,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
+
