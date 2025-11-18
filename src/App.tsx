@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -23,6 +23,7 @@ import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
+
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
 
@@ -30,25 +31,31 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
 
-// === B2B ===
+// 🔹 B2B PAGES
 import CatalogoB2B from "./pages/b2b/Catalogo";
 import CarritoB2B from "./pages/b2b/Carrito";
 import PedidosB2B from "./pages/b2b/Pedidos";
 
+// 🔹 ChatBot components
+import ChatBubble from "./components/ChatBubble";
+import ChatBot from "./components/ChatBot";
 
 function ProtectedApp() {
   const { user } = useAuth();
   const hasUpdate = useVersionChecker(60000);
   const location = useLocation();
 
+  const [openChat, setOpenChat] = useState(false);
+
+  // NO logueado ⇒ Login
   if (!user) return <Login />;
 
   const role = user.role;
   let allowedRoutes;
 
-  // -------------------------------------------------
+  // ---------------------------
   // 🚀 1) VENDEDOR
-  // -------------------------------------------------
+  // ---------------------------
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -64,9 +71,9 @@ function ProtectedApp() {
     );
   }
 
-  // -------------------------------------------------
+  // ---------------------------
   // 🚀 2) SUPERVISOR
-  // -------------------------------------------------
+  // ---------------------------
   else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
@@ -85,9 +92,9 @@ function ProtectedApp() {
     );
   }
 
-  // -------------------------------------------------
+  // ---------------------------
   // 🚀 3) LOGÍSTICA
-  // -------------------------------------------------
+  // ---------------------------
   else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
@@ -100,9 +107,9 @@ function ProtectedApp() {
     );
   }
 
-  // -------------------------------------------------
-  // 🚀 4) ADMIN (incluye módulo B2B)
-  // -------------------------------------------------
+  // ---------------------------
+  // 🚀 4) ADMIN (incluye B2B)
+  // ---------------------------
   else if (role === "admin") {
     allowedRoutes = (
       <Routes>
@@ -122,7 +129,7 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
 
-        {/* === B2B === */}
+        {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
@@ -130,9 +137,9 @@ function ProtectedApp() {
     );
   }
 
-  // -------------------------------------------------
-  // 🚀 DEFAULT
-  // -------------------------------------------------
+  // ---------------------------
+  // 🚀 5) Default
+  // ---------------------------
   else {
     allowedRoutes = (
       <Routes>
@@ -141,7 +148,14 @@ function ProtectedApp() {
     );
   }
 
-  const isChat = location.pathname === "/chat";
+  // ---------------------------
+  // 🌟 Mostrar ChatBot SOLO en B2B
+  // ---------------------------
+  const showChatBot =
+    location.pathname.startsWith("/b2b") ||
+    location.pathname === "/b2b/catalogo" ||
+    location.pathname === "/b2b/carrito" ||
+    location.pathname === "/b2b/pedidos";
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
@@ -154,16 +168,15 @@ function ProtectedApp() {
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
-      {!isChat && (
-        <footer className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 mt-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
-              <p>VaFood - Sistema de consulta de clientes</p>
-              <p className="mt-1">Consulte situación y promociones de clientes</p>
-            </div>
-          </div>
-        </footer>
+      {/* ⭐ SOLO aparece en páginas B2B */}
+      {showChatBot && !openChat && (
+        <ChatBubble onOpen={() => setOpenChat(true)} />
       )}
+
+      {showChatBot && openChat && (
+        <ChatBot onClose={() => setOpenChat(false)} />
+      )}
+
     </div>
   );
 }
@@ -179,4 +192,3 @@ function App() {
 }
 
 export default App;
-
