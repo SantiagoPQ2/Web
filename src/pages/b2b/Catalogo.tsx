@@ -38,11 +38,13 @@ const CatalogoB2B: React.FC = () => {
 
   const cargarProductos = async () => {
     const { data, error } = await supabase
-      .from("B2B.z_productos")
+      .schema("B2B")
+      .from("z_productos")
       .select("*")
       .eq("activo", true);
 
-    if (!error && data) setProductos(data);
+    if (error) console.error(error);
+    if (data) setProductos(data);
   };
 
   const agregarAlCarrito = (id: string) => {
@@ -122,3 +124,4 @@ const CatalogoB2B: React.FC = () => {
 };
 
 export default CatalogoB2B;
+
