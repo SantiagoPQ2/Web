@@ -18,11 +18,9 @@ const CarritoB2B: React.FC = () => {
 
   const cargarProductos = async () => {
     const ids = Object.keys(carrito);
-
     if (ids.length === 0) return setProductos([]);
 
     const { data } = await supabase
-      .schema("B2B")
       .from("z_productos")
       .select("*")
       .in("id", ids);
@@ -37,7 +35,6 @@ const CarritoB2B: React.FC = () => {
 
   const finalizarPedido = async () => {
     const { data: pedido, error } = await supabase
-      .schema("B2B")
       .from("z_pedidos")
       .insert({
         created_by: "admin",
@@ -53,7 +50,6 @@ const CarritoB2B: React.FC = () => {
 
     for (const p of productos) {
       await supabase
-        .schema("B2B")
         .from("z_pedido_items")
         .insert({
           pedido_id: pedido.id,
@@ -76,7 +72,9 @@ const CarritoB2B: React.FC = () => {
     <div style={{ padding: 20 }}>
       <h2>🧺 Carrito B2B</h2>
 
-      <button onClick={() => navigate("/b2b/catalogo")}>Volver al catálogo</button>
+      <button onClick={() => navigate("/b2b/catalogo")}>
+        Volver al catálogo
+      </button>
 
       {productos.length === 0 && <p>El carrito está vacío.</p>}
 
