@@ -22,18 +22,23 @@ const CarritoB2B: React.FC = () => {
     if (ids.length === 0) return setProductos([]);
 
     const { data } = await supabase
-      .from("B2B.z_productos")
+      .schema("B2B")
+      .from("z_productos")
       .select("*")
       .in("id", ids);
 
     setProductos(data || []);
   };
 
-  const total = productos.reduce((acc, p) => acc + p.precio * carrito[p.id], 0);
+  const total = productos.reduce(
+    (acc, p) => acc + p.precio * carrito[p.id],
+    0
+  );
 
   const finalizarPedido = async () => {
     const { data: pedido, error } = await supabase
-      .from("B2B.z_pedidos")
+      .schema("B2B")
+      .from("z_pedidos")
       .insert({
         created_by: "admin",
         total: total,
@@ -47,15 +52,18 @@ const CarritoB2B: React.FC = () => {
     }
 
     for (const p of productos) {
-      await supabase.from("B2B.z_pedido_items").insert({
-        pedido_id: pedido.id,
-        producto_id: p.id,
-        articulo: p.articulo,
-        nombre: p.nombre,
-        cantidad: carrito[p.id],
-        precio_unitario: p.precio,
-        subtotal: p.precio * carrito[p.id]
-      });
+      await supabase
+        .schema("B2B")
+        .from("z_pedido_items")
+        .insert({
+          pedido_id: pedido.id,
+          producto_id: p.id,
+          articulo: p.articulo,
+          nombre: p.nombre,
+          cantidad: carrito[p.id],
+          precio_unitario: p.precio,
+          subtotal: p.precio * carrito[p.id],
+        });
     }
 
     localStorage.removeItem("carrito_b2b");
