@@ -23,3 +23,4 @@ export function setCartQty(id: string, cantidad: number) {
 
   localStorage.setItem("carrito_b2b", JSON.stringify(carrito));
 }
+
