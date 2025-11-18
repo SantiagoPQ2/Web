@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../../config/supabase";
+import { useNavigate } from "react-router-dom";
 
 const CarritoB2B: React.FC = () => {
   const [carrito, setCarrito] = useState<any>({});
   const [productos, setProductos] = useState<any[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const data = localStorage.getItem("carrito_b2b");
@@ -30,8 +32,7 @@ const CarritoB2B: React.FC = () => {
   const total = productos.reduce((acc, p) => acc + p.precio * carrito[p.id], 0);
 
   const finalizarPedido = async () => {
-    // crear pedido
-    const { data: pedido } = await supabase
+    const { data: pedido, error } = await supabase
       .from("B2B.z_pedidos")
       .insert({
         created_by: "admin",
@@ -39,6 +40,11 @@ const CarritoB2B: React.FC = () => {
       })
       .select()
       .single();
+
+    if (error) {
+      alert("Error al crear pedido");
+      return;
+    }
 
     for (const p of productos) {
       await supabase.from("B2B.z_pedido_items").insert({
@@ -55,11 +61,14 @@ const CarritoB2B: React.FC = () => {
     localStorage.removeItem("carrito_b2b");
     setCarrito({});
     alert("Pedido creado correctamente");
+    navigate("/b2b/pedidos");
   };
 
   return (
     <div style={{ padding: 20 }}>
       <h2>🧺 Carrito B2B</h2>
+
+      <button onClick={() => navigate("/b2b/catalogo")}>Volver al catálogo</button>
 
       {productos.length === 0 && <p>El carrito está vacío.</p>}
 
@@ -69,10 +78,12 @@ const CarritoB2B: React.FC = () => {
         </div>
       ))}
 
-      <h3>Total: ${total}</h3>
+      <h3>Total: ${total.toFixed(2)}</h3>
 
       {productos.length > 0 && (
-        <button onClick={finalizarPedido}>Finalizar pedido</button>
+        <button onClick={finalizarPedido} style={{ padding: 10, marginTop: 10 }}>
+          Finalizar pedido
+        </button>
       )}
     </div>
   );
