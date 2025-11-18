@@ -1,5 +1,4 @@
 // src/services/aiBot.ts
-
 import { supabase } from "../config/supabase";
 import { addToCart, removeFromCart, setCartQty } from "./cartActions";
 
@@ -12,14 +11,16 @@ Sos el asistente B2B de VaFood.
 Podés:
 - Responder sobre precios, stock y productos.
 - Buscar productos por nombre o categoría.
-- Modificar el carrito: agregar, sacar, o cambiar cantidades.
-- Siempre respondé corto, claro y profesional.
+- Modificar el carrito: agregar, sacar, cambiar cantidades.
+Tu estilo debe ser claro, profesional y directo.
+Si el usuario pide agregar productos, eliminarlos o modificar cantidades, respondé normalmente y además ejecutá la acción.
     `;
 
+    // 🔥 Llamada a OpenAI
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: \`Bearer \${API_KEY}\`,
+        Authorization: `Bearer ${API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -32,50 +33,75 @@ Podés:
     });
 
     const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content || "No entendí eso.";
+    const reply: string =
+      data?.choices?.[0]?.message?.content || "No entendí eso.";
 
-    // Procesar acciones concretas
+    // Procesamos acciones del usuario
     await interpretarAcciones(userMessage);
 
     return reply;
   } catch (error) {
-    console.error(error);
+    console.error("Error en askAI:", error);
     return "Hubo un error procesando tu mensaje.";
   }
 }
 
-// -------------------------------------------------------------
-// 🔧 Detecta si el usuario pidió una acción (agregar, sacar, etc.)
-// -------------------------------------------------------------
+/* ---------------------------------------------------------
+ * 🔧 Interpreta si el usuario pidió una acción concreta
+ * --------------------------------------------------------- */
 async function interpretarAcciones(msg: string) {
   msg = msg.toLowerCase();
 
-  if (msg.includes("agrega") || msg.includes("añade")) {
+  // AGREGAR PRODUCTOS
+  if (
+    msg.includes("agrega") ||
+    msg.includes("añade") ||
+    msg.includes("agregar") ||
+    msg.includes("sumar") ||
+    msg.includes("poneme")
+  ) {
     const cantidad = extraerNumero(msg) || 1;
     const producto = await buscarProducto(msg);
-    if (producto) addToCart(producto.id, cantidad);
+    if (producto) {
+      addToCart(producto.id, cantidad);
+    }
   }
 
-  if (msg.includes("saca") || msg.includes("elimina")) {
+  // SACAR / ELIMINAR PRODUCTOS
+  if (
+    msg.includes("saca") ||
+    msg.includes("elimina") ||
+    msg.includes("sacar") ||
+    msg.includes("quitar")
+  ) {
     const producto = await buscarProducto(msg);
-    if (producto) removeFromCart(producto.id);
+    if (producto) {
+      removeFromCart(producto.id);
+    }
   }
 
-  if (msg.includes("pone") || msg.includes("ponele")) {
+  // CAMBIAR CANTIDAD ESPECÍFICA
+  if (msg.includes("ponele") || msg.includes("poné") || msg.includes("coloca")) {
     const cantidad = extraerNumero(msg);
     const producto = await buscarProducto(msg);
 
-    if (producto && cantidad) setCartQty(producto.id, cantidad);
+    if (producto && cantidad) {
+      setCartQty(producto.id, cantidad);
+    }
   }
 }
 
-// Extrae un número de un texto
+/* ---------------------------------------------------------
+ * 🔍 Extrae un número del texto (ej: "agrega 3 patys")
+ * --------------------------------------------------------- */
 function extraerNumero(msg: string): number | null {
   const match = msg.match(/\b\d+\b/);
   return match ? parseInt(match[0]) : null;
 }
 
-// Busca un producto por coincidencia de texto
+/* ---------------------------------------------------------
+ * 🔎 Busca un producto que coincida con el mensaje
+ * --------------------------------------------------------- */
 async function buscarProducto(msg: string) {
   const { data } = await supabase.from("z_productos").select("*");
 
@@ -86,7 +112,8 @@ async function buscarProducto(msg: string) {
   const encontrado = data.find((p: any) =>
     texto.includes(p.nombre.toLowerCase()) ||
     (p.marca && texto.includes(p.marca.toLowerCase())) ||
-    (p.categoria && texto.includes(p.categoria.toLowerCase()))
+    (p.categoria && texto.includes(p.categoria.toLowerCase())) ||
+    (p.articulo && texto.includes(p.articulo.toLowerCase()))
   );
 
   return encontrado || null;
