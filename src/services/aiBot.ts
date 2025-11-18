@@ -5,39 +5,41 @@ const API_KEY = import.meta.env.VITE_OPENAI_KEY;
 
 export async function askAI(userMessage: string): Promise<string> {
   try {
-    // ⭐ 1) OBTENER PRODUCTOS REALES
+    // ⭐ 1) OBTENER PRODUCTOS
     const { data: productos } = await supabase
       .from("z_productos")
-      .select("id, articulo, nombre, marca, categoria, precio, stock");
+      .select("id, articulo, nombre, marca, categoria, precio");
 
+    // ⭐ 2) FORMATEAR CATÁLOGO (solo nombre/marca/categoría/precio)
     const catalogo = productos
       ?.map(
         (p) =>
-          `• ${p.nombre} (marca: ${p.marca || "-"}, cat: ${
+          `${p.nombre} | marca ${p.marca || "-"} | categoría ${
             p.categoria || "-"
-          }, precio: $${p.precio}, stock: ${p.stock})`
+          } | precio $${p.precio}`
       )
       .join("\n");
 
-    // ⭐ 2) ANTI-ALUCINACIÓN (prompt fuerte)
+    // ⭐ 3) PROMPT ANTI-ALUCINACIÓN + FORMATO LIMPIO
     const systemPrompt = `
 Sos el asistente B2B de VaFood.
 
-Reglas estrictas:
-- SOLO podés responder usando el catálogo real adjunto.
-- SI NO existe en el catálogo → decí: "Ese producto no figura en catálogo."
-- NO inventes nombres, marcas, productos ni categorías.
-- NO completes con suposiciones.
-- NO uses tono creativo.
-- Respondé SIEMPRE de forma clara, profesional y breve (2–3 líneas).
-- Cuando te pidan "qué hamburguesas tenés", buscá en el catálogo por categoría o coincidencia de nombre.
-- Podés sugerir productos similares SOLO si están en el catálogo.
+Reglas:
+1) SOLO podés usar los productos reales del catálogo adjunto.
+2) NO inventes productos, marcas ni categorías.
+3) SI NO existe en el catálogo → respondé: "Ese producto no figura en catálogo."
+4) Tus respuestas deben ser cortas (2–4 líneas), claras y profesionales.
+5) Cuando el usuario te pida un listado (ej: "qué salchichas tenés"):
+   - Mostrá una lista con bullets.
+   - Formato de cada item: "• Nombre – $precio"
+   - NO mostrar stock.
+   - NO agregar texto innecesario.
 
-Catálogo real:
+Catálogo:
 ${catalogo}
     `;
 
-    // ⭐ 3) Llamada a OpenAI
+    // ⭐ 4) LLAMADA A OPENAI
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -57,7 +59,7 @@ ${catalogo}
     const reply =
       data?.choices?.[0]?.message?.content || "No pude entender tu consulta.";
 
-    // ⭐ 4) Procesar acciones (agregar/sacar productos)
+    // ⭐ 5) ACCIONES (agregar, sacar, modificar cantidades)
     await interpretarAcciones(userMessage);
 
     return reply;
@@ -96,13 +98,11 @@ async function interpretarAcciones(msg: string) {
   }
 }
 
-// 🔍 Extraer números
 function extraerNumero(msg: string): number | null {
-  const match = msg.match(/\b\d+\b/);
-  return match ? parseInt(match[0]) : null;
+  const m = msg.match(/\b\d+\b/);
+  return m ? parseInt(m[0]) : null;
 }
 
-// 🔎 Buscar producto real
 async function buscarProducto(msg: string) {
   const { data } = await supabase.from("z_productos").select("*");
   if (!data) return null;
@@ -111,8 +111,12 @@ async function buscarProducto(msg: string) {
 
   return (
     data.find((p: any) => texto.includes(p.nombre.toLowerCase())) ||
-    data.find((p: any) => texto.includes((p.marca || "").toLowerCase())) ||
-    data.find((p: any) => texto.includes((p.categoria || "").toLowerCase())) ||
+    data.find((p: any) =>
+      texto.includes((p.marca || "").toLowerCase())
+    ) ||
+    data.find((p: any) =>
+      texto.includes((p.categoria || "").toLowerCase())
+    ) ||
     null
   );
 }
