@@ -12,7 +12,6 @@ const PedidosB2B = () => {
 
   const cargarPedidos = async () => {
     const { data } = await supabase
-      .schema("B2B")
       .from("z_pedidos")
       .select("*")
       .order("created_at", { ascending: false });
@@ -24,7 +23,6 @@ const PedidosB2B = () => {
     setSelected(pedidoId);
 
     const { data } = await supabase
-      .schema("B2B")
       .from("z_pedido_items")
       .select("*")
       .eq("pedido_id", pedidoId);
@@ -53,7 +51,10 @@ const PedidosB2B = () => {
               <span>Total: ${p.total}</span>
             </div>
 
-            <button style={{ marginTop: 5 }} onClick={() => cargarItems(p.id)}>
+            <button
+              style={{ marginTop: 5 }}
+              onClick={() => cargarItems(p.id)}
+            >
               Ver detalle
             </button>
 
