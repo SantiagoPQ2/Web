@@ -12,7 +12,8 @@ const PedidosB2B = () => {
 
   const cargarPedidos = async () => {
     const { data } = await supabase
-      .from("B2B.z_pedidos")
+      .schema("B2B")
+      .from("z_pedidos")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -23,7 +24,8 @@ const PedidosB2B = () => {
     setSelected(pedidoId);
 
     const { data } = await supabase
-      .from("B2B.z_pedido_items")
+      .schema("B2B")
+      .from("z_pedido_items")
       .select("*")
       .eq("pedido_id", pedidoId);
 
@@ -36,13 +38,16 @@ const PedidosB2B = () => {
 
       <div style={{ marginTop: 20 }}>
         {pedidos.map((p) => (
-          <div key={p.id} style={{
-            border: "1px solid #ddd",
-            padding: 10,
-            borderRadius: 8,
-            marginBottom: 10,
-            background: selected === p.id ? "#f5f5f5" : "white"
-          }}>
+          <div
+            key={p.id}
+            style={{
+              border: "1px solid #ddd",
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 10,
+              background: selected === p.id ? "#f5f5f5" : "white",
+            }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <b>Pedido #{p.id.slice(0, 8)}</b>
               <span>Total: ${p.total}</span>
