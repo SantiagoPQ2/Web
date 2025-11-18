@@ -20,6 +20,9 @@ const CatalogoB2B: React.FC = () => {
   const [busqueda, setBusqueda] = useState("");
   const [carrito, setCarrito] = useState<Record<string, number>>({});
 
+  // animación por producto
+  const [btnAnimacion, setBtnAnimacion] = useState<Record<string, boolean>>({});
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,6 +51,15 @@ const CatalogoB2B: React.FC = () => {
   };
 
   const agregarAlCarrito = (id: string) => {
+    // seteo animación
+    setBtnAnimacion((prev) => ({ ...prev, [id]: true }));
+
+    // desactivo animación 300ms
+    setTimeout(() => {
+      setBtnAnimacion((prev) => ({ ...prev, [id]: false }));
+    }, 300);
+
+    // actualizo carrito
     const nuevo = { ...carrito, [id]: (carrito[id] || 0) + 1 };
     guardarCarrito(nuevo);
   };
@@ -76,6 +88,7 @@ const CatalogoB2B: React.FC = () => {
   return (
     <div className="w-full">
       <div className="max-w-7xl mx-auto px-4 py-6">
+
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <div>
@@ -83,7 +96,7 @@ const CatalogoB2B: React.FC = () => {
               Catálogo B2B
             </h2>
             <p className="text-sm text-gray-500">
-              Explorá el catálogo y armá pedidos de forma rápida y segura.
+              Explorá productos y armá tu pedido.
             </p>
           </div>
 
@@ -98,31 +111,39 @@ const CatalogoB2B: React.FC = () => {
           </button>
         </div>
 
-        {/* Filtros */}
-        <div className="bg-white rounded-xl shadow-md p-4 mb-6 border border-red-50">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+        {/* Layout principal: sidebar + productos */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+
+          {/* SIDEBAR FILTROS */}
+          <div className="md:col-span-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm h-fit sticky top-20">
+            <h3 className="text-sm font-bold text-gray-700 mb-3">
+              Filtros
+            </h3>
+
+            {/* Buscador */}
+            <div className="mb-4">
               <label className="text-xs font-semibold text-gray-500 uppercase">
                 Buscar
               </label>
               <input
-                placeholder="Nombre, código o artículo..."
+                placeholder="Nombre, código..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="mt-1 w-full px-3 py-2 mb-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
               />
             </div>
 
-            <div>
+            {/* Marca */}
+            <div className="mb-4">
               <label className="text-xs font-semibold text-gray-500 uppercase">
                 Marca
               </label>
               <select
                 value={filtroMarca}
                 onChange={(e) => setFiltroMarca(e.target.value)}
-                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
               >
-                <option value="">Todas las marcas</option>
+                <option value="">Todas</option>
                 {marcas.map((m) => (
                   <option key={m} value={m}>
                     {m}
@@ -131,16 +152,17 @@ const CatalogoB2B: React.FC = () => {
               </select>
             </div>
 
-            <div>
+            {/* Categoría */}
+            <div className="mb-2">
               <label className="text-xs font-semibold text-gray-500 uppercase">
                 Categoría
               </label>
               <select
                 value={filtroCategoria}
                 onChange={(e) => setFiltroCategoria(e.target.value)}
-                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-red-500 focus:border-red-500"
               >
-                <option value="">Todas las categorías</option>
+                <option value="">Todas</option>
                 {categorias.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -149,109 +171,89 @@ const CatalogoB2B: React.FC = () => {
               </select>
             </div>
           </div>
-        </div>
 
-        {/* Grid de productos */}
-        {filtrados.length === 0 ? (
-          <div className="text-center text-gray-500 text-sm py-8 bg-white rounded-xl shadow-sm">
-            No se encontraron productos con los filtros seleccionados.
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtrados.map((p) => (
-              <div
-                key={p.id}
-                className="bg-white rounded-xl shadow-md border border-gray-100 flex flex-col overflow-hidden hover:shadow-lg transition-shadow"
-              >
-                {/* Imagen */}
-                <div className="h-32 sm:h-36 bg-gray-50 flex items-center justify-center">
-                  {p.imagen_url ? (
-                    <img
-                      src={p.imagen_url}
-                      alt={p.nombre}
-                      className="max-h-full object-contain"
-                    />
-                  ) : (
-                    <div className="text-center px-4">
-                      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                        Sin imagen
-                      </div>
-                      <div className="text-[10px] text-gray-400">
-                        Código: {p.articulo}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Contenido */}
-                <div className="flex-1 flex flex-col p-3 sm:p-4">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">
-                      {p.nombre}
-                    </h3>
-                    {p.stock <= 0 ? (
-                      <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full">
-                        Sin stock
-                      </span>
-                    ) : p.stock < 20 ? (
-                      <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
-                        Stock bajo
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                        Stock OK
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-gray-500 mb-2">
-                    {p.marca && (
-                      <span className="font-medium text-gray-700">
-                        {p.marca}
-                      </span>
-                    )}{" "}
-                    {p.categoria && (
-                      <>• <span>{p.categoria}</span></>
-                    )}
-                  </p>
-
-                  <div className="flex items-center justify-between mt-auto">
-                    <div>
-                      <div className="text-[11px] text-gray-400 uppercase">
-                        Precio unitario
-                      </div>
-                      <div className="text-lg font-bold text-red-600">
-                        ${p.precio?.toLocaleString("es-AR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        Stock:{" "}
-                        <span className="font-semibold text-gray-700">
-                          {p.stock}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button
-                      disabled={p.stock <= 0}
-                      onClick={() => agregarAlCarrito(p.id)}
-                      className={`ml-2 inline-flex items-center justify-center px-3 py-2 rounded-lg text-xs font-semibold shadow-sm transition
-                        ${
-                          p.stock <= 0
-                            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-                            : "bg-red-600 hover:bg-red-700 text-white"
-                        }`}
-                    >
-                      Agregar
-                    </button>
-                  </div>
-                </div>
+          {/* GRID DE PRODUCTOS */}
+          <div className="md:col-span-3">
+            {filtrados.length === 0 ? (
+              <div className="text-center text-gray-500 text-sm py-8 bg-white rounded-xl shadow-sm">
+                No hay productos para mostrar.
               </div>
-            ))}
+            ) : (
+              <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+                {filtrados.map((p) => (
+                  <div
+                    key={p.id}
+                    className="bg-white rounded-xl shadow-md border border-gray-100 flex flex-col overflow-hidden hover:shadow-lg transition-shadow"
+                  >
+                    {/* Imagen */}
+                    <div className="h-36 bg-gray-50 flex items-center justify-center">
+                      {p.imagen_url ? (
+                        <img
+                          src={p.imagen_url}
+                          alt={p.nombre}
+                          className="max-h-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-center px-4">
+                          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                            Sin imagen
+                          </div>
+                          <div className="text-[10px] text-gray-400">
+                            Código: {p.articulo}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Contenido */}
+                    <div className="flex-1 flex flex-col p-4">
+
+                      <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">
+                        {p.nombre}
+                      </h3>
+
+                      <p className="text-xs text-gray-500 mt-1 mb-2">
+                        {p.marca} • {p.categoria}
+                      </p>
+
+                      <div className="mt-auto flex items-center justify-between">
+                        <div>
+                          <p className="text-[11px] text-gray-400 uppercase">
+                            Precio
+                          </p>
+                          <p className="text-lg font-bold text-red-600">
+                            ${p.precio.toLocaleString("es-AR", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </p>
+                        </div>
+
+                        <button
+                          disabled={p.stock <= 0}
+                          onClick={() => agregarAlCarrito(p.id)}
+                          className={`
+                            px-3 py-2 rounded-lg text-xs font-semibold shadow-sm transition 
+                            ${
+                              p.stock <= 0
+                                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                : btnAnimacion[p.id]
+                                ? "bg-gray-300 text-gray-700 scale-105"
+                                : "bg-red-600 hover:bg-red-700 text-white"
+                            }
+                          `}
+                        >
+                          {btnAnimacion[p.id] ? "Añadido ✔" : "Agregar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+
+        </div>
       </div>
     </div>
   );
