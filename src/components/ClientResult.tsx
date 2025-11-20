@@ -6,7 +6,7 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Fiambres: ["fiambres", "jamon", "mortadela", "salame", "nuyun", "paleta", "Cremoso", "Queso"],
   Peñaflor: ["dada", "frizze", "vino", "cerveza", "SMF", "gordons", "MSD", "trapiche", "Alma Mora", "Alaris", "Navarro", "San Telmo", "Cazador", "Trapiche"],
   Hamburguesas: ["hamburguesa", "paty"],
-  Salchichas: ["VSS", "ICB"],
+  Salchichas: ["VSS", "ICB", "PatyViena"],
   Azucar: ["Azucar"],
   Softys: ["Softy"],
   Molinos: ["Molino", "Snack"],
