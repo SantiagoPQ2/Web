@@ -63,6 +63,7 @@ const BajaClienteCambioRuta: React.FC = () => {
           detalle,
           vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
           foto_url: fotoUrl,
+          estado: "pendiente",
         },
       ]);
 
@@ -74,7 +75,7 @@ const BajaClienteCambioRuta: React.FC = () => {
     }
 
     // --------------------------
-    // CONSULTAR SUPERVISORES
+    // NOTIFICACIONES A SUPERVISORES
     // --------------------------
     const { data: supervisores } = await supabase
       .from("usuarios_app")
@@ -96,11 +97,7 @@ const BajaClienteCambioRuta: React.FC = () => {
         leida: false,
       }));
 
-      const { error: notiError } = await supabase
-        .from("notificaciones")
-        .insert(notis);
-
-      if (notiError) console.error("Error creando notificaciones:", notiError);
+      await supabase.from("notificaciones").insert(notis);
     }
 
     setLoading(false);
@@ -170,11 +167,13 @@ const BajaClienteCambioRuta: React.FC = () => {
           />
         </div>
 
+        {/* FOTO - con cámara */}
         <div>
           <label className="text-sm font-medium">Foto (opcional)</label>
           <input
             type="file"
             accept="image/*"
+            capture="environment"   // 📸 habilita cámara
             className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
             onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
           />
