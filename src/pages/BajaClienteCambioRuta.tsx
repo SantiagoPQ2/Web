@@ -9,6 +9,7 @@ const BajaClienteCambioRuta: React.FC = () => {
   const [razonSocial, setRazonSocial] = useState("");
   const [motivo, setMotivo] = useState("");
   const [detalle, setDetalle] = useState("");
+  const [foto, setFoto] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
   const motivos = ["Cierre", "Duplicado", "Cambio de ruta", "Otro"];
@@ -21,7 +22,37 @@ const BajaClienteCambioRuta: React.FC = () => {
 
     setLoading(true);
 
-    // 1) Insertar la baja en la tabla principal
+    // --------------------------
+    // SUBIR FOTO (si existe)
+    // --------------------------
+    let fotoUrl = null;
+
+    if (foto) {
+      const fileExt = foto.name.split(".").pop();
+      const fileName = `${cliente}_${Date.now()}.${fileExt}`;
+      const filePath = `${user?.username}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("chat_uploads")
+        .upload(filePath, foto);
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert("Error subiendo la foto");
+        setLoading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("chat_uploads")
+        .getPublicUrl(filePath);
+
+      fotoUrl = urlData.publicUrl;
+    }
+
+    // --------------------------
+    // INSERTAR BAJA
+    // --------------------------
     const { error: insertError } = await supabase
       .from("bajas_cambio_ruta")
       .insert([
@@ -31,6 +62,7 @@ const BajaClienteCambioRuta: React.FC = () => {
           motivo,
           detalle,
           vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
+          foto_url: fotoUrl,
         },
       ]);
 
@@ -41,17 +73,15 @@ const BajaClienteCambioRuta: React.FC = () => {
       return;
     }
 
-    // 2) Buscar todos los supervisores
-    const { data: supervisores, error: supError } = await supabase
+    // --------------------------
+    // CONSULTAR SUPERVISORES
+    // --------------------------
+    const { data: supervisores } = await supabase
       .from("usuarios_app")
       .select("username, name, role")
       .eq("role", "supervisor");
 
-    if (supError) {
-      console.error("Error buscando supervisores:", supError);
-      // No cortamos acá: la baja ya se guardó. Solo avisamos.
-    } else if (supervisores && supervisores.length > 0) {
-      // 3) Armar el texto de la notificación
+    if (supervisores && supervisores.length > 0) {
       const titulo = "Nueva baja / cambio de ruta";
       const mensaje = `${
         user?.name ?? user?.username ?? "Un vendedor"
@@ -59,7 +89,6 @@ const BajaClienteCambioRuta: React.FC = () => {
         detalle ? ` (Detalle: ${detalle})` : ""
       }`;
 
-      // 4) Insertar una noti por cada supervisor
       const notis = supervisores.map((s) => ({
         usuario_username: s.username,
         titulo,
@@ -71,20 +100,18 @@ const BajaClienteCambioRuta: React.FC = () => {
         .from("notificaciones")
         .insert(notis);
 
-      if (notiError) {
-        console.error("Error creando notificaciones:", notiError);
-        // Nuevamente, no rompemos el flujo, solo logueamos
-      }
+      if (notiError) console.error("Error creando notificaciones:", notiError);
     }
 
     setLoading(false);
 
-    // 5) Feedback y reset del formulario
     alert("Solicitud registrada correctamente");
+
     setCliente("");
     setRazonSocial("");
     setMotivo("");
     setDetalle("");
+    setFoto(null);
   };
 
   return (
@@ -140,6 +167,16 @@ const BajaClienteCambioRuta: React.FC = () => {
             className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
             value={detalle}
             onChange={(e) => setDetalle(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm font-medium">Foto (opcional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
+            onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
           />
         </div>
 
