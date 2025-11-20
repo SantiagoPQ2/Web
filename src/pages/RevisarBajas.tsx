@@ -13,7 +13,7 @@ interface BajaItem {
   aprobado: boolean;
   supervisor_nombre: string | null;
   created_at: string;
-  estado: boolean | null;
+  estado: string | null;
   foto_url: string | null;
 }
 
@@ -25,12 +25,12 @@ const RevisarBajas: React.FC = () => {
   const [fotoVista, setFotoVista] = useState<string | null>(null);
 
   const cargar = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("bajas_cambio_ruta")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error) setItems((data || []) as BajaItem[]);
+    setItems((data || []) as BajaItem[]);
   };
 
   const formatearFechaVista = (iso: string) =>
@@ -39,21 +39,49 @@ const RevisarBajas: React.FC = () => {
   const formatearFechaIso = (iso: string) =>
     new Date(iso).toISOString().slice(0, 10);
 
+  const siguienteEstado = (estado: string | null) => {
+    if (!estado || estado === "pendiente") return "correcto";
+    if (estado === "correcto") return "rechazado";
+    return "pendiente";
+  };
+
   const filtrados = filtroFecha
     ? items.filter((i) => formatearFechaIso(i.created_at) === filtroFecha)
     : items;
 
+  const toggleEstado = async (item: BajaItem) => {
+    if (!user || user.role !== "admin") {
+      alert("Solo admin puede cambiar el estado.");
+      return;
+    }
+
+    const nuevo = siguienteEstado(item.estado);
+
+    setLoading(true);
+
+    await supabase
+      .from("bajas_cambio_ruta")
+      .update({ estado: nuevo })
+      .eq("id", item.id);
+
+    setLoading(false);
+
+    setItems((prev) =>
+      prev.map((x) => (x.id === item.id ? { ...x, estado: nuevo } : x))
+    );
+  };
+
   const toggleAprobado = async (item: BajaItem) => {
-    if (!user) return;
-    if (user.role !== "supervisor" && user.role !== "admin") {
+    if (!user || (user.role !== "supervisor" && user.role !== "admin")) {
       alert("Solo supervisores o admin pueden aprobar.");
       return;
     }
 
     const nuevoValor = !item.aprobado;
+
     setLoading(true);
 
-    const { error } = await supabase
+    await supabase
       .from("bajas_cambio_ruta")
       .update({
         aprobado: nuevoValor,
@@ -63,45 +91,19 @@ const RevisarBajas: React.FC = () => {
 
     setLoading(false);
 
-    if (!error) {
-      setItems((prev) =>
-        prev.map((r) =>
-          r.id === item.id
-            ? {
-                ...r,
-                aprobado: nuevoValor,
-                supervisor_nombre: nuevoValor
-                  ? user.name ?? user.username
-                  : null,
-              }
-            : r
-        )
-      );
-    }
-  };
-
-  const toggleEstado = async (item: BajaItem) => {
-    if (!user || user.role !== "admin") {
-      alert("Solo admin puede cambiar el estado.");
-      return;
-    }
-
-    const nuevo = !item.estado;
-
-    setLoading(true);
-
-    const { error } = await supabase
-      .from("bajas_cambio_ruta")
-      .update({ estado: nuevo })
-      .eq("id", item.id);
-
-    setLoading(false);
-
-    if (!error) {
-      setItems((prev) =>
-        prev.map((x) => (x.id === item.id ? { ...x, estado: nuevo } : x))
-      );
-    }
+    setItems((prev) =>
+      prev.map((r) =>
+        r.id === item.id
+          ? {
+              ...r,
+              aprobado: nuevoValor,
+              supervisor_nombre: nuevoValor
+                ? user.name ?? user.username
+                : null,
+            }
+          : r
+      )
+    );
   };
 
   const exportarExcel = () => {
@@ -118,7 +120,7 @@ const RevisarBajas: React.FC = () => {
       Detalle: i.detalle,
       Vendedor: i.vendedor_nombre ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
-      Estado: i.estado ? "Correcto" : "Pendiente",
+      Estado: i.estado ?? "pendiente",
       Supervisor: i.supervisor_nombre ?? "",
       Foto: i.foto_url ?? "",
     }));
@@ -138,7 +140,7 @@ const RevisarBajas: React.FC = () => {
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto mt-4 p-4 sm:p-6 bg-white dark:bg-gray-900 shadow rounded">
+    <div className="max-w-6xl mx-auto mt-4 p-4 bg-white shadow rounded">
 
       {/* MODAL FOTO */}
       {fotoVista && (
@@ -156,42 +158,43 @@ const RevisarBajas: React.FC = () => {
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h2 className="text-xl sm:text-2xl font-semibold">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-semibold">
           Revisión de Bajas / Cambios de Ruta
         </h2>
 
         <button
           onClick={exportarExcel}
-          className="self-start sm:self-auto px-4 py-2 text-sm font-medium rounded bg-emerald-600 hover:bg-emerald-700 text-white"
+          className="px-4 py-2 bg-emerald-600 text-white rounded"
         >
           Exportar XLSX
         </button>
       </div>
 
       {/* FILTRO */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+      <div className="mb-4 flex items-center gap-2">
         <span className="font-medium">Filtrar por fecha:</span>
         <input
           type="date"
-          className="p-2 border rounded dark:bg-gray-800 text-sm"
+          className="p-2 border rounded"
           value={filtroFecha}
           onChange={(e) => setFiltroFecha(e.target.value)}
         />
+
         {filtroFecha && (
           <button
-            className="text-xs text-blue-600 underline"
             onClick={() => setFiltroFecha("")}
+            className="text-blue-600 underline text-sm"
           >
-            Limpiar filtro
+            Limpiar
           </button>
         )}
       </div>
 
       {/* TABLA */}
-      <div className="overflow-x-auto rounded border border-gray-200 dark:border-gray-700">
-        <table className="min-w-full border-collapse">
-          <thead className="bg-gray-100 dark:bg-gray-800">
+      <div className="overflow-x-auto border rounded">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-gray-100">
             <tr>
               <th className="p-2 border">Fecha</th>
               <th className="p-2 border">Cliente</th>
@@ -199,10 +202,13 @@ const RevisarBajas: React.FC = () => {
               <th className="p-2 border">Motivo</th>
               <th className="p-2 border">Detalle</th>
               <th className="p-2 border">Vendedor</th>
-              <th className="p-2 border text-center">Aprobado</th>
+              <th className="p-2 border">Aprobado</th>
               <th className="p-2 border">Supervisor</th>
+
+              {/* → LAS DOS ÚLTIMAS COLUMNAS ← */}
               <th className="p-2 border text-center">Estado</th>
               <th className="p-2 border text-center">Foto</th>
+
               <th className="p-2 border text-center">Acción</th>
             </tr>
           </thead>
@@ -210,9 +216,7 @@ const RevisarBajas: React.FC = () => {
           <tbody>
             {filtrados.map((item) => (
               <tr key={item.id}>
-                <td className="p-2 border">
-                  {formatearFechaVista(item.created_at)}
-                </td>
+                <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
                 <td className="p-2 border">{item.cliente}</td>
                 <td className="p-2 border">{item.razon_social}</td>
                 <td className="p-2 border">{item.motivo}</td>
@@ -227,27 +231,35 @@ const RevisarBajas: React.FC = () => {
                   )}
                 </td>
 
-                <td className="p-2 border">
-                  {item.supervisor_nombre ?? "-"}
-                </td>
+                <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
 
-                {/* ESTADO */}
+                {/* ESTADO (últimas columnas) */}
                 <td className="p-2 border text-center">
                   {user?.role === "admin" ? (
                     <button
                       onClick={() => toggleEstado(item)}
                       className={`px-3 py-1 rounded text-white ${
-                        item.estado
+                        item.estado === "correcto"
                           ? "bg-green-600"
+                          : item.estado === "rechazado"
+                          ? "bg-red-900"
                           : "bg-gray-500"
                       }`}
                     >
-                      {item.estado ? "Correcto" : "Pendiente"}
+                      {item.estado}
                     </button>
-                  ) : item.estado ? (
-                    <span className="text-green-600 font-bold">✔</span>
                   ) : (
-                    <span className="text-red-600 font-bold">✘</span>
+                    <span
+                      className={`px-3 py-1 rounded text-white ${
+                        item.estado === "correcto"
+                          ? "bg-green-600"
+                          : item.estado === "rechazado"
+                          ? "bg-red-900"
+                          : "bg-gray-500"
+                      }`}
+                    >
+                      {item.estado}
+                    </span>
                   )}
                 </td>
 
@@ -256,7 +268,7 @@ const RevisarBajas: React.FC = () => {
                   {item.foto_url ? (
                     <button
                       onClick={() => setFotoVista(item.foto_url!)}
-                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded"
+                      className="px-3 py-1 bg-blue-600 text-white rounded"
                     >
                       Ver Foto
                     </button>
@@ -265,17 +277,14 @@ const RevisarBajas: React.FC = () => {
                   )}
                 </td>
 
-                {/* APROBAR */}
+                {/* ACCIÓN */}
                 <td className="p-2 border text-center">
-                  {(user?.role === "supervisor" ||
-                    user?.role === "admin") && (
+                  {(user?.role === "supervisor" || user?.role === "admin") && (
                     <button
                       disabled={loading}
                       onClick={() => toggleAprobado(item)}
                       className={`px-3 py-1 rounded text-white ${
-                        item.aprobado
-                          ? "bg-gray-600"
-                          : "bg-green-600"
+                        item.aprobado ? "bg-gray-600" : "bg-green-600"
                       }`}
                     >
                       {item.aprobado ? "Desaprobar" : "Aprobar"}
@@ -287,11 +296,8 @@ const RevisarBajas: React.FC = () => {
 
             {filtrados.length === 0 && (
               <tr>
-                <td
-                  colSpan={11}
-                  className="p-4 text-center text-gray-500"
-                >
-                  No hay registros para mostrar.
+                <td colSpan={11} className="p-4 text-center text-gray-500">
+                  No hay registros.
                 </td>
               </tr>
             )}
