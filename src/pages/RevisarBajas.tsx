@@ -1,3 +1,5 @@
+// 🔧 ARCHIVO COMPLETO CORREGIDO
+
 import React, { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -58,10 +60,10 @@ const RevisarBajas: React.FC = () => {
 
   const filtrados = items.filter((i) => cumpleRango(i.created_at));
 
-  // Paginación
-  const totalPaginas = Math.ceil(filtrados.length / REGISTROS_PAGINA);
-  const inicio = (paginaActual - 1) * REGISTROS_PAGINA;
-  const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_PAGINA);
+  // 📌 PAGINACIÓN (CORREGIDO)
+  const totalPaginas = Math.ceil(filtrados.length / REGISTROS_POR_PAGINA);
+  const inicio = (paginaActual - 1) * REGISTROS_POR_PAGINA;
+  const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_POR_PAGINA);
 
   const siguientePagina = () => {
     if (paginaActual < totalPaginas) setPaginaActual(paginaActual + 1);
@@ -186,10 +188,8 @@ const RevisarBajas: React.FC = () => {
         </div>
       )}
 
-      {/* FILTROS + EXPORTAR (MISMA FILA) */}
+      {/* FILTROS + EXPORTAR */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-
-        {/* FILTROS */}
         <div className="flex items-center gap-3 text-sm">
           <span className="font-medium">Desde:</span>
           <input
@@ -214,7 +214,6 @@ const RevisarBajas: React.FC = () => {
           />
         </div>
 
-        {/* EXPORTAR */}
         <button
           onClick={exportarExcel}
           className="self-start sm:self-auto px-4 py-2 bg-emerald-600 text-white rounded"
