@@ -22,15 +22,15 @@ const RevisarBajas: React.FC = () => {
   const [items, setItems] = useState<BajaItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // RANGO DE FECHAS
+  // Rango de fechas
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
-  // PAGINACIÓN
+  // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
-  const REGISTROS_POR_PAGINA = 20;
+  const REGISTROS_POR_PAGINA = 8;
 
-  // FOTO
+  // Vista de foto
   const [fotoVista, setFotoVista] = useState<string | null>(null);
 
   const cargar = async () => {
@@ -48,6 +48,7 @@ const RevisarBajas: React.FC = () => {
   const formatearFechaIso = (iso: string) =>
     new Date(iso).toISOString().slice(0, 10);
 
+  // Rango desde/hasta
   const cumpleRango = (fecha: string) => {
     if (!fechaDesde || !fechaHasta) return true;
 
@@ -55,14 +56,12 @@ const RevisarBajas: React.FC = () => {
     return f >= fechaDesde && f <= fechaHasta;
   };
 
-  // FILTRADOS POR RANGO
   const filtrados = items.filter((i) => cumpleRango(i.created_at));
 
-  // 🔵 PAGINACIÓN
-  const totalPaginas = Math.ceil(filtrados.length / REGISTROS_POR_PAGINA);
-
-  const inicio = (paginaActual - 1) * REGISTROS_POR_PAGINA;
-  const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_POR_PAGINA);
+  // Paginación
+  const totalPaginas = Math.ceil(filtrados.length / REGISTROS_PAGINA);
+  const inicio = (paginaActual - 1) * REGISTROS_PAGINA;
+  const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_PAGINA);
 
   const siguientePagina = () => {
     if (paginaActual < totalPaginas) setPaginaActual(paginaActual + 1);
@@ -72,7 +71,7 @@ const RevisarBajas: React.FC = () => {
     if (paginaActual > 1) setPaginaActual(paginaActual - 1);
   };
 
-  // 🔁 CICLO DE ESTADOS
+  // Ciclo de estados
   const siguienteEstado = (estado: string | null) => {
     if (!estado || estado === "pendiente") return "correcto";
     if (estado === "correcto") return "rechazado";
@@ -86,6 +85,7 @@ const RevisarBajas: React.FC = () => {
     }
 
     const nuevo = siguienteEstado(item.estado);
+
     setLoading(true);
 
     await supabase
@@ -107,6 +107,7 @@ const RevisarBajas: React.FC = () => {
     }
 
     const nuevoValor = !item.aprobado;
+
     setLoading(true);
 
     await supabase
@@ -170,7 +171,7 @@ const RevisarBajas: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
 
-      {/* MODAL FOTO */}
+      {/* MODAL DE FOTO */}
       {fotoVista && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white p-4 rounded shadow max-w-xl max-h-[90vh]">
@@ -185,39 +186,41 @@ const RevisarBajas: React.FC = () => {
         </div>
       )}
 
-      {/* BOTÓN EXPORTAR */}
-      <div className="flex justify-end mb-3">
+      {/* FILTROS + EXPORTAR (MISMA FILA) */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+
+        {/* FILTROS */}
+        <div className="flex items-center gap-3 text-sm">
+          <span className="font-medium">Desde:</span>
+          <input
+            type="date"
+            className="p-2 border rounded"
+            value={fechaDesde}
+            onChange={(e) => {
+              setFechaDesde(e.target.value);
+              setPaginaActual(1);
+            }}
+          />
+
+          <span className="font-medium">Hasta:</span>
+          <input
+            type="date"
+            className="p-2 border rounded"
+            value={fechaHasta}
+            onChange={(e) => {
+              setFechaHasta(e.target.value);
+              setPaginaActual(1);
+            }}
+          />
+        </div>
+
+        {/* EXPORTAR */}
         <button
           onClick={exportarExcel}
-          className="px-4 py-2 bg-emerald-600 text-white rounded"
+          className="self-start sm:self-auto px-4 py-2 bg-emerald-600 text-white rounded"
         >
           Exportar XLSX
         </button>
-      </div>
-
-      {/* FILTROS FECHAS */}
-      <div className="mb-4 flex items-center gap-3 text-sm">
-        <span className="font-medium">Desde:</span>
-        <input
-          type="date"
-          className="p-2 border rounded"
-          value={fechaDesde}
-          onChange={(e) => {
-            setFechaDesde(e.target.value);
-            setPaginaActual(1);
-          }}
-        />
-
-        <span className="font-medium">Hasta:</span>
-        <input
-          type="date"
-          className="p-2 border rounded"
-          value={fechaHasta}
-          onChange={(e) => {
-            setFechaHasta(e.target.value);
-            setPaginaActual(1);
-          }}
-        />
       </div>
 
       {/* TABLA */}
@@ -233,11 +236,7 @@ const RevisarBajas: React.FC = () => {
               <th className="p-2 border">Vendedor</th>
               <th className="p-2 border text-center">Aprobado</th>
               <th className="p-2 border">Supervisor</th>
-
-              {/* Acción */}
               <th className="p-2 border text-center">Acción</th>
-
-              {/* Últimas DOS columnas */}
               <th className="p-2 border text-center">Estado</th>
               <th className="p-2 border text-center">Foto</th>
             </tr>
@@ -253,7 +252,6 @@ const RevisarBajas: React.FC = () => {
                 <td className="p-2 border">{item.detalle}</td>
                 <td className="p-2 border">{item.vendedor_nombre}</td>
 
-                {/* APROBADO */}
                 <td className="p-2 border text-center">
                   {item.aprobado ? (
                     <span className="text-green-600 font-bold">✔</span>
@@ -330,7 +328,7 @@ const RevisarBajas: React.FC = () => {
             {vistaPagina.length === 0 && (
               <tr>
                 <td colSpan={11} className="p-4 text-center text-gray-500">
-                  No hay registros para mostrar.
+                  No hay registros dentro del rango.
                 </td>
               </tr>
             )}
@@ -338,28 +336,32 @@ const RevisarBajas: React.FC = () => {
         </table>
       </div>
 
-      {/* PAGINACIÓN */}
-      <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-        <button
-          onClick={anteriorPagina}
-          disabled={paginaActual === 1}
-          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-        >
-          ◀ Anterior
-        </button>
+      {/* PAGINACIÓN SOLO FLECHAS */}
+      {totalPaginas > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-6 text-sm">
 
-        <span>
-          Página {paginaActual} de {totalPaginas}
-        </span>
+          <button
+            onClick={anteriorPagina}
+            disabled={paginaActual === 1}
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+          >
+            ◀
+          </button>
 
-        <button
-          onClick={siguientePagina}
-          disabled={paginaActual === totalPaginas}
-          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
-        >
-          Siguiente ▶
-        </button>
-      </div>
+          <span>
+            {paginaActual} / {totalPaginas}
+          </span>
+
+          <button
+            onClick={siguientePagina}
+            disabled={paginaActual === totalPaginas}
+            className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+          >
+            ▶
+          </button>
+
+        </div>
+      )}
     </div>
   );
 };
