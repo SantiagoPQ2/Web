@@ -21,7 +21,16 @@ const RevisarBajas: React.FC = () => {
   const { user } = useAuth();
   const [items, setItems] = useState<BajaItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filtroFecha, setFiltroFecha] = useState<string>("");
+
+  // RANGO DE FECHAS
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+
+  // PAGINACIÓN
+  const [paginaActual, setPaginaActual] = useState(1);
+  const REGISTROS_POR_PAGINA = 20;
+
+  // FOTO
   const [fotoVista, setFotoVista] = useState<string | null>(null);
 
   const cargar = async () => {
@@ -39,16 +48,36 @@ const RevisarBajas: React.FC = () => {
   const formatearFechaIso = (iso: string) =>
     new Date(iso).toISOString().slice(0, 10);
 
-  // Ciclo: pendiente → correcto → rechazado → pendiente
+  const cumpleRango = (fecha: string) => {
+    if (!fechaDesde || !fechaHasta) return true;
+
+    const f = formatearFechaIso(fecha);
+    return f >= fechaDesde && f <= fechaHasta;
+  };
+
+  // FILTRADOS POR RANGO
+  const filtrados = items.filter((i) => cumpleRango(i.created_at));
+
+  // 🔵 PAGINACIÓN
+  const totalPaginas = Math.ceil(filtrados.length / REGISTROS_POR_PAGINA);
+
+  const inicio = (paginaActual - 1) * REGISTROS_POR_PAGINA;
+  const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_POR_PAGINA);
+
+  const siguientePagina = () => {
+    if (paginaActual < totalPaginas) setPaginaActual(paginaActual + 1);
+  };
+
+  const anteriorPagina = () => {
+    if (paginaActual > 1) setPaginaActual(paginaActual - 1);
+  };
+
+  // 🔁 CICLO DE ESTADOS
   const siguienteEstado = (estado: string | null) => {
     if (!estado || estado === "pendiente") return "correcto";
     if (estado === "correcto") return "rechazado";
     return "pendiente";
   };
-
-  const filtrados = filtroFecha
-    ? items.filter((i) => formatearFechaIso(i.created_at) === filtroFecha)
-    : items;
 
   const toggleEstado = async (item: BajaItem) => {
     if (!user || user.role !== "admin") {
@@ -59,18 +88,16 @@ const RevisarBajas: React.FC = () => {
     const nuevo = siguienteEstado(item.estado);
     setLoading(true);
 
-    const { error } = await supabase
+    await supabase
       .from("bajas_cambio_ruta")
       .update({ estado: nuevo })
       .eq("id", item.id);
 
     setLoading(false);
 
-    if (!error) {
-      setItems((prev) =>
-        prev.map((x) => (x.id === item.id ? { ...x, estado: nuevo } : x))
-      );
-    }
+    setItems((prev) =>
+      prev.map((x) => (x.id === item.id ? { ...x, estado: nuevo } : x))
+    );
   };
 
   const toggleAprobado = async (item: BajaItem) => {
@@ -82,7 +109,7 @@ const RevisarBajas: React.FC = () => {
     const nuevoValor = !item.aprobado;
     setLoading(true);
 
-    const { error } = await supabase
+    await supabase
       .from("bajas_cambio_ruta")
       .update({
         aprobado: nuevoValor,
@@ -92,26 +119,24 @@ const RevisarBajas: React.FC = () => {
 
     setLoading(false);
 
-    if (!error) {
-      setItems((prev) =>
-        prev.map((r) =>
-          r.id === item.id
-            ? {
-                ...r,
-                aprobado: nuevoValor,
-                supervisor_nombre: nuevoValor
-                  ? user.name ?? user.username
-                  : null,
-              }
-            : r
-        )
-      );
-    }
+    setItems((prev) =>
+      prev.map((r) =>
+        r.id === item.id
+          ? {
+              ...r,
+              aprobado: nuevoValor,
+              supervisor_nombre: nuevoValor
+                ? user.name ?? user.username
+                : null,
+            }
+          : r
+      )
+    );
   };
 
   const exportarExcel = () => {
-    if (filtrados.length === 0) {
-      alert("No hay datos para exportar.");
+    if (!fechaDesde || !fechaHasta) {
+      alert("Debe elegir un rango de fechas para exportar.");
       return;
     }
 
@@ -134,7 +159,7 @@ const RevisarBajas: React.FC = () => {
 
     XLSX.writeFile(
       wb,
-      `bajas_cambio_ruta${filtroFecha ? "_" + filtroFecha : ""}.xlsx`
+      `bajas_${fechaDesde}_a_${fechaHasta}.xlsx`
     );
   };
 
@@ -147,9 +172,9 @@ const RevisarBajas: React.FC = () => {
 
       {/* MODAL FOTO */}
       {fotoVista && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded shadow max-w-lg max-h-[90vh]">
-            <img src={fotoVista} className="max-h-[80vh] mx-auto" />
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white p-4 rounded shadow max-w-xl max-h-[90vh]">
+            <img src={fotoVista} className="max-h-[80vh] mx-auto rounded" />
             <button
               onClick={() => setFotoVista(null)}
               className="mt-4 w-full bg-red-600 text-white p-2 rounded"
@@ -160,12 +185,8 @@ const RevisarBajas: React.FC = () => {
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h2 className="text-2xl font-semibold">
-          Revisión de Bajas / Cambios de Ruta
-        </h2>
-
+      {/* BOTÓN EXPORTAR */}
+      <div className="flex justify-end mb-3">
         <button
           onClick={exportarExcel}
           className="px-4 py-2 bg-emerald-600 text-white rounded"
@@ -174,25 +195,29 @@ const RevisarBajas: React.FC = () => {
         </button>
       </div>
 
-      {/* FILTRO */}
-      <div className="mb-4 flex items-center gap-2 text-sm">
-        <span className="font-medium">Filtrar por fecha:</span>
-
+      {/* FILTROS FECHAS */}
+      <div className="mb-4 flex items-center gap-3 text-sm">
+        <span className="font-medium">Desde:</span>
         <input
           type="date"
           className="p-2 border rounded"
-          value={filtroFecha}
-          onChange={(e) => setFiltroFecha(e.target.value)}
+          value={fechaDesde}
+          onChange={(e) => {
+            setFechaDesde(e.target.value);
+            setPaginaActual(1);
+          }}
         />
 
-        {filtroFecha && (
-          <button
-            onClick={() => setFiltroFecha("")}
-            className="text-blue-600 underline"
-          >
-            Limpiar
-          </button>
-        )}
+        <span className="font-medium">Hasta:</span>
+        <input
+          type="date"
+          className="p-2 border rounded"
+          value={fechaHasta}
+          onChange={(e) => {
+            setFechaHasta(e.target.value);
+            setPaginaActual(1);
+          }}
+        />
       </div>
 
       {/* TABLA */}
@@ -209,17 +234,17 @@ const RevisarBajas: React.FC = () => {
               <th className="p-2 border text-center">Aprobado</th>
               <th className="p-2 border">Supervisor</th>
 
-              {/* Accion va ANTES de las últimas dos */}
+              {/* Acción */}
               <th className="p-2 border text-center">Acción</th>
 
-              {/* ÚLTIMAS DOS COLUMNAS */}
+              {/* Últimas DOS columnas */}
               <th className="p-2 border text-center">Estado</th>
               <th className="p-2 border text-center">Foto</th>
             </tr>
           </thead>
 
           <tbody>
-            {filtrados.map((item) => (
+            {vistaPagina.map((item) => (
               <tr key={item.id}>
                 <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
                 <td className="p-2 border">{item.cliente}</td>
@@ -228,6 +253,7 @@ const RevisarBajas: React.FC = () => {
                 <td className="p-2 border">{item.detalle}</td>
                 <td className="p-2 border">{item.vendedor_nombre}</td>
 
+                {/* APROBADO */}
                 <td className="p-2 border text-center">
                   {item.aprobado ? (
                     <span className="text-green-600 font-bold">✔</span>
@@ -255,7 +281,7 @@ const RevisarBajas: React.FC = () => {
                   )}
                 </td>
 
-                {/* ESTADO — PENÚLTIMA */}
+                {/* ESTADO */}
                 <td className="p-2 border text-center">
                   {user?.role === "admin" ? (
                     <button
@@ -285,7 +311,7 @@ const RevisarBajas: React.FC = () => {
                   )}
                 </td>
 
-                {/* FOTO — ÚLTIMA */}
+                {/* FOTO */}
                 <td className="p-2 border text-center">
                   {item.foto_url ? (
                     <button
@@ -301,7 +327,7 @@ const RevisarBajas: React.FC = () => {
               </tr>
             ))}
 
-            {filtrados.length === 0 && (
+            {vistaPagina.length === 0 && (
               <tr>
                 <td colSpan={11} className="p-4 text-center text-gray-500">
                   No hay registros para mostrar.
@@ -310,6 +336,29 @@ const RevisarBajas: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* PAGINACIÓN */}
+      <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+        <button
+          onClick={anteriorPagina}
+          disabled={paginaActual === 1}
+          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+        >
+          ◀ Anterior
+        </button>
+
+        <span>
+          Página {paginaActual} de {totalPaginas}
+        </span>
+
+        <button
+          onClick={siguientePagina}
+          disabled={paginaActual === totalPaginas}
+          className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+        >
+          Siguiente ▶
+        </button>
       </div>
     </div>
   );
