@@ -43,14 +43,14 @@ function ProtectedApp() {
 
   const [openChat, setOpenChat] = useState(false);
 
-  // 🔒 Si NO está logueado → Login
+  // Si NO está logueado → Login
   if (!user) return <Login />;
 
   const role = user.role;
   let allowedRoutes;
 
   // ========================================
-  // 🚀 1) CLIENTE B2B
+  // 🚀 CLIENTE B2B
   // ========================================
   if (role === "cliente") {
     allowedRoutes = (
@@ -58,21 +58,31 @@ function ProtectedApp() {
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
-        {/* Si intenta entrar a algo raro → lo mando al catálogo */}
+
+        {/* logout universal */}
+        <Route
+          path="/logout"
+          element={
+            <div>
+              {localStorage.clear()}
+              {window.location.replace("/")}
+            </div>
+          }
+        />
+
         <Route path="*" element={<CatalogoB2B />} />
       </Routes>
     );
 
     return (
       <div className="min-h-screen bg-white">
-        {/* 🚨 Cliente NO usa Navigation interno */}
         <main className="flex-1">{allowedRoutes}</main>
       </div>
     );
   }
 
   // ========================================
-  // 🚀 2) VENDEDOR
+  // 🚀 VENDEDOR
   // ========================================
   if (role === "vendedor") {
     allowedRoutes = (
@@ -85,12 +95,22 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        <Route
+          path="/logout"
+          element={
+            <div>
+              {localStorage.clear()}
+              {window.location.replace("/")}
+            </div>
+          }
+        />
       </Routes>
     );
   }
 
   // ========================================
-  // 🚀 3) SUPERVISOR
+  // 🚀 SUPERVISOR
   // ========================================
   else if (role === "supervisor") {
     allowedRoutes = (
@@ -106,12 +126,22 @@ function ProtectedApp() {
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
+
+        <Route
+          path="/logout"
+          element={
+            <div>
+              {localStorage.clear()}
+              {window.location.replace("/")}
+            </div>
+          }
+        />
       </Routes>
     );
   }
 
   // ========================================
-  // 🚀 4) LOGÍSTICA
+  // 🚀 LOGÍSTICA
   // ========================================
   else if (role === "logistica") {
     allowedRoutes = (
@@ -121,12 +151,22 @@ function ProtectedApp() {
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
+
+        <Route
+          path="/logout"
+          element={
+            <div>
+              {localStorage.clear()}
+              {window.location.replace("/")}
+            </div>
+          }
+        />
       </Routes>
     );
   }
 
   // ========================================
-  // 🚀 5) ADMIN
+  // 🚀 ADMIN
   // ========================================
   else if (role === "admin") {
     allowedRoutes = (
@@ -147,10 +187,20 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
 
-        {/* ⭐ B2B DISPONIBLE PARA ADMIN TAMBIÉN */}
+        {/* B2B disponible para admin */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
+
+        <Route
+          path="/logout"
+          element={
+            <div>
+              {localStorage.clear()}
+              {window.location.replace("/")}
+            </div>
+          }
+        />
       </Routes>
     );
   }
@@ -169,17 +219,9 @@ function ProtectedApp() {
   // ========================================
   // 🚀 APP INTERNA (con Navigation)
   // ========================================
-  const showChatBot =
-    location.pathname.startsWith("/b2b") ||
-    location.pathname === "/b2b/catalogo" ||
-    location.pathname === "/b2b/carrito" ||
-    location.pathname === "/b2b/pedidos";
-
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
-
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <Navigation />
-
       <main className="flex-1">{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
@@ -198,4 +240,3 @@ function App() {
 }
 
 export default App;
-
