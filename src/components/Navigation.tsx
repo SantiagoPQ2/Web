@@ -28,10 +28,6 @@ const Navigation: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
 
-  // ⭐⭐⭐ IMPORTANTE ⭐⭐⭐
-  // SI ES CLIENTE → NO MOSTRAR EL NAVIGATION
-  if (user?.role === "cliente") return null;
-
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificaciones, setNotificaciones] = useState<any[]>([]);
@@ -39,9 +35,6 @@ const Navigation: React.FC = () => {
 
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // ---------------------------------------
-  // Cerrar menú usuario al hacer click fuera
-  // ---------------------------------------
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -56,9 +49,6 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ---------------------------------------
-  // Notificaciones
-  // ---------------------------------------
   const cargarNotificaciones = async () => {
     if (!user?.username) return;
 
@@ -102,9 +92,6 @@ const Navigation: React.FC = () => {
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
-  // ---------------------------------------
-  // Nombre de página actual
-  // ---------------------------------------
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
@@ -140,7 +127,7 @@ const Navigation: React.FC = () => {
       case "/revisar-bajas":
         return "Revisión de Bajas";
 
-      // === B2B ===
+      // === NUEVOS: B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
       case "/b2b/carrito":
@@ -153,9 +140,6 @@ const Navigation: React.FC = () => {
     }
   };
 
-  // ---------------------------------------
-  // MENU ITEMS POR ROL
-  // ---------------------------------------
   let menuItems: {
     name: string;
     path: string;
@@ -163,9 +147,6 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // -------------------------
-  // VENDEDOR
-  // -------------------------
   if (user?.role === "vendedor") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
@@ -179,70 +160,57 @@ const Navigation: React.FC = () => {
     ];
   }
 
-  // -------------------------
-  // SUPERVISOR
-  // -------------------------
   else if (user?.role === "supervisor") {
     menuItems = [
       { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
       { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
       { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver GPS" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
       { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Visitas en mapa" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Ver rutas y visitas" },
       { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
-      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel supervisor" },
+      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel del supervisor" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Ajustes" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
 
-  // -------------------------
-  // LOGÍSTICA
-  // -------------------------
   else if (user?.role === "logistica") {
     menuItems = [
-      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazo" },
+      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
       { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y datos" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Ajustes" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
 
-  // -------------------------
-  // ADMIN (incluye B2B)
-  // -------------------------
   else if (user?.role === "admin") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar clientes" },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
       { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
       { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazos" },
       { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Notas crédito" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar GPS" },
-      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar bajas" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Visitas en mapa" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar coordenadas" },
+      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Ver rutas y visitas" },
       { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
       { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Chat interno" },
-      { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF a Excel" },
 
-      // === MÓDULO B2B ===
-      { name: "B2B - Catálogo", path: "/b2b/catalogo", icon: Store, description: "Catálogo" },
-      { name: "B2B - Carrito", path: "/b2b/carrito", icon: ShoppingCart, description: "Carrito" },
-      { name: "B2B - Pedidos", path: "/b2b/pedidos", icon: Package, description: "Pedidos" },
+      // === NUEVO MÓDULO B2B ===
+      { name: "B2B - Catálogo", path: "/b2b/catalogo", icon: Store, description: "Catálogo de productos" },
+      { name: "B2B - Carrito", path: "/b2b/carrito", icon: ShoppingCart, description: "Carrito de compras" },
+      { name: "B2B - Pedidos", path: "/b2b/pedidos", icon: Package, description: "Pedidos realizados" },
 
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Ajustes" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
 
-  // ---------------------------------------
-  // RENDER
-  // ---------------------------------------
   return (
     <>
-      {/* HEADER */}
       <header className="w-full bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -262,7 +230,6 @@ const Navigation: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4 relative">
-            {/* NOTIFICACIONES */}
             <div className="relative">
               <button
                 className="relative p-2"
@@ -304,7 +271,6 @@ const Navigation: React.FC = () => {
               )}
             </div>
 
-            {/* USER MENU */}
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -342,7 +308,6 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
-      {/* SIDEBAR */}
       {sidebarOpen && (
         <>
           <div
@@ -350,7 +315,7 @@ const Navigation: React.FC = () => {
             onClick={() => setSidebarOpen(false)}
           ></div>
 
-          <div className="fixed top-0 left-0 w-full max-w-xs sm:w-72 bg-white dark:bg-gray-900 h-full shadow-xl z-50 p-4 overflow-y-auto">
+          <div className="fixed top-0 left-0 w-full max-w-xs sm:w-72 bg-white dark:bg-gray-900 h-full shadow-xl z-50 p-4 overflow-y-atuo">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold">Menú</h2>
               <button
@@ -400,3 +365,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
+
