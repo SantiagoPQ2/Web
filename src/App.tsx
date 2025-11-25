@@ -31,10 +31,14 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
 
-// ⭐ B2B CLIENTE
+// 🔹 B2B PAGES
 import CatalogoB2B from "./pages/b2b/Catalogo";
 import CarritoB2B from "./pages/b2b/Carrito";
 import PedidosB2B from "./pages/b2b/Pedidos";
+
+// 🔹 ChatBot components
+import ChatBubble from "./components/ChatBubble";
+import ChatBot from "./components/ChatBot";
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -43,47 +47,15 @@ function ProtectedApp() {
 
   const [openChat, setOpenChat] = useState(false);
 
-  // Si NO está logueado → Login
+  // NO logueado ⇒ Login
   if (!user) return <Login />;
 
   const role = user.role;
   let allowedRoutes;
 
-  // ========================================
-  // 🚀 CLIENTE B2B
-  // ========================================
-  if (role === "cliente") {
-    allowedRoutes = (
-      <Routes>
-        <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
-        <Route path="/b2b/carrito" element={<CarritoB2B />} />
-        <Route path="/b2b/pedidos" element={<PedidosB2B />} />
-
-        {/* logout universal */}
-        <Route
-          path="/logout"
-          element={
-            <div>
-              {localStorage.clear()}
-              {window.location.replace("/")}
-            </div>
-          }
-        />
-
-        <Route path="*" element={<CatalogoB2B />} />
-      </Routes>
-    );
-
-    return (
-      <div className="min-h-screen bg-white">
-        <main className="flex-1">{allowedRoutes}</main>
-      </div>
-    );
-  }
-
-  // ========================================
-  // 🚀 VENDEDOR
-  // ========================================
+  // ---------------------------
+  // 🚀 1) VENDEDOR
+  // ---------------------------
   if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
@@ -95,23 +67,13 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
-
-        <Route
-          path="/logout"
-          element={
-            <div>
-              {localStorage.clear()}
-              {window.location.replace("/")}
-            </div>
-          }
-        />
       </Routes>
     );
   }
 
-  // ========================================
-  // 🚀 SUPERVISOR
-  // ========================================
+  // ---------------------------
+  // 🚀 2) SUPERVISOR
+  // ---------------------------
   else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
@@ -126,23 +88,13 @@ function ProtectedApp() {
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
-
-        <Route
-          path="/logout"
-          element={
-            <div>
-              {localStorage.clear()}
-              {window.location.replace("/")}
-            </div>
-          }
-        />
       </Routes>
     );
   }
 
-  // ========================================
-  // 🚀 LOGÍSTICA
-  // ========================================
+  // ---------------------------
+  // 🚀 3) LOGÍSTICA
+  // ---------------------------
   else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
@@ -151,23 +103,13 @@ function ProtectedApp() {
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
-
-        <Route
-          path="/logout"
-          element={
-            <div>
-              {localStorage.clear()}
-              {window.location.replace("/")}
-            </div>
-          }
-        />
       </Routes>
     );
   }
 
-  // ========================================
-  // 🚀 ADMIN
-  // ========================================
+  // ---------------------------
+  // 🚀 4) ADMIN (incluye B2B)
+  // ---------------------------
   else if (role === "admin") {
     allowedRoutes = (
       <Routes>
@@ -187,27 +129,17 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
 
-        {/* B2B disponible para admin */}
+        {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
-
-        <Route
-          path="/logout"
-          element={
-            <div>
-              {localStorage.clear()}
-              {window.location.replace("/")}
-            </div>
-          }
-        />
       </Routes>
     );
   }
 
-  // ========================================
-  // 🚀 DEFAULT
-  // ========================================
+  // ---------------------------
+  // 🚀 5) Default
+  // ---------------------------
   else {
     allowedRoutes = (
       <Routes>
@@ -216,15 +148,32 @@ function ProtectedApp() {
     );
   }
 
-  // ========================================
-  // 🚀 APP INTERNA (con Navigation)
-  // ========================================
+  // ---------------------------
+  // 🌟 Mostrar ChatBot SOLO en B2B
+  // ---------------------------
+  const showChatBot =
+    location.pathname.startsWith("/b2b") ||
+    location.pathname === "/b2b/catalogo" ||
+    location.pathname === "/b2b/carrito" ||
+    location.pathname === "/b2b/pedidos";
+
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
-      <main className="flex-1">{allowedRoutes}</main>
+
+      <main className="flex-1 overflow-hidden">
+        {allowedRoutes}
+      </main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
+
+      {showChatBot && !openChat && (
+        <ChatBubble onOpen={() => setOpenChat(true)} />
+      )}
+
+      {showChatBot && openChat && (
+        <ChatBot onClose={() => setOpenChat(false)} />
+      )}
     </div>
   );
 }
