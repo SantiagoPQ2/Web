@@ -12,6 +12,7 @@ const PROMO_CATEGORIES: Record<string, string[]> = {
   Molinos: ["Molino", "Snack"],
   QuesoRallado: ["rallado"],
   Yerba: ["Manto","yerba"],
+  Vanuts: ["Vanuts"],
   Otros: [],
 };
 
