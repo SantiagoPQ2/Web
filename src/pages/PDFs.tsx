@@ -7,7 +7,7 @@ interface Documento {
   archivo_url: string;
   categoria: string | null;
   creado_en: string;
-  creado_por: string;
+  creado_por: string | null;
 }
 
 export default function PDFs() {
@@ -15,10 +15,13 @@ export default function PDFs() {
   const [file, setFile] = useState<File | null>(null);
   const [titulo, setTitulo] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Cargar documentos al abrir
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  // ============================================================
+  // Cargar documentos al entrar
+  // ============================================================
   useEffect(() => {
     cargarDocs();
   }, []);
@@ -29,12 +32,22 @@ export default function PDFs() {
       .select("*")
       .order("creado_en", { ascending: false });
 
-    if (!error) setDocs(data);
+    console.log("DOCUMENTOS DESDE SUPABASE:", data, "ERROR:", error);
+
+    if (error) {
+      console.error("ERROR AL CARGAR DOCS:", error);
+      return;
+    }
+
+    if (data) setDocs(data);
   }
 
+  // ============================================================
+  // Subir PDF
+  // ============================================================
   async function subirPDF() {
-    if (!file || !titulo) {
-      alert("Falta título o archivo.");
+    if (!file || !titulo.trim()) {
+      alert("Falta seleccionar un archivo y/o título.");
       return;
     }
 
@@ -42,12 +55,12 @@ export default function PDFs() {
 
     try {
       const ext = file.name.split(".").pop();
-      const nombre = `${crypto.randomUUID()}.${ext}`;
+      const nombreArchivo = `${crypto.randomUUID()}.${ext}`;
 
-      // 1. Subir archivo
+      // 1) Subir archivo al bucket
       const { error: uploadErr } = await supabase.storage
         .from("documentos_pdf")
-        .upload(nombre, file, {
+        .upload(nombreArchivo, file, {
           contentType: "application/pdf",
         });
 
@@ -55,16 +68,17 @@ export default function PDFs() {
 
       const user = (await supabase.auth.getUser()).data.user;
 
-      // 2. Guardar metadata
-      const { error: dbErr } = await supabase.from("documentos").insert({
+      // 2) Insertar metadata en tabla
+      const { error: insertErr } = await supabase.from("documentos").insert({
         titulo,
-        archivo_url: nombre,
+        archivo_url: nombreArchivo,
         categoria: categoria || null,
-        creado_por: user?.id,
+        creado_por: user?.id ?? null,
       });
 
-      if (dbErr) throw dbErr;
+      if (insertErr) throw insertErr;
 
+      // Reset form
       setTitulo("");
       setCategoria("");
       setFile(null);
@@ -72,23 +86,33 @@ export default function PDFs() {
       await cargarDocs();
       alert("PDF subido correctamente.");
     } catch (err) {
-      console.error(err);
-      alert("Error al subir el PDF.");
+      console.error("ERROR SUBIENDO PDF:", err);
+      alert("Error al subir PDF. Revisá consola.");
     } finally {
       setLoading(false);
     }
   }
 
-  // Obtener URL firmada del PDF
+  // ============================================================
+  // Ver PDF
+  // ============================================================
   async function verPDF(path: string) {
-    const { data } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from("documentos_pdf")
       .createSignedUrl(path, 3600);
 
-    if (data?.signedUrl) setPdfUrl(data.signedUrl);
+    if (error) {
+      console.error("ERROR URL FIRMADA:", error);
+      alert("No se pudo abrir el PDF. Revisá las policies del bucket.");
+      return;
+    }
+
+    setPdfUrl(data?.signedUrl ?? null);
   }
 
-  // Borrar documento
+  // ============================================================
+  // Borrar PDF
+  // ============================================================
   async function borrarPDF(id: string, path: string) {
     if (!confirm("¿Seguro que querés borrar este documento?")) return;
 
@@ -98,12 +122,17 @@ export default function PDFs() {
     cargarDocs();
   }
 
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
-    <div className="p-4 max-w-3xl mx-auto">
+    <div className="p-4 max-w-2xl mx-auto">
 
-      <h1 className="text-2xl font-bold mb-4">Documentos PDF</h1>
+      <h1 className="text-2xl font-bold mb-4 text-center">Documentos PDF</h1>
 
-      {/* Subir PDF */}
+      {/* ===============================
+          Formulario de subida
+      =============================== */}
       <div className="bg-white shadow p-4 rounded mb-6">
         <h2 className="font-semibold mb-2">Subir nuevo PDF</h2>
 
@@ -126,8 +155,8 @@ export default function PDFs() {
         <input
           type="file"
           accept="application/pdf"
-          onChange={(e) => e.target.files && setFile(e.target.files[0])}
           className="mb-2"
+          onChange={(e) => e.target.files && setFile(e.target.files[0])}
         />
 
         <button
@@ -139,8 +168,14 @@ export default function PDFs() {
         </button>
       </div>
 
-      {/* Lista de PDFs */}
+      {/* ===============================
+          Listado
+      =============================== */}
       <h2 className="text-xl font-bold mb-2">Listado</h2>
+
+      {docs.length === 0 && (
+        <p className="text-gray-600">No hay documentos cargados.</p>
+      )}
 
       <div className="space-y-3">
         {docs.map((d) => (
@@ -150,8 +185,12 @@ export default function PDFs() {
           >
             <div>
               <p className="font-semibold">{d.titulo}</p>
-              <p className="text-sm text-gray-600">{d.categoria}</p>
-              <p className="text-xs text-gray-500">{d.creado_en}</p>
+              {d.categoria && (
+                <p className="text-sm text-gray-600">{d.categoria}</p>
+              )}
+              <p className="text-xs text-gray-500">
+                {new Date(d.creado_en).toLocaleString()}
+              </p>
             </div>
 
             <div className="flex gap-2">
@@ -173,7 +212,9 @@ export default function PDFs() {
         ))}
       </div>
 
-      {/* VISOR DE PDF */}
+      {/* ===============================
+          VISOR PDF
+      =============================== */}
       {pdfUrl && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center">
           <div className="bg-white w-11/12 h-5/6 rounded shadow relative">
