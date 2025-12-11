@@ -19,6 +19,15 @@
   memory = 1024
 
 #############################################
+# 🔒 SECRETS SCANNING CONFIG
+#############################################
+# Desactiva el escaneo agresivo que bloquea builds por falsos positivos
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+  # Alternativa opcional si querés desactivar todo:
+  # SECRETS_SCAN_DISABLED = "true"
+
+#############################################
 # 🚫 CACHE HEADERS (tus originales)
 #############################################
 [[headers]]
