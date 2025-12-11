@@ -88,7 +88,7 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
-        <Route path="/PDFs" element={<PDFs />} />
+        <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
       </Routes>
     );
@@ -130,7 +130,7 @@ function ProtectedApp() {
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
-        <Route path="/PDFs" element={<PDFs />} />
+        <Route path="/pdfs" element={<PDFs />} />
 
         {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
