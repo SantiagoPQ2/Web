@@ -12,6 +12,8 @@
   "theme_color": "#991b1b",
   "lang": "es",
   "categories": ["food", "business", "productivity"],
+  "prefer_related_applications": false,
+
   "icons": [
     {
       "src": "/image.png",
@@ -26,6 +28,7 @@
       "purpose": "any maskable"
     }
   ],
+
   "shortcuts": [
     {
       "name": "Buscar Cliente",
@@ -38,6 +41,16 @@
           "sizes": "192x192"
         }
       ]
+    }
+  ],
+
+  "screenshots": [
+    {
+      "src": "/image.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Pantalla principal de VaFood"
     }
   ]
 }
