@@ -23,6 +23,7 @@ import AdminPanel from "./pages/AdminPanel";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
+import PowerBIPage from "./pages/PDFs";
 
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
@@ -87,6 +88,7 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
+        <Route path="/revisar-bajas" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
       </Routes>
     );
@@ -128,6 +130,7 @@ function ProtectedApp() {
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
+        <Route path="/revisar-bajas" element={<PDFs />} />
 
         {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
