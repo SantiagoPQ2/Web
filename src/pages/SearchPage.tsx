@@ -1,69 +1,110 @@
-// src/components/SearchClientes.tsx
-import React, { useState } from "react";
-import { useSearchClientes } from "../hooks/useSearchClientes";
+import React, { useState, useRef } from "react";
+import { useExcelData } from "../hooks/useExcelData";
+import { supabase } from "../config/supabase";
+import { CONFIG } from "../config/constants";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
+import SearchBox from "../components/SearchBox";
+import ClientResult from "../components/ClientResult";
+import EmptyState from "../components/EmptyState";
 
-const SearchClientes: React.FC = () => {
-  const [term, setTerm] = useState("");
-  const { results, loading, error, searchClientes } = useSearchClientes();
+const SearchPage: React.FC = () => {
+  const {
+    data,
+    loading,
+    error,
+    searchTerm,
+    searchResult,
+    hasSearched,
+    setSearchTerm,
+    handleSearch: handleExcelSearch,
+    retryLoad,
+  } = useExcelData();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setTerm(value);
-    searchClientes(value);
+  const lastSearchRef = useRef<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Recuperamos el usuario logueado desde localStorage
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+  const handleSearch = async () => {
+    setLocalError(null);
+    if (!searchTerm) return;
+
+    if (lastSearchRef.current === searchTerm) {
+      setLocalError("⚠️ Ya buscaste este cliente, prueba con otro distinto.");
+      return;
+    }
+
+    console.log("Intentando guardar en Supabase:", searchTerm);
+
+    const { data: inserted, error } = await supabase
+      .from("busquedas_clientes")
+      .insert([
+        {
+          cliente_numero: searchTerm,
+          created_by: currentUser.id,
+        },
+      ])
+      .select();
+
+    if (error) {
+      console.error("❌ Error al guardar búsqueda:", error.message);
+      setLocalError("❌ Error al guardar búsqueda.");
+    } else {
+      console.log("✅ Búsqueda guardada en Supabase:", inserted);
+      lastSearchRef.current = searchTerm;
+    }
+
+    handleExcelSearch();
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      <input
-        type="text"
-        value={term}
-        onChange={handleChange}
-        placeholder="Buscar cliente por razón social..."
-        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring focus:border-blue-400"
-      />
-
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* 🌀 Loading */}
       {loading && (
-        <p className="mt-4 text-sm text-gray-500">Buscando clientes…</p>
+        <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
+          <LoadingSpinner message={CONFIG.MESSAGES.LOADING} />
+        </div>
       )}
 
-      {error && (
-        <p className="mt-4 text-sm text-red-600">
-          Error: {error}
-        </p>
+      {/* ⚠️ Error */}
+      {(error || localError) && !loading && (
+        <div className="mb-6">
+          <ErrorMessage message={error || localError} onRetry={retryLoad} />
+        </div>
       )}
 
-      {!loading && results.length === 0 && term.length >= 2 && (
-        <p className="mt-4 text-sm text-gray-500">
-          No se encontraron clientes.
-        </p>
-      )}
+      {/* ✅ Contenido principal */}
+      {data && !loading && !error && (
+        <div className="space-y-6">
+          {/* 🔍 Caja de búsqueda */}
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Buscar Cliente
+            </h2>
+            <SearchBox
+              value={searchTerm}
+              onChange={setSearchTerm}
+              onSearch={handleSearch}
+              placeholder={CONFIG.MESSAGES.SEARCH_PLACEHOLDER}
+            />
+          </div>
 
-      <ul className="mt-6 space-y-4">
-        {results.map((cliente) => (
-          <li
-            key={cliente.id}
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
-            <p className="font-semibold text-gray-800">
-              {cliente.razon_social_nombre}
-            </p>
-
-            {cliente.situacion && (
-              <p className="mt-1 text-sm text-gray-600">
-                {cliente.situacion}
-              </p>
+          {/* 🧾 Resultado del cliente */}
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-sm p-6 transition-colors duration-300">
+            {searchResult ? (
+              <ClientResult cliente={searchResult} />
+            ) : hasSearched ? (
+              <EmptyState type="not-found" searchTerm={searchTerm} />
+            ) : (
+              <EmptyState type="initial" />
             )}
-
-            {cliente.promos && (
-              <p className="mt-2 text-sm text-blue-700">
-                {cliente.promos}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default SearchClientes;
+export default SearchPage;
