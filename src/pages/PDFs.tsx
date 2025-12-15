@@ -34,31 +34,50 @@ export default function PDFs() {
   }
 
   // ============================================================
-  // Manejo Drag & Drop
+  // Helpers
   // ============================================================
-  function handleDrop(e: React.DragEvent) {
+  function agregarArchivos(nuevos: File[]) {
+    setFiles((prev) => {
+      const existentes = prev.map((f) => f.name + f.size);
+      const filtrados = nuevos.filter(
+        (f) => !existentes.includes(f.name + f.size)
+      );
+      return [...prev, ...filtrados];
+    });
+  }
+
+  // ============================================================
+  // Drag & Drop
+  // ============================================================
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
+    e.stopPropagation();
     setDragOver(false);
 
     const droppedFiles = Array.from(e.dataTransfer.files).filter(
       (f) => f.type === "application/pdf"
     );
 
-    setFiles((prev) => [...prev, ...droppedFiles]);
+    agregarArchivos(droppedFiles);
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (!e.target.files) return;
 
-    const selected = Array.from(e.target.files).filter(
+    const selectedFiles = Array.from(e.target.files).filter(
       (f) => f.type === "application/pdf"
     );
 
-    setFiles((prev) => [...prev, ...selected]);
+    agregarArchivos(selectedFiles);
+    e.target.value = ""; // importante
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   // ============================================================
-  // Subir PDFs
+  // Subida en lote
   // ============================================================
   async function subirPDFs() {
     if (files.length === 0) {
@@ -69,36 +88,33 @@ export default function PDFs() {
     setUploading(true);
     setProgress(0);
 
-    const user = (await supabase.auth.getUser()).data.user;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const ext = file.name.split(".").pop();
-      const storageName = `${crypto.randomUUID()}.${ext}`;
+      const uuid = crypto.randomUUID();
 
-      // 1️⃣ Subir archivo
+      const storagePath = `${year}/${month}/${uuid}.${ext}`;
+
       const { error: uploadError } = await supabase.storage
         .from("documentos_pdf")
-        .upload(storageName, file, {
+        .upload(storagePath, file, {
           contentType: "application/pdf",
         });
 
-      if (uploadError) {
-        console.error("Error subiendo:", file.name, uploadError);
-        continue;
+      if (!uploadError) {
+        const titulo = file.name.replace(/\.pdf$/i, "");
+
+        await supabase.from("documentos").insert({
+          titulo,
+          archivo_url: storagePath,
+          categoria: "Informe",
+        });
       }
 
-      // 2️⃣ Insertar metadata
-      const titulo = file.name.replace(/\.pdf$/i, "");
-
-      await supabase.from("documentos").insert({
-        titulo,
-        archivo_url: storageName,
-        categoria: "Informe",
-        creado_por: user?.id ?? null,
-      });
-
-      // 3️⃣ Progreso
       setProgress(Math.round(((i + 1) / files.length) * 100));
     }
 
@@ -119,7 +135,7 @@ export default function PDFs() {
   }
 
   // ============================================================
-  // Borrar PDF
+  // Borrar
   // ============================================================
   async function borrarPDF(id: string, path: string) {
     if (!confirm("¿Borrar este documento?")) return;
@@ -134,7 +150,9 @@ export default function PDFs() {
   // ============================================================
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-center mb-6">Documentos PDF</h1>
+      <h1 className="text-2xl font-bold text-center mb-6">
+        Documentos PDF
+      </h1>
 
       {/* DROPZONE */}
       <div
@@ -145,7 +163,7 @@ export default function PDFs() {
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-lg p-6 text-center transition
-          ${dragOver ? "border-red-500 bg-red-50" : "border-gray-300 bg-white"}
+          ${dragOver ? "border-red-600 bg-red-50" : "border-gray-300 bg-white"}
         `}
       >
         <p className="font-medium mb-2">
@@ -153,27 +171,41 @@ export default function PDFs() {
         </p>
 
         <input
+          id="pdfInput"
           type="file"
           accept="application/pdf"
           multiple
           onChange={handleFileSelect}
           className="hidden"
-          id="fileInput"
         />
 
         <label
-          htmlFor="fileInput"
+          htmlFor="pdfInput"
           className="inline-block mt-2 px-4 py-2 bg-red-600 text-white rounded cursor-pointer"
         >
           Seleccionar PDFs
         </label>
-
-        {files.length > 0 && (
-          <p className="mt-3 text-sm text-gray-600">
-            {files.length} archivo(s) seleccionados
-          </p>
-        )}
       </div>
+
+      {/* PREVIEW */}
+      {files.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {files.map((f, i) => (
+            <div
+              key={i}
+              className="flex justify-between items-center bg-white shadow p-2 rounded"
+            >
+              <span className="text-sm truncate">{f.name}</span>
+              <button
+                onClick={() => removeFile(i)}
+                className="text-red-600 text-sm"
+              >
+                Quitar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* PROGRESO */}
       {uploading && (
@@ -188,10 +220,9 @@ export default function PDFs() {
         </div>
       )}
 
-      {/* BOTÓN */}
       <button
         onClick={subirPDFs}
-        disabled={uploading}
+        disabled={uploading || files.length === 0}
         className="mt-4 w-full bg-red-600 text-white py-2 rounded disabled:opacity-50"
       >
         {uploading ? "Subiendo PDFs..." : "Subir PDFs"}
