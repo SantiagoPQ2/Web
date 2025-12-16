@@ -11,33 +11,51 @@ interface Documento {
 
 export default function PDFs() {
   const [docs, setDocs] = useState<Documento[]>([]);
+  const [carpetas, setCarpetas] = useState<string[]>([]);
+  const [carpetaActiva, setCarpetaActiva] = useState("informes");
+
   const [files, setFiles] = useState<File[]>([]);
-  const [carpeta, setCarpeta] = useState("informes");
   const [loading, setLoading] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ============================
+  // CARGA INICIAL
+  // ============================
   useEffect(() => {
-    cargarDocs();
+    cargarTodo();
   }, []);
 
-  async function cargarDocs() {
+  async function cargarTodo() {
     const { data } = await supabase
       .from("documentos")
       .select("*")
       .order("creado_en", { ascending: false });
 
-    setDocs(data || []);
+    if (!data) return;
+
+    setDocs(data);
+
+    const carpetasUnicas = Array.from(
+      new Set(data.map((d) => d.carpeta))
+    );
+
+    setCarpetas(carpetasUnicas);
+
+    if (!carpetasUnicas.includes(carpetaActiva)) {
+      setCarpetaActiva(carpetasUnicas[0] || "informes");
+    }
   }
 
   // ============================
   // MANEJO ARCHIVOS
   // ============================
   function agregarArchivos(nuevos: File[]) {
-    const filtrados = nuevos.filter(
+    const pdfs = nuevos.filter(
       (f) => f.type === "application/pdf"
     );
-    setFiles((prev) => [...prev, ...filtrados]);
+    setFiles((prev) => [...prev, ...pdfs]);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -47,10 +65,6 @@ export default function PDFs() {
 
   function quitarArchivo(index: number) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function limpiarSeleccion() {
-    setFiles([]);
   }
 
   // ============================
@@ -66,8 +80,8 @@ export default function PDFs() {
 
     try {
       for (const file of files) {
-        const nombre = file.name.replace(".pdf", "");
-        const path = `${carpeta}/${crypto.randomUUID()}.pdf`;
+        const titulo = file.name.replace(".pdf", "");
+        const path = `${carpetaActiva}/${crypto.randomUUID()}.pdf`;
 
         await supabase.storage
           .from("documentos_pdf")
@@ -76,15 +90,15 @@ export default function PDFs() {
           });
 
         await supabase.from("documentos").insert({
-          titulo: nombre,
+          titulo,
           archivo_url: path,
+          carpeta: carpetaActiva,
           categoria: "Informes",
-          carpeta,
         });
       }
 
       setFiles([]);
-      await cargarDocs();
+      await cargarTodo();
       alert("PDFs subidos correctamente");
     } catch (err) {
       console.error(err);
@@ -108,6 +122,10 @@ export default function PDFs() {
   // ============================
   // RENDER
   // ============================
+  const docsFiltrados = docs.filter(
+    (d) => d.carpeta === carpetaActiva
+  );
+
   return (
     <div className="max-w-3xl mx-auto p-4">
 
@@ -115,15 +133,15 @@ export default function PDFs() {
         Documentos PDF
       </h1>
 
-      {/* CARPETA */}
+      {/* INPUT CARPETA */}
       <div className="bg-white shadow rounded p-4 mb-4">
         <label className="font-semibold block mb-1">
           ¿A qué carpeta lo querés subir?
         </label>
         <input
           className="border rounded w-full p-2"
-          value={carpeta}
-          onChange={(e) => setCarpeta(e.target.value.trim())}
+          value={carpetaActiva}
+          onChange={(e) => setCarpetaActiva(e.target.value.trim())}
         />
         <p className="text-xs text-gray-500 mt-1">
           Si no existe, se crea automáticamente
@@ -150,7 +168,8 @@ export default function PDFs() {
           multiple
           hidden
           onChange={(e) =>
-            e.target.files && agregarArchivos(Array.from(e.target.files))
+            e.target.files &&
+            agregarArchivos(Array.from(e.target.files))
           }
         />
       </div>
@@ -158,33 +177,19 @@ export default function PDFs() {
       {/* PREVIEW */}
       {files.length > 0 && (
         <div className="bg-white shadow rounded p-4 mb-4">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-semibold">
-              Archivos a subir ({files.length})
-            </h3>
-            <button
-              onClick={limpiarSeleccion}
-              className="text-sm text-red-600"
-            >
-              Limpiar
-            </button>
-          </div>
-
+          <h3 className="font-semibold mb-2">
+            Archivos a subir ({files.length})
+          </h3>
           <ul className="space-y-2">
             {files.map((f, i) => (
               <li
                 key={i}
-                className="flex justify-between items-center border rounded p-2"
+                className="flex justify-between border rounded p-2"
               >
-                <div>
-                  <p className="font-medium">{f.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {(f.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
+                <span>{f.name}</span>
                 <button
                   onClick={() => quitarArchivo(i)}
-                  className="text-sm text-gray-600"
+                  className="text-sm text-red-600"
                 >
                   Quitar
                 </button>
@@ -203,11 +208,31 @@ export default function PDFs() {
         {loading ? "Subiendo..." : "Subir PDFs"}
       </button>
 
+      {/* CARPETAS */}
+      <h2 className="font-bold mb-2">Carpetas</h2>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {carpetas.map((c) => (
+          <button
+            key={c}
+            onClick={() => setCarpetaActiva(c)}
+            className={`px-4 py-2 rounded shadow text-sm ${
+              c === carpetaActiva
+                ? "bg-red-600 text-white"
+                : "bg-white"
+            }`}
+          >
+            📁 {c}
+          </button>
+        ))}
+      </div>
+
       {/* LISTADO */}
-      <h2 className="font-bold mb-2">Listado</h2>
+      <h2 className="font-bold mb-2">
+        Archivos en: {carpetaActiva}
+      </h2>
 
       <div className="space-y-2">
-        {docs.map((d) => (
+        {docsFiltrados.map((d) => (
           <div
             key={d.id}
             className="bg-white shadow rounded p-3 flex justify-between"
@@ -215,7 +240,7 @@ export default function PDFs() {
             <div>
               <p className="font-semibold">{d.titulo}</p>
               <p className="text-xs text-gray-500">
-                {d.carpeta} · {new Date(d.creado_en).toLocaleString()}
+                {new Date(d.creado_en).toLocaleString()}
               </p>
             </div>
             <button
@@ -245,4 +270,3 @@ export default function PDFs() {
     </div>
   );
 }
-
