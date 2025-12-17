@@ -214,12 +214,7 @@ const Navigation: React.FC = () => {
       { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
       { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
       { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Planilla de Carga", path: "/planilla-carga", icon: FileText, description: "Convertir PDF a Excel" },
 
-      // B2B
-      { name: "B2B - Catálogo", path: "/b2b/catalogo", icon: Store, description: "Catálogo de productos" },
-      { name: "B2B - Carrito", path: "/b2b/carrito", icon: ShoppingCart, description: "Carrito de compras" },
-      { name: "B2B - Pedidos", path: "/b2b/pedidos", icon: Package, description: "Pedidos realizados" },
 
       { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
