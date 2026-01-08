@@ -98,10 +98,7 @@ function ProtectedApp() {
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
 
-        {/* (Opcional) si querés que supervisor también pueda cargar pedidos */}
-        {/* <Route path="/pedido-compra" element={<PedidoDeCompra />} /> */}
-
-        {/* ❌ Revisar Compras NO está para supervisor (solo admin) */}
+        {/* ❌ Revisar Compras NO para supervisor */}
       </Routes>
     );
   }
@@ -147,7 +144,7 @@ function ProtectedApp() {
         {/* ✅ Compras */}
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
 
-        {/* ✅ SOLO ADMIN puede ver Revisar Compras */}
+        {/* ✅ Revisar Compras solo admin (y administracion-cordoba en su bloque) */}
         <Route path="/revisar-compras" element={<RevisarCompras />} />
 
         {/* 🌟 B2B */}
@@ -159,7 +156,26 @@ function ProtectedApp() {
   }
 
   // ---------------------------
-  // 🚀 5) Default
+  // 🚀 5) ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
+  // ---------------------------
+  else if (role === "administracion-cordoba") {
+    allowedRoutes = (
+      <Routes>
+        {/* Que al entrar a "/" vaya directo al formulario */}
+        <Route path="/" element={<PedidoDeCompra />} />
+
+        {/* Las dos páginas permitidas */}
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        <Route path="/revisar-compras" element={<RevisarCompras />} />
+
+        {/* Catch-all para evitar pantallas vacías */}
+        <Route path="*" element={<PedidoDeCompra />} />
+      </Routes>
+    );
+  }
+
+  // ---------------------------
+  // 🚀 6) Default
   // ---------------------------
   else {
     allowedRoutes = (
@@ -206,3 +222,4 @@ function App() {
 }
 
 export default App;
+
