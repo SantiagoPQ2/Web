@@ -15,10 +15,8 @@ import {
   Settings as SettingsIcon,
   Wrench,
   BarChart3,
-  ShoppingCart,
-  Package,
-  Store,
   File,
+  ShoppingCart,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -133,6 +131,12 @@ const Navigation: React.FC = () => {
       case "/pdfs":
         return "Documentos PDF";
 
+      // ✅ COMPRAS
+      case "/pedido-compra":
+        return "Pedido de Compra";
+      case "/revisar-compras":
+        return "Revisar Compras";
+
       // === B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
@@ -160,63 +164,275 @@ const Navigation: React.FC = () => {
   // VENDEDOR
   if (user?.role === "vendedor") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
-      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas de crédito",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y clientes del día",
+      },
+      {
+        name: "Baja / Cambio Ruta",
+        path: "/baja-cliente",
+        icon: FileText,
+        description: "Solicitar baja o cambio de ruta",
+      },
+
+      // ✅ Pedido de compra para vendedor
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   }
 
   // SUPERVISOR
   else if (user?.role === "supervisor") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
-      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
-      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
-      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
-      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel del supervisor" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Revisar Bajas",
+        path: "/revisar-bajas",
+        icon: FileText,
+        description: "Aprobar solicitudes de baja",
+      },
+      {
+        name: "Documentos PDF",
+        path: "/pdfs",
+        icon: File,
+        description: "Documentación interna",
+      },
+      {
+        name: "Mapa de Visitas",
+        path: "/mapa",
+        icon: Compass,
+        description: "Rutas y visitas",
+      },
+      {
+        name: "Dashboard Power BI",
+        path: "/powerbi",
+        icon: BarChart3,
+        description: "Indicadores",
+      },
+      {
+        name: "Supervisor",
+        path: "/supervisor",
+        icon: Compass,
+        description: "Panel del supervisor",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
+
+      // ❌ No agrego Revisar Compras aquí (solo admin)
+      // (Si querés que supervisor también lo vea, lo sumo)
     ];
   }
 
   // LOGÍSTICA
   else if (user?.role === "logistica") {
     menuItems = [
-      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
-      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y datos" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar nuevo rechazo",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y datos",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   }
 
   // ADMIN
   else if (user?.role === "admin") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazos" },
-      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar coordenadas" },
-      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
-      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
-      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
-      { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar rechazos",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar coordenadas",
+      },
+      {
+        name: "Revisar Bajas",
+        path: "/revisar-bajas",
+        icon: FileText,
+        description: "Aprobar solicitudes de baja",
+      },
 
+      // ✅ Compras para admin
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
 
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      // ✅ SOLO ADMIN: Revisar Compras
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Aprobar y auditar pedidos de compra",
+      },
+
+      {
+        name: "Documentos PDF",
+        path: "/pdfs",
+        icon: File,
+        description: "Documentación interna",
+      },
+      {
+        name: "Mapa de Visitas",
+        path: "/mapa",
+        icon: Compass,
+        description: "Rutas y visitas",
+      },
+      {
+        name: "Dashboard Power BI",
+        path: "/powerbi",
+        icon: BarChart3,
+        description: "Indicadores",
+      },
+      {
+        name: "Panel Admin",
+        path: "/admin",
+        icon: Wrench,
+        description: "Herramientas admin",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   }
 
@@ -274,7 +490,10 @@ const Navigation: React.FC = () => {
                   ) : (
                     <ul className="max-h-64 overflow-y-auto">
                       {notificaciones.map((n) => (
-                        <li key={n.id} className="text-sm p-2 border-b border-gray-200">
+                        <li
+                          key={n.id}
+                          className="text-sm p-2 border-b border-gray-200"
+                        >
                           <strong>{n.titulo}</strong>
                           <br />
                           {n.mensaje}
