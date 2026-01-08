@@ -34,9 +34,18 @@ const PedidoDeCompra: React.FC = () => {
     "Telefono",
   ];
 
-  const urgencias = ["Se para la operacion", "Compra Habitual", "Reparacion"];
+  // ✅ Agregado "No"
+  const urgencias = ["Se para la operacion", "Compra Habitual", "Reparacion", "No"];
 
-  const montos = ["0-50K", "50-300K", "300K a +"];
+  // ✅ Labels con aclaración, pero values limpios
+  const montos: { value: string; label: string }[] = [
+    { value: "0-50K", label: "0-50K" },
+    { value: "50-300K", label: "50-300K (obligatorio una foto)" },
+    { value: "300K a +", label: "300K a + (obligatorio una foto)" },
+  ];
+
+  const montoRequiereFoto =
+    montoEstimado === "50-300K" || montoEstimado === "300K a +";
 
   const handleSubmit = async () => {
     if (!queEs || !tipoGasto || !urgencia || !montoEstimado) {
@@ -46,6 +55,12 @@ const PedidoDeCompra: React.FC = () => {
 
     if (!user) {
       alert("No hay usuario logueado");
+      return;
+    }
+
+    // ✅ Reglas de negocio: si el monto es alto, foto obligatoria
+    if (montoRequiereFoto && !foto) {
+      alert("Para este monto es obligatorio adjuntar una foto.");
       return;
     }
 
@@ -94,7 +109,7 @@ const PedidoDeCompra: React.FC = () => {
             tipo_gasto: tipoGasto,
             urgencia,
             detalle_adicional: detalleAdicional || null,
-            monto_total_estimado: montoEstimado,
+            monto_total_estimado: montoEstimado, // value limpio
             vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
             vendedor_username: user?.username ?? null,
             foto_url: fotoUrl,
@@ -120,7 +135,6 @@ const PedidoDeCompra: React.FC = () => {
         .eq("role", "supervisor");
 
       if (supError) {
-        // No frenamos el flujo si falla la notificación
         console.error("Error buscando supervisores:", supError);
       } else if (supervisores && supervisores.length > 0) {
         const titulo = "Nuevo pedido de compra";
@@ -231,16 +245,24 @@ const PedidoDeCompra: React.FC = () => {
           >
             <option value="">Seleccione...</option>
             {montos.map((m) => (
-              <option key={m} value={m}>
-                {m}
+              <option key={m.value} value={m.value}>
+                {m.label}
               </option>
             ))}
           </select>
+
+          {montoRequiereFoto && (
+            <p className="text-xs text-red-600 mt-1">
+              Para este monto es obligatorio adjuntar una foto.
+            </p>
+          )}
         </div>
 
         {/* 6) Foto */}
         <div>
-          <label className="text-sm font-medium">Foto (opcional)</label>
+          <label className="text-sm font-medium">
+            Foto {montoRequiereFoto ? "(obligatoria)" : "(opcional)"}
+          </label>
           <input
             type="file"
             accept="image/*"
