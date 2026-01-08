@@ -97,7 +97,11 @@ const Navigation: React.FC = () => {
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
-        return "Buscar Cliente";
+        // Para administracion-cordoba "/" es Pedido de Compra, para los demás sigue siendo Buscar Cliente
+        return user?.role === "administracion-cordoba"
+          ? "Pedido de Compra"
+          : "Buscar Cliente";
+
       case "/bonificaciones":
         return "Bonificaciones";
       case "/notas-credito":
@@ -200,15 +204,12 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
       },
-
-      // ✅ Pedido de compra para vendedor
       {
         name: "Pedido de Compra",
         path: "/pedido-compra",
         icon: ShoppingCart,
         description: "Cargar un pedido de compra",
       },
-
       {
         name: "Chat",
         path: "/chat",
@@ -293,9 +294,6 @@ const Navigation: React.FC = () => {
         icon: SettingsIcon,
         description: "Configuración del usuario",
       },
-
-      // ❌ No agrego Revisar Compras aquí (solo admin)
-      // (Si querés que supervisor también lo vea, lo sumo)
     ];
   }
 
@@ -331,6 +329,24 @@ const Navigation: React.FC = () => {
         path: "/settings",
         icon: SettingsIcon,
         description: "Configuración del usuario",
+      },
+    ];
+  }
+
+  // ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
+  else if (user?.role === "administracion-cordoba") {
+    menuItems = [
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Ver pedidos de compra",
       },
     ];
   }
@@ -380,23 +396,18 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Aprobar solicitudes de baja",
       },
-
-      // ✅ Compras para admin
       {
         name: "Pedido de Compra",
         path: "/pedido-compra",
         icon: ShoppingCart,
         description: "Cargar un pedido de compra",
       },
-
-      // ✅ SOLO ADMIN: Revisar Compras
       {
         name: "Revisar Compras",
         path: "/revisar-compras",
         icon: FileText,
         description: "Aprobar y auditar pedidos de compra",
       },
-
       {
         name: "Documentos PDF",
         path: "/pdfs",
@@ -439,6 +450,8 @@ const Navigation: React.FC = () => {
   // -------------------------
   // COMPONENTE
   // -------------------------
+
+  const hideSettingsEverywhere = user?.role === "administracion-cordoba";
 
   return (
     <>
@@ -524,12 +537,14 @@ const Navigation: React.FC = () => {
                 <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 p-2">
                   <p className="px-4 py-2 text-sm border-b">{user?.username}</p>
 
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                    onClick={() => (window.location.href = "/settings")}
-                  >
-                    <User size={16} /> Configuración
-                  </button>
+                  {!hideSettingsEverywhere && (
+                    <button
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                      onClick={() => (window.location.href = "/settings")}
+                    >
+                      <User size={16} /> Configuración
+                    </button>
+                  )}
 
                   <button
                     className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
