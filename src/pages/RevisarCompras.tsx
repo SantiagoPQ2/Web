@@ -121,10 +121,10 @@ const RevisarCompras: React.FC = () => {
       Urgencia: i.urgencia,
       "Detalle adicional": i.detalle_adicional ?? "",
       "Monto estimado": i.monto_total_estimado,
-      Vendedor: i.vendedor_nombre ?? "",
-      "Vendedor username": i.vendedor_username ?? "",
+      Personal: i.vendedor_nombre ?? "",
+      "Personal username": i.vendedor_username ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
-      Supervisor: i.supervisor_nombre ?? "",
+      CEO: i.supervisor_nombre ?? "",
       Foto: i.foto_url ?? "",
     }));
 
@@ -201,9 +201,9 @@ const RevisarCompras: React.FC = () => {
               <th className="p-2 border">Urgencia</th>
               <th className="p-2 border">Detalle</th>
               <th className="p-2 border">Monto</th>
-              <th className="p-2 border">Vendedor</th>
+              <th className="p-2 border">Personal</th>
               <th className="p-2 border text-center">Aprobado</th>
-              <th className="p-2 border">Supervisor</th>
+              <th className="p-2 border">CEO</th>
               <th className="p-2 border text-center">Acción</th>
               <th className="p-2 border text-center">Foto</th>
             </tr>
