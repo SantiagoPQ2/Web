@@ -15,7 +15,6 @@ interface CompraItem {
   aprobado: boolean;
   supervisor_nombre: string | null;
   created_at: string;
-  estado: string | null;
   foto_url: string | null;
 }
 
@@ -73,38 +72,10 @@ const RevisarCompras: React.FC = () => {
     if (paginaActual > 1) setPaginaActual(paginaActual - 1);
   };
 
-  // Ciclo de estados
-  const siguienteEstado = (estado: string | null) => {
-    if (!estado || estado === "pendiente") return "correcto";
-    if (estado === "correcto") return "rechazado";
-    return "pendiente";
-  };
-
-  const toggleEstado = async (item: CompraItem) => {
-    if (!user || user.role !== "admin") {
-      alert("Solo admin puede cambiar el estado.");
-      return;
-    }
-
-    const nuevo = siguienteEstado(item.estado);
-
-    setLoading(true);
-
-    await supabase
-      .from("pedidos_compra")
-      .update({ estado: nuevo })
-      .eq("id", item.id);
-
-    setLoading(false);
-
-    setItems((prev) =>
-      prev.map((x) => (x.id === item.id ? { ...x, estado: nuevo } : x))
-    );
-  };
-
+  // ✅ Aprobar/Desaprobar SOLO admin
   const toggleAprobado = async (item: CompraItem) => {
-    if (!user || (user.role !== "supervisor" && user.role !== "admin")) {
-      alert("Solo supervisores o admin pueden aprobar.");
+    if (!user || user.role !== "admin") {
+      alert("Solo admin puede aprobar/desaprobar.");
       return;
     }
 
@@ -153,7 +124,6 @@ const RevisarCompras: React.FC = () => {
       Vendedor: i.vendedor_nombre ?? "",
       "Vendedor username": i.vendedor_username ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
-      Estado: i.estado ?? "pendiente",
       Supervisor: i.supervisor_nombre ?? "",
       Foto: i.foto_url ?? "",
     }));
@@ -235,7 +205,6 @@ const RevisarCompras: React.FC = () => {
               <th className="p-2 border text-center">Aprobado</th>
               <th className="p-2 border">Supervisor</th>
               <th className="p-2 border text-center">Acción</th>
-              <th className="p-2 border text-center">Estado</th>
               <th className="p-2 border text-center">Foto</th>
             </tr>
           </thead>
@@ -264,9 +233,9 @@ const RevisarCompras: React.FC = () => {
 
                 <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
 
-                {/* ACCIÓN */}
+                {/* ACCIÓN: SOLO ADMIN */}
                 <td className="p-2 border text-center">
-                  {(user?.role === "supervisor" || user?.role === "admin") && (
+                  {user?.role === "admin" ? (
                     <button
                       disabled={loading}
                       onClick={() => toggleAprobado(item)}
@@ -276,36 +245,8 @@ const RevisarCompras: React.FC = () => {
                     >
                       {item.aprobado ? "Desaprobar" : "Aprobar"}
                     </button>
-                  )}
-                </td>
-
-                {/* ESTADO */}
-                <td className="p-2 border text-center">
-                  {user?.role === "admin" ? (
-                    <button
-                      onClick={() => toggleEstado(item)}
-                      className={`px-3 py-1 rounded text-white ${
-                        item.estado === "correcto"
-                          ? "bg-green-600"
-                          : item.estado === "rechazado"
-                          ? "bg-red-900"
-                          : "bg-gray-500"
-                      }`}
-                    >
-                      {item.estado ?? "pendiente"}
-                    </button>
                   ) : (
-                    <span
-                      className={`px-3 py-1 rounded text-white ${
-                        item.estado === "correcto"
-                          ? "bg-green-600"
-                          : item.estado === "rechazado"
-                          ? "bg-red-900"
-                          : "bg-gray-500"
-                      }`}
-                    >
-                      {item.estado ?? "pendiente"}
-                    </span>
+                    <span className="text-gray-400">-</span>
                   )}
                 </td>
 
@@ -327,7 +268,7 @@ const RevisarCompras: React.FC = () => {
 
             {vistaPagina.length === 0 && (
               <tr>
-                <td colSpan={12} className="p-4 text-center text-gray-500">
+                <td colSpan={11} className="p-4 text-center text-gray-500">
                   No hay registros dentro del rango.
                 </td>
               </tr>
