@@ -28,6 +28,10 @@ import PDFs from "./pages/PDFs";
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
 
+// ✅ NUEVAS PÁGINAS
+import PedidoDeCompra from "./pages/PedidoDeCompra";
+import RevisarCompras from "./pages/RevisarCompras";
+
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
 import UpdateBanner from "./components/UpdateBanner";
@@ -68,6 +72,9 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        {/* ✅ Compras: vendedor carga pedido */}
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
       </Routes>
     );
   }
@@ -90,6 +97,11 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
+
+        {/* (Opcional) si querés que supervisor también pueda cargar pedidos */}
+        {/* <Route path="/pedido-compra" element={<PedidoDeCompra />} /> */}
+
+        {/* ❌ Revisar Compras NO está para supervisor (solo admin) */}
       </Routes>
     );
   }
@@ -132,6 +144,12 @@ function ProtectedApp() {
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
         <Route path="/pdfs" element={<PDFs />} />
 
+        {/* ✅ Compras */}
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+
+        {/* ✅ SOLO ADMIN puede ver Revisar Compras */}
+        <Route path="/revisar-compras" element={<RevisarCompras />} />
+
         {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
@@ -164,9 +182,7 @@ function ProtectedApp() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
 
-      <main className="flex-1 overflow-hidden">
-        {allowedRoutes}
-      </main>
+      <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
@@ -174,9 +190,7 @@ function ProtectedApp() {
         <ChatBubble onOpen={() => setOpenChat(true)} />
       )}
 
-      {showChatBot && openChat && (
-        <ChatBot onClose={() => setOpenChat(false)} />
-      )}
+      {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
 }
