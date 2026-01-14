@@ -215,7 +215,8 @@ const RevisarCompras: React.FC = () => {
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
+    // ✅ Contenedor más ancho para que entre todo prolijo
+    <div className="max-w-7xl w-[98vw] mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
       {/* MODAL DE ADJUNTOS */}
       {adjuntosVista && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -301,23 +302,23 @@ const RevisarCompras: React.FC = () => {
         </button>
       </div>
 
-      {/* TABLA - sin scroll horizontal */}
+      {/* TABLA */}
       <div className="border rounded overflow-hidden">
         <table className="w-full table-fixed border-collapse text-sm">
-          {/* ✅ Defino anchos fijos para que ENTRE TODO en pantalla y Detalle sea más ancho */}
+          {/* ✅ Rebalanceo anchos: "¿Qué es?" más ancho, Detalle ancho, Acción/Adjuntos con espacio */}
           <colgroup>
-            <col style={{ width: "7%" }} />  {/* Fecha */}
-            <col style={{ width: "7%" }} />  {/* ¿Qué es? */}
-            <col style={{ width: "8%" }} />  {/* Tipo */}
-            <col style={{ width: "7%" }} />  {/* Urgencia */}
-            <col style={{ width: "26%" }} /> {/* Detalle (más ancho) */}
-            <col style={{ width: "6%" }} />  {/* Monto */}
-            <col style={{ width: "7%" }} />  {/* Personal */}
-            <col style={{ width: "6%" }} />  {/* Aprobado */}
-            <col style={{ width: "7%" }} />  {/* CEO */}
-            <col style={{ width: "18%" }} /> {/* Respuesta */}
-            <col style={{ width: "6%" }} />  {/* Acción */}
-            <col style={{ width: "5%" }} />  {/* Foto */}
+            <col style={{ width: "7%" }} />   {/* Fecha */}
+            <col style={{ width: "12%" }} />  {/* ¿Qué es? (más ancho) */}
+            <col style={{ width: "8%" }} />   {/* Tipo */}
+            <col style={{ width: "7%" }} />   {/* Urgencia */}
+            <col style={{ width: "22%" }} />  {/* Detalle */}
+            <col style={{ width: "6%" }} />   {/* Monto */}
+            <col style={{ width: "7%" }} />   {/* Personal */}
+            <col style={{ width: "6%" }} />   {/* Aprobado */}
+            <col style={{ width: "6%" }} />   {/* CEO */}
+            <col style={{ width: "14%" }} />  {/* Respuesta */}
+            <col style={{ width: "7%" }} />   {/* Acción (más ancho) */}
+            <col style={{ width: "8%" }} />   {/* Adjuntos (más ancho) */}
           </colgroup>
 
           <thead className="bg-gray-100">
@@ -351,6 +352,7 @@ const RevisarCompras: React.FC = () => {
                     {formatearFechaVista(item.created_at)}
                   </td>
 
+                  {/* ✅ "¿Qué es?" con wrap prolijo (sin cascada extrema por ancho mayor) */}
                   <td className="p-2 border whitespace-normal break-words">
                     {item.que_es}
                   </td>
@@ -363,7 +365,7 @@ const RevisarCompras: React.FC = () => {
                     {item.urgencia}
                   </td>
 
-                  {/* ✅ DETALLE ancho y con wrap. Limito altura para que no desfigure filas */}
+                  {/* ✅ Detalle ancho + scroll vertical interno */}
                   <td className="p-2 border">
                     <div className="max-h-40 overflow-auto whitespace-pre-wrap break-words">
                       {item.detalle_adicional ?? "-"}
@@ -390,7 +392,7 @@ const RevisarCompras: React.FC = () => {
                     {item.supervisor_nombre ?? "-"}
                   </td>
 
-                  {/* ✅ RESPUESTA */}
+                  {/* RESPUESTA */}
                   <td className="p-2 border">
                     {esAdmin ? (
                       <div className="space-y-2">
@@ -426,13 +428,13 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
-                  {/* ACCIÓN: SOLO ADMIN */}
+                  {/* ✅ ACCIÓN: botón ocupa todo el ancho de la celda, sin solape */}
                   <td className="p-2 border text-center">
                     {esAdmin ? (
                       <button
                         disabled={loading}
                         onClick={() => toggleAprobado(item)}
-                        className={`px-3 py-1 rounded text-white ${
+                        className={`w-full whitespace-nowrap text-xs px-2 py-2 rounded text-white ${
                           item.aprobado ? "bg-gray-600" : "bg-green-600"
                         }`}
                       >
@@ -443,12 +445,12 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
-                  {/* ADJUNTOS */}
+                  {/* ✅ ADJUNTOS: botón ocupa todo el ancho de la celda, sin solape */}
                   <td className="p-2 border text-center">
                     {tieneAdjuntos ? (
                       <button
                         onClick={() => abrirAdjuntos(item)}
-                        className="px-3 py-1 bg-blue-600 text-white rounded"
+                        className="w-full whitespace-nowrap text-xs px-2 py-2 bg-blue-600 text-white rounded"
                       >
                         Ver
                       </button>
@@ -471,7 +473,7 @@ const RevisarCompras: React.FC = () => {
         </table>
       </div>
 
-      {/* PAGINACIÓN SOLO FLECHAS */}
+      {/* PAGINACIÓN */}
       {totalPaginas > 1 && (
         <div className="mt-4 flex items-center justify-center gap-6 text-sm">
           <button
@@ -500,3 +502,4 @@ const RevisarCompras: React.FC = () => {
 };
 
 export default RevisarCompras;
+
