@@ -18,14 +18,11 @@ interface CompraItem {
   supervisor_nombre: string | null;
   created_at: string;
 
-  // ✅ nuevos campos
   adjuntos_urls?: string[] | null;
   adjuntos_nombres?: string[] | null;
 
-  // compat viejo
   foto_url?: string | null;
 
-  // ✅ NUEVO
   respuesta?: string | null;
 }
 
@@ -41,13 +38,11 @@ const RevisarCompras: React.FC = () => {
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 8;
 
-  // ✅ Modal adjuntos
   const [adjuntosVista, setAdjuntosVista] = useState<{
     urls: string[];
     nombres: string[];
   } | null>(null);
 
-  // ✅ edición de respuestas por fila (admin)
   const [respuestasDraft, setRespuestasDraft] = useState<Record<string, string>>(
     {}
   );
@@ -67,7 +62,6 @@ const RevisarCompras: React.FC = () => {
       const rows = (data || []) as CompraItem[];
       setItems(rows);
 
-      // inicializo drafts con lo que venga de DB
       const initDrafts: Record<string, string> = {};
       for (const r of rows) initDrafts[r.id] = r.respuesta ?? "";
       setRespuestasDraft(initDrafts);
@@ -103,7 +97,6 @@ const RevisarCompras: React.FC = () => {
     if (paginaActual > 1) setPaginaActual(paginaActual - 1);
   };
 
-  // ✅ Aprobar/Desaprobar SOLO admin
   const toggleAprobado = async (item: CompraItem) => {
     if (!esAdmin) {
       alert("Solo admin puede aprobar/desaprobar.");
@@ -137,7 +130,6 @@ const RevisarCompras: React.FC = () => {
     );
   };
 
-  // ✅ Guardar Respuesta (solo admin)
   const guardarRespuesta = async (item: CompraItem) => {
     if (!esAdmin) {
       alert("Solo admin puede editar la respuesta.");
@@ -187,7 +179,8 @@ const RevisarCompras: React.FC = () => {
   };
 
   const esPdf = (url: string) =>
-    url.toLowerCase().includes(".pdf") || url.toLowerCase().includes("application/pdf");
+    url.toLowerCase().includes(".pdf") ||
+    url.toLowerCase().includes("application/pdf");
 
   const exportarExcel = () => {
     if (!fechaDesde || !fechaHasta) {
@@ -308,9 +301,25 @@ const RevisarCompras: React.FC = () => {
         </button>
       </div>
 
-      {/* TABLA */}
-      <div className="overflow-x-auto border rounded">
-        <table className="min-w-full border-collapse text-sm">
+      {/* TABLA - sin scroll horizontal */}
+      <div className="border rounded overflow-hidden">
+        <table className="w-full table-fixed border-collapse text-sm">
+          {/* ✅ Defino anchos fijos para que ENTRE TODO en pantalla y Detalle sea más ancho */}
+          <colgroup>
+            <col style={{ width: "7%" }} />  {/* Fecha */}
+            <col style={{ width: "7%" }} />  {/* ¿Qué es? */}
+            <col style={{ width: "8%" }} />  {/* Tipo */}
+            <col style={{ width: "7%" }} />  {/* Urgencia */}
+            <col style={{ width: "26%" }} /> {/* Detalle (más ancho) */}
+            <col style={{ width: "6%" }} />  {/* Monto */}
+            <col style={{ width: "7%" }} />  {/* Personal */}
+            <col style={{ width: "6%" }} />  {/* Aprobado */}
+            <col style={{ width: "7%" }} />  {/* CEO */}
+            <col style={{ width: "18%" }} /> {/* Respuesta */}
+            <col style={{ width: "6%" }} />  {/* Acción */}
+            <col style={{ width: "5%" }} />  {/* Foto */}
+          </colgroup>
+
           <thead className="bg-gray-100">
             <tr>
               <th className="p-2 border">Fecha</th>
@@ -322,12 +331,9 @@ const RevisarCompras: React.FC = () => {
               <th className="p-2 border">Personal</th>
               <th className="p-2 border text-center">Aprobado</th>
               <th className="p-2 border">CEO</th>
-
-              {/* ✅ NUEVO */}
               <th className="p-2 border">Respuesta</th>
-
               <th className="p-2 border text-center">Acción</th>
-              <th className="p-2 border text-center">Foto</th>
+              <th className="p-2 border text-center">Adjuntos</th>
             </tr>
           </thead>
 
@@ -341,13 +347,36 @@ const RevisarCompras: React.FC = () => {
 
               return (
                 <tr key={item.id} className="align-top">
-                  <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
-                  <td className="p-2 border">{item.que_es}</td>
-                  <td className="p-2 border">{item.tipo_gasto}</td>
-                  <td className="p-2 border">{item.urgencia}</td>
-                  <td className="p-2 border">{item.detalle_adicional ?? "-"}</td>
-                  <td className="p-2 border">{item.monto_total_estimado}</td>
-                  <td className="p-2 border">{item.vendedor_nombre ?? "-"}</td>
+                  <td className="p-2 border whitespace-normal break-words">
+                    {formatearFechaVista(item.created_at)}
+                  </td>
+
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.que_es}
+                  </td>
+
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.tipo_gasto}
+                  </td>
+
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.urgencia}
+                  </td>
+
+                  {/* ✅ DETALLE ancho y con wrap. Limito altura para que no desfigure filas */}
+                  <td className="p-2 border">
+                    <div className="max-h-40 overflow-auto whitespace-pre-wrap break-words">
+                      {item.detalle_adicional ?? "-"}
+                    </div>
+                  </td>
+
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.monto_total_estimado}
+                  </td>
+
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.vendedor_nombre ?? "-"}
+                  </td>
 
                   <td className="p-2 border text-center">
                     {item.aprobado ? (
@@ -357,10 +386,12 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
-                  <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
+                  <td className="p-2 border whitespace-normal break-words">
+                    {item.supervisor_nombre ?? "-"}
+                  </td>
 
                   {/* ✅ RESPUESTA */}
-                  <td className="p-2 border min-w-[280px]">
+                  <td className="p-2 border">
                     {esAdmin ? (
                       <div className="space-y-2">
                         <textarea
@@ -376,7 +407,7 @@ const RevisarCompras: React.FC = () => {
                           placeholder="Escribir respuesta..."
                         />
 
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end">
                           <button
                             onClick={() => guardarRespuesta(item)}
                             disabled={guardandoRespuestaId === item.id}
@@ -389,7 +420,7 @@ const RevisarCompras: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="whitespace-pre-wrap text-sm text-gray-700">
+                      <div className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-sm text-gray-700">
                         {item.respuesta?.trim() ? item.respuesta : "-"}
                       </div>
                     )}
@@ -419,7 +450,7 @@ const RevisarCompras: React.FC = () => {
                         onClick={() => abrirAdjuntos(item)}
                         className="px-3 py-1 bg-blue-600 text-white rounded"
                       >
-                        Ver Fotos/PDFs
+                        Ver
                       </button>
                     ) : (
                       "-"
