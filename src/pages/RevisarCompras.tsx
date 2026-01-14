@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import * as XLSX from "xlsx";
@@ -10,12 +10,20 @@ interface CompraItem {
   urgencia: string;
   detalle_adicional: string | null;
   monto_total_estimado: string;
+
   vendedor_nombre: string | null;
   vendedor_username: string | null;
+
   aprobado: boolean;
   supervisor_nombre: string | null;
   created_at: string;
-  foto_url: string | null;
+
+  // ✅ nuevos campos
+  adjuntos_urls?: string[] | null;
+  adjuntos_nombres?: string[] | null;
+
+  // compat viejo
+  foto_url?: string | null;
 }
 
 const RevisarCompras: React.FC = () => {
@@ -24,16 +32,17 @@ const RevisarCompras: React.FC = () => {
   const [items, setItems] = useState<CompraItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Rango de fechas
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
-  // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 8;
 
-  // Vista de foto
-  const [fotoVista, setFotoVista] = useState<string | null>(null);
+  // ✅ Modal adjuntos
+  const [adjuntosVista, setAdjuntosVista] = useState<{
+    urls: string[];
+    nombres: string[];
+  } | null>(null);
 
   const cargar = async () => {
     const { data, error } = await supabase
@@ -50,16 +59,17 @@ const RevisarCompras: React.FC = () => {
   const formatearFechaIso = (iso: string) =>
     new Date(iso).toISOString().slice(0, 10);
 
-  // Rango desde/hasta
   const cumpleRango = (fecha: string) => {
     if (!fechaDesde || !fechaHasta) return true;
     const f = formatearFechaIso(fecha);
     return f >= fechaDesde && f <= fechaHasta;
   };
 
-  const filtrados = items.filter((i) => cumpleRango(i.created_at));
+  const filtrados = useMemo(
+    () => items.filter((i) => cumpleRango(i.created_at)),
+    [items, fechaDesde, fechaHasta]
+  );
 
-  // Paginación
   const totalPaginas = Math.ceil(filtrados.length / REGISTROS_POR_PAGINA);
   const inicio = (paginaActual - 1) * REGISTROS_POR_PAGINA;
   const vistaPagina = filtrados.slice(inicio, inicio + REGISTROS_POR_PAGINA);
@@ -108,6 +118,32 @@ const RevisarCompras: React.FC = () => {
     );
   };
 
+  const abrirAdjuntos = (item: CompraItem) => {
+    const urls: string[] = [];
+    const nombres: string[] = [];
+
+    const arrUrls = (item.adjuntos_urls ?? []) as string[];
+    const arrNames = (item.adjuntos_nombres ?? []) as string[];
+
+    // nuevos
+    for (let i = 0; i < arrUrls.length; i++) {
+      urls.push(arrUrls[i]);
+      nombres.push(arrNames[i] ?? `Adjunto ${i + 1}`);
+    }
+
+    // compat viejo
+    if (urls.length === 0 && item.foto_url) {
+      urls.push(item.foto_url);
+      nombres.push("Foto");
+    }
+
+    setAdjuntosVista({ urls, nombres });
+  };
+
+  const esPdf = (url: string) =>
+    url.toLowerCase().includes(".pdf") ||
+    url.toLowerCase().includes("application/pdf");
+
   const exportarExcel = () => {
     if (!fechaDesde || !fechaHasta) {
       alert("Debe elegir un rango de fechas para exportar.");
@@ -125,7 +161,7 @@ const RevisarCompras: React.FC = () => {
       "Personal username": i.vendedor_username ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
       CEO: i.supervisor_nombre ?? "",
-      Foto: i.foto_url ?? "",
+      Adjuntos: (i.adjuntos_urls ?? []).join(" | ") || (i.foto_url ?? ""),
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataExport);
@@ -141,17 +177,53 @@ const RevisarCompras: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
-      {/* MODAL DE FOTO */}
-      {fotoVista && (
+      {/* MODAL DE ADJUNTOS */}
+      {adjuntosVista && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded shadow max-w-xl max-h-[90vh]">
-            <img src={fotoVista} className="max-h-[80vh] mx-auto rounded" />
-            <button
-              onClick={() => setFotoVista(null)}
-              className="mt-4 w-full bg-red-600 text-white p-2 rounded"
-            >
-              Cerrar
-            </button>
+          <div className="bg-white p-4 rounded shadow max-w-3xl w-[95vw] max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="font-semibold">Adjuntos (Fotos / PDFs)</h3>
+              <button
+                onClick={() => setAdjuntosVista(null)}
+                className="px-3 py-1 bg-red-600 text-white rounded"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            {adjuntosVista.urls.length === 0 ? (
+              <p className="text-sm text-gray-500">No hay adjuntos.</p>
+            ) : (
+              <div className="space-y-4">
+                {adjuntosVista.urls.map((url, idx) => {
+                  const nombre = adjuntosVista.nombres[idx] ?? `Adjunto ${idx + 1}`;
+                  const pdf = esPdf(url);
+
+                  return (
+                    <div key={`${url}-${idx}`} className="border rounded p-3">
+                      <div className="text-sm font-medium mb-2">{nombre}</div>
+
+                      {pdf ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block px-3 py-1 bg-blue-600 text-white rounded"
+                        >
+                          Abrir PDF
+                        </a>
+                      ) : (
+                        <img
+                          src={url}
+                          alt={nombre}
+                          className="max-h-[70vh] mx-auto rounded"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -210,61 +282,64 @@ const RevisarCompras: React.FC = () => {
           </thead>
 
           <tbody>
-            {vistaPagina.map((item) => (
-              <tr key={item.id}>
-                <td className="p-2 border">
-                  {formatearFechaVista(item.created_at)}
-                </td>
+            {vistaPagina.map((item) => {
+              const tieneAdjuntos =
+                (item.adjuntos_urls && item.adjuntos_urls.length > 0) ||
+                !!item.foto_url;
 
-                <td className="p-2 border">{item.que_es}</td>
-                <td className="p-2 border">{item.tipo_gasto}</td>
-                <td className="p-2 border">{item.urgencia}</td>
-                <td className="p-2 border">{item.detalle_adicional ?? "-"}</td>
-                <td className="p-2 border">{item.monto_total_estimado}</td>
-                <td className="p-2 border">{item.vendedor_nombre ?? "-"}</td>
+              return (
+                <tr key={item.id}>
+                  <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
+                  <td className="p-2 border">{item.que_es}</td>
+                  <td className="p-2 border">{item.tipo_gasto}</td>
+                  <td className="p-2 border">{item.urgencia}</td>
+                  <td className="p-2 border">{item.detalle_adicional ?? "-"}</td>
+                  <td className="p-2 border">{item.monto_total_estimado}</td>
+                  <td className="p-2 border">{item.vendedor_nombre ?? "-"}</td>
 
-                <td className="p-2 border text-center">
-                  {item.aprobado ? (
-                    <span className="text-green-600 font-bold">✔</span>
-                  ) : (
-                    <span className="text-red-600 font-bold">✘</span>
-                  )}
-                </td>
+                  <td className="p-2 border text-center">
+                    {item.aprobado ? (
+                      <span className="text-green-600 font-bold">✔</span>
+                    ) : (
+                      <span className="text-red-600 font-bold">✘</span>
+                    )}
+                  </td>
 
-                <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
+                  <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
 
-                {/* ACCIÓN: SOLO ADMIN */}
-                <td className="p-2 border text-center">
-                  {user?.role === "admin" ? (
-                    <button
-                      disabled={loading}
-                      onClick={() => toggleAprobado(item)}
-                      className={`px-3 py-1 rounded text-white ${
-                        item.aprobado ? "bg-gray-600" : "bg-green-600"
-                      }`}
-                    >
-                      {item.aprobado ? "Desaprobar" : "Aprobar"}
-                    </button>
-                  ) : (
-                    <span className="text-gray-400">-</span>
-                  )}
-                </td>
+                  {/* ACCIÓN: SOLO ADMIN */}
+                  <td className="p-2 border text-center">
+                    {user?.role === "admin" ? (
+                      <button
+                        disabled={loading}
+                        onClick={() => toggleAprobado(item)}
+                        className={`px-3 py-1 rounded text-white ${
+                          item.aprobado ? "bg-gray-600" : "bg-green-600"
+                        }`}
+                      >
+                        {item.aprobado ? "Desaprobar" : "Aprobar"}
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
 
-                {/* FOTO */}
-                <td className="p-2 border text-center">
-                  {item.foto_url ? (
-                    <button
-                      onClick={() => setFotoVista(item.foto_url!)}
-                      className="px-3 py-1 bg-blue-600 text-white rounded"
-                    >
-                      Ver Foto
-                    </button>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-              </tr>
-            ))}
+                  {/* ADJUNTOS */}
+                  <td className="p-2 border text-center">
+                    {tieneAdjuntos ? (
+                      <button
+                        onClick={() => abrirAdjuntos(item)}
+                        className="px-3 py-1 bg-blue-600 text-white rounded"
+                      >
+                        Ver Fotos/PDFs
+                      </button>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
 
             {vistaPagina.length === 0 && (
               <tr>
