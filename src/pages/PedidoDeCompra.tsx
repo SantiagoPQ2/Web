@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -10,7 +10,9 @@ const PedidoDeCompra: React.FC = () => {
   const [urgencia, setUrgencia] = useState("");
   const [detalleAdicional, setDetalleAdicional] = useState("");
   const [montoEstimado, setMontoEstimado] = useState("");
-  const [foto, setFoto] = useState<File | null>(null);
+
+  // ✅ múltiples adjuntos
+  const [adjuntos, setAdjuntos] = useState<File[]>([]);
 
   const [loading, setLoading] = useState(false);
 
@@ -34,18 +36,66 @@ const PedidoDeCompra: React.FC = () => {
     "Telefono",
   ];
 
-  // ✅ Agregado "No"
+  // ✅ Agregada opción "No"
   const urgencias = ["Se para la operacion", "Compra Habitual", "Reparacion", "No"];
 
-  // ✅ Labels con aclaración, pero values limpios
+  // ✅ Labels con aclaración, values limpios
   const montos: { value: string; label: string }[] = [
     { value: "0-50K", label: "0-50K" },
-    { value: "50-300K", label: "50-300K (obligatorio una foto)" },
-    { value: "300K a +", label: "300K a + (obligatorio una foto)" },
+    { value: "50-300K", label: "50-300K (obligatorio un adjunto)" },
+    { value: "300K a +", label: "300K a + (obligatorio un adjunto)" },
   ];
 
-  const montoRequiereFoto =
-    montoEstimado === "50-300K" || montoEstimado === "300K a +";
+  const montoRequiereAdjunto = useMemo(
+    () => montoEstimado === "50-300K" || montoEstimado === "300K a +",
+    [montoEstimado]
+  );
+
+  const handleAdjuntosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    setAdjuntos(files);
+  };
+
+  const subirAdjuntos = async (files: File[]) => {
+    if (!user?.username) throw new Error("Usuario sin username");
+
+    const uploadedUrls: string[] = [];
+    const uploadedNames: string[] = [];
+
+    for (const file of files) {
+      const fileExt = file.name.split(".").pop() || "bin";
+      const safeExt = fileExt.toLowerCase();
+
+      // nombre único
+      const fileName = `compra_${Date.now()}_${Math.random()
+        .toString(16)
+        .slice(2)}.${safeExt}`;
+
+      // agrupamos por user
+      const filePath = `${user.username}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("chat_uploads")
+        .upload(filePath, file, {
+          upsert: false,
+          contentType: file.type || undefined,
+        });
+
+      if (uploadError) {
+        console.error(uploadError);
+        throw new Error("Error subiendo adjuntos");
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("chat_uploads")
+        .getPublicUrl(filePath);
+
+      uploadedUrls.push(urlData.publicUrl);
+      uploadedNames.push(file.name);
+    }
+
+    return { uploadedUrls, uploadedNames };
+  };
 
   const handleSubmit = async () => {
     if (!queEs || !tipoGasto || !urgencia || !montoEstimado) {
@@ -58,44 +108,25 @@ const PedidoDeCompra: React.FC = () => {
       return;
     }
 
-    // ✅ Reglas de negocio: si el monto es alto, foto obligatoria
-    if (montoRequiereFoto && !foto) {
-      alert("Para este monto es obligatorio adjuntar una foto.");
+    // ✅ si monto alto, obligo al menos 1 adjunto
+    if (montoRequiereAdjunto && adjuntos.length === 0) {
+      alert("Para este monto es obligatorio adjuntar al menos una foto o PDF.");
       return;
     }
 
     setLoading(true);
 
-    // --------------------------
-    // SUBIR FOTO (si existe)
-    // --------------------------
-    let fotoUrl: string | null = null;
-
     try {
-      if (foto) {
-        const fileExt = foto.name.split(".").pop() || "jpg";
-        const fileName = `compra_${Date.now()}.${fileExt}`;
-        const filePath = `${user?.username}/${fileName}`;
+      // --------------------------
+      // SUBIR ADJUNTOS (si existen)
+      // --------------------------
+      let adjuntosUrls: string[] = [];
+      let adjuntosNombres: string[] = [];
 
-        const { error: uploadError } = await supabase.storage
-          .from("chat_uploads")
-          .upload(filePath, foto, {
-            upsert: false,
-            contentType: foto.type || "image/*",
-          });
-
-        if (uploadError) {
-          console.error(uploadError);
-          alert("Error subiendo la foto");
-          setLoading(false);
-          return;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from("chat_uploads")
-          .getPublicUrl(filePath);
-
-        fotoUrl = urlData.publicUrl;
+      if (adjuntos.length > 0) {
+        const res = await subirAdjuntos(adjuntos);
+        adjuntosUrls = res.uploadedUrls;
+        adjuntosNombres = res.uploadedNames;
       }
 
       // --------------------------
@@ -109,20 +140,22 @@ const PedidoDeCompra: React.FC = () => {
             tipo_gasto: tipoGasto,
             urgencia,
             detalle_adicional: detalleAdicional || null,
-            monto_total_estimado: montoEstimado, // value limpio
+            monto_total_estimado: montoEstimado,
             vendedor_nombre: user?.name ?? user?.username ?? "sin_nombre",
             vendedor_username: user?.username ?? null,
-            foto_url: fotoUrl,
+
+            // ✅ nuevos campos
+            adjuntos_urls: adjuntosUrls,
+            adjuntos_nombres: adjuntosNombres,
+
             aprobado: false,
             supervisor_nombre: null,
-            estado: "pendiente",
           },
         ]);
 
       if (insertError) {
         console.error(insertError);
         alert("Error al registrar el pedido");
-        setLoading(false);
         return;
       }
 
@@ -142,7 +175,7 @@ const PedidoDeCompra: React.FC = () => {
           user?.name ?? user?.username ?? "Un vendedor"
         } cargó un pedido de compra: ${queEs}. Tipo: ${tipoGasto}. Urgencia: ${urgencia}. Monto: ${montoEstimado}${
           detalleAdicional ? ` (Detalle: ${detalleAdicional})` : ""
-        }`;
+        }${adjuntosUrls.length ? ` (Adjuntos: ${adjuntosUrls.length})` : ""}`;
 
         const notis = supervisores.map((s) => ({
           usuario_username: s.username,
@@ -166,7 +199,7 @@ const PedidoDeCompra: React.FC = () => {
       setUrgencia("");
       setDetalleAdicional("");
       setMontoEstimado("");
-      setFoto(null);
+      setAdjuntos([]);
     } finally {
       setLoading(false);
     }
@@ -179,7 +212,6 @@ const PedidoDeCompra: React.FC = () => {
       </h2>
 
       <div className="space-y-4">
-        {/* 1) Qué es */}
         <div>
           <label className="text-sm font-medium">¿Qué es? *</label>
           <input
@@ -190,7 +222,6 @@ const PedidoDeCompra: React.FC = () => {
           />
         </div>
 
-        {/* 2) Tipo de gasto */}
         <div>
           <label className="text-sm font-medium">Tipo de Gasto *</label>
           <select
@@ -207,7 +238,6 @@ const PedidoDeCompra: React.FC = () => {
           </select>
         </div>
 
-        {/* 3) Urgencia */}
         <div>
           <label className="text-sm font-medium">Urgencia *</label>
           <select
@@ -224,7 +254,6 @@ const PedidoDeCompra: React.FC = () => {
           </select>
         </div>
 
-        {/* 4) Detalle adicional */}
         <div>
           <label className="text-sm font-medium">Detalle Adicional</label>
           <input
@@ -235,7 +264,6 @@ const PedidoDeCompra: React.FC = () => {
           />
         </div>
 
-        {/* 5) Monto total estimado */}
         <div>
           <label className="text-sm font-medium">Monto Total Estimado *</label>
           <select
@@ -251,25 +279,43 @@ const PedidoDeCompra: React.FC = () => {
             ))}
           </select>
 
-          {montoRequiereFoto && (
+          {montoRequiereAdjunto && (
             <p className="text-xs text-red-600 mt-1">
-              Para este monto es obligatorio adjuntar una foto.
+              Para este monto es obligatorio adjuntar al menos una foto o PDF.
             </p>
           )}
         </div>
 
-        {/* 6) Foto */}
+        {/* ✅ Adjuntos múltiples: fotos + pdf */}
         <div>
           <label className="text-sm font-medium">
-            Foto {montoRequiereFoto ? "(obligatoria)" : "(opcional)"}
+            Adjuntos (fotos o PDFs){" "}
+            {montoRequiereAdjunto ? "(obligatorio)" : "(opcional)"}
           </label>
+
           <input
             type="file"
-            accept="image/*"
-            capture="environment"
+            accept="image/*,application/pdf"
+            multiple
             className="w-full p-2 border rounded mt-1 dark:bg-gray-800"
-            onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
+            onChange={handleAdjuntosChange}
           />
+
+          {adjuntos.length > 0 && (
+            <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              <div className="font-medium mb-1">Archivos seleccionados:</div>
+              <ul className="list-disc pl-5 space-y-1">
+                {adjuntos.map((f, idx) => (
+                  <li key={`${f.name}-${idx}`}>
+                    {f.name}{" "}
+                    <span className="text-xs text-gray-500">
+                      ({Math.ceil(f.size / 1024)} KB)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <button
