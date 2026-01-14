@@ -24,6 +24,9 @@ interface CompraItem {
 
   // compat viejo
   foto_url?: string | null;
+
+  // ✅ NUEVO
+  respuesta?: string | null;
 }
 
 const RevisarCompras: React.FC = () => {
@@ -44,13 +47,31 @@ const RevisarCompras: React.FC = () => {
     nombres: string[];
   } | null>(null);
 
+  // ✅ edición de respuestas por fila (admin)
+  const [respuestasDraft, setRespuestasDraft] = useState<Record<string, string>>(
+    {}
+  );
+  const [guardandoRespuestaId, setGuardandoRespuestaId] = useState<string | null>(
+    null
+  );
+
+  const esAdmin = user?.role === "admin";
+
   const cargar = async () => {
     const { data, error } = await supabase
       .from("pedidos_compra")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error) setItems((data || []) as CompraItem[]);
+    if (!error) {
+      const rows = (data || []) as CompraItem[];
+      setItems(rows);
+
+      // inicializo drafts con lo que venga de DB
+      const initDrafts: Record<string, string> = {};
+      for (const r of rows) initDrafts[r.id] = r.respuesta ?? "";
+      setRespuestasDraft(initDrafts);
+    }
   };
 
   const formatearFechaVista = (iso: string) =>
@@ -84,7 +105,7 @@ const RevisarCompras: React.FC = () => {
 
   // ✅ Aprobar/Desaprobar SOLO admin
   const toggleAprobado = async (item: CompraItem) => {
-    if (!user || user.role !== "admin") {
+    if (!esAdmin) {
       alert("Solo admin puede aprobar/desaprobar.");
       return;
     }
@@ -97,7 +118,7 @@ const RevisarCompras: React.FC = () => {
       .from("pedidos_compra")
       .update({
         aprobado: nuevoValor,
-        supervisor_nombre: nuevoValor ? user.name ?? user.username : null,
+        supervisor_nombre: nuevoValor ? user?.name ?? user?.username : null,
       })
       .eq("id", item.id);
 
@@ -109,12 +130,39 @@ const RevisarCompras: React.FC = () => {
           ? {
               ...r,
               aprobado: nuevoValor,
-              supervisor_nombre: nuevoValor
-                ? user.name ?? user.username
-                : null,
+              supervisor_nombre: nuevoValor ? user?.name ?? user?.username : null,
             }
           : r
       )
+    );
+  };
+
+  // ✅ Guardar Respuesta (solo admin)
+  const guardarRespuesta = async (item: CompraItem) => {
+    if (!esAdmin) {
+      alert("Solo admin puede editar la respuesta.");
+      return;
+    }
+
+    const texto = (respuestasDraft[item.id] ?? "").trim();
+
+    setGuardandoRespuestaId(item.id);
+
+    const { error } = await supabase
+      .from("pedidos_compra")
+      .update({ respuesta: texto.length ? texto : null })
+      .eq("id", item.id);
+
+    setGuardandoRespuestaId(null);
+
+    if (error) {
+      console.error(error);
+      alert("Error guardando la respuesta");
+      return;
+    }
+
+    setItems((prev) =>
+      prev.map((r) => (r.id === item.id ? { ...r, respuesta: texto } : r))
     );
   };
 
@@ -125,13 +173,11 @@ const RevisarCompras: React.FC = () => {
     const arrUrls = (item.adjuntos_urls ?? []) as string[];
     const arrNames = (item.adjuntos_nombres ?? []) as string[];
 
-    // nuevos
     for (let i = 0; i < arrUrls.length; i++) {
       urls.push(arrUrls[i]);
       nombres.push(arrNames[i] ?? `Adjunto ${i + 1}`);
     }
 
-    // compat viejo
     if (urls.length === 0 && item.foto_url) {
       urls.push(item.foto_url);
       nombres.push("Foto");
@@ -141,8 +187,7 @@ const RevisarCompras: React.FC = () => {
   };
 
   const esPdf = (url: string) =>
-    url.toLowerCase().includes(".pdf") ||
-    url.toLowerCase().includes("application/pdf");
+    url.toLowerCase().includes(".pdf") || url.toLowerCase().includes("application/pdf");
 
   const exportarExcel = () => {
     if (!fechaDesde || !fechaHasta) {
@@ -161,6 +206,7 @@ const RevisarCompras: React.FC = () => {
       "Personal username": i.vendedor_username ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
       CEO: i.supervisor_nombre ?? "",
+      Respuesta: i.respuesta ?? "",
       Adjuntos: (i.adjuntos_urls ?? []).join(" | ") || (i.foto_url ?? ""),
     }));
 
@@ -276,6 +322,10 @@ const RevisarCompras: React.FC = () => {
               <th className="p-2 border">Personal</th>
               <th className="p-2 border text-center">Aprobado</th>
               <th className="p-2 border">CEO</th>
+
+              {/* ✅ NUEVO */}
+              <th className="p-2 border">Respuesta</th>
+
               <th className="p-2 border text-center">Acción</th>
               <th className="p-2 border text-center">Foto</th>
             </tr>
@@ -287,8 +337,10 @@ const RevisarCompras: React.FC = () => {
                 (item.adjuntos_urls && item.adjuntos_urls.length > 0) ||
                 !!item.foto_url;
 
+              const draft = respuestasDraft[item.id] ?? (item.respuesta ?? "");
+
               return (
-                <tr key={item.id}>
+                <tr key={item.id} className="align-top">
                   <td className="p-2 border">{formatearFechaVista(item.created_at)}</td>
                   <td className="p-2 border">{item.que_es}</td>
                   <td className="p-2 border">{item.tipo_gasto}</td>
@@ -307,9 +359,45 @@ const RevisarCompras: React.FC = () => {
 
                   <td className="p-2 border">{item.supervisor_nombre ?? "-"}</td>
 
+                  {/* ✅ RESPUESTA */}
+                  <td className="p-2 border min-w-[280px]">
+                    {esAdmin ? (
+                      <div className="space-y-2">
+                        <textarea
+                          className="w-full p-2 border rounded text-sm"
+                          rows={4}
+                          value={draft}
+                          onChange={(e) =>
+                            setRespuestasDraft((prev) => ({
+                              ...prev,
+                              [item.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Escribir respuesta..."
+                        />
+
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => guardarRespuesta(item)}
+                            disabled={guardandoRespuestaId === item.id}
+                            className="px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-50"
+                          >
+                            {guardandoRespuestaId === item.id
+                              ? "Guardando..."
+                              : "Guardar"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="whitespace-pre-wrap text-sm text-gray-700">
+                        {item.respuesta?.trim() ? item.respuesta : "-"}
+                      </div>
+                    )}
+                  </td>
+
                   {/* ACCIÓN: SOLO ADMIN */}
                   <td className="p-2 border text-center">
-                    {user?.role === "admin" ? (
+                    {esAdmin ? (
                       <button
                         disabled={loading}
                         onClick={() => toggleAprobado(item)}
@@ -343,7 +431,7 @@ const RevisarCompras: React.FC = () => {
 
             {vistaPagina.length === 0 && (
               <tr>
-                <td colSpan={11} className="p-4 text-center text-gray-500">
+                <td colSpan={12} className="p-4 text-center text-gray-500">
                   No hay registros dentro del rango.
                 </td>
               </tr>
