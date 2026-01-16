@@ -21,6 +21,7 @@ interface CompraItem {
   adjuntos_urls?: string[] | null;
   adjuntos_nombres?: string[] | null;
 
+  // compat viejo
   foto_url?: string | null;
 
   respuesta?: string | null;
@@ -32,17 +33,21 @@ const RevisarCompras: React.FC = () => {
   const [items, setItems] = useState<CompraItem[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Rango de fechas
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
 
+  // Paginación
   const [paginaActual, setPaginaActual] = useState(1);
   const REGISTROS_POR_PAGINA = 8;
 
+  // Modal adjuntos
   const [adjuntosVista, setAdjuntosVista] = useState<{
     urls: string[];
     nombres: string[];
   } | null>(null);
 
+  // Respuesta (draft por fila)
   const [respuestasDraft, setRespuestasDraft] = useState<Record<string, string>>(
     {}
   );
@@ -52,20 +57,29 @@ const RevisarCompras: React.FC = () => {
 
   const esAdmin = user?.role === "admin";
 
+  // ✅ Admin ve todo; no-admin solo lo suyo (por vendedor_username)
   const cargar = async () => {
-    const { data, error } = await supabase
-      .from("pedidos_compra")
-      .select("*")
-      .order("created_at", { ascending: false });
+    if (!user?.username) return;
 
-    if (!error) {
-      const rows = (data || []) as CompraItem[];
-      setItems(rows);
+    let query = supabase.from("pedidos_compra").select("*");
 
-      const initDrafts: Record<string, string> = {};
-      for (const r of rows) initDrafts[r.id] = r.respuesta ?? "";
-      setRespuestasDraft(initDrafts);
+    if (!esAdmin) {
+      query = query.eq("vendedor_username", user.username);
     }
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const rows = (data || []) as CompraItem[];
+    setItems(rows);
+
+    const initDrafts: Record<string, string> = {};
+    for (const r of rows) initDrafts[r.id] = r.respuesta ?? "";
+    setRespuestasDraft(initDrafts);
   };
 
   const formatearFechaVista = (iso: string) =>
@@ -97,6 +111,7 @@ const RevisarCompras: React.FC = () => {
     if (paginaActual > 1) setPaginaActual(paginaActual - 1);
   };
 
+  // ✅ Aprobar/Desaprobar SOLO admin
   const toggleAprobado = async (item: CompraItem) => {
     if (!esAdmin) {
       alert("Solo admin puede aprobar/desaprobar.");
@@ -107,7 +122,7 @@ const RevisarCompras: React.FC = () => {
 
     setLoading(true);
 
-    await supabase
+    const { error } = await supabase
       .from("pedidos_compra")
       .update({
         aprobado: nuevoValor,
@@ -116,6 +131,12 @@ const RevisarCompras: React.FC = () => {
       .eq("id", item.id);
 
     setLoading(false);
+
+    if (error) {
+      console.error(error);
+      alert("Error actualizando aprobado.");
+      return;
+    }
 
     setItems((prev) =>
       prev.map((r) =>
@@ -130,6 +151,7 @@ const RevisarCompras: React.FC = () => {
     );
   };
 
+  // ✅ Guardar Respuesta SOLO admin
   const guardarRespuesta = async (item: CompraItem) => {
     if (!esAdmin) {
       alert("Solo admin puede editar la respuesta.");
@@ -170,6 +192,7 @@ const RevisarCompras: React.FC = () => {
       nombres.push(arrNames[i] ?? `Adjunto ${i + 1}`);
     }
 
+    // compat viejo
     if (urls.length === 0 && item.foto_url) {
       urls.push(item.foto_url);
       nombres.push("Foto");
@@ -193,8 +216,8 @@ const RevisarCompras: React.FC = () => {
       "¿Qué es?": i.que_es,
       "Tipo de gasto": i.tipo_gasto,
       Urgencia: i.urgencia,
-      "Detalle adicional": i.detalle_adicional ?? "",
-      "Monto estimado": i.monto_total_estimado,
+      Detalle: i.detalle_adicional ?? "",
+      Monto: i.monto_total_estimado,
       Personal: i.vendedor_nombre ?? "",
       "Personal username": i.vendedor_username ?? "",
       Aprobado: i.aprobado ? "Sí" : "No",
@@ -212,12 +235,13 @@ const RevisarCompras: React.FC = () => {
 
   useEffect(() => {
     cargar();
-  }, []);
+    // si cambia usuario/rol, recarga
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.username, user?.role]);
 
   return (
-    // ✅ Contenedor más ancho para que entre todo prolijo
     <div className="max-w-7xl w-[98vw] mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
-      {/* MODAL DE ADJUNTOS */}
+      {/* MODAL ADJUNTOS */}
       {adjuntosVista && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-white p-4 rounded shadow max-w-3xl w-[95vw] max-h-[90vh] overflow-auto">
@@ -305,10 +329,9 @@ const RevisarCompras: React.FC = () => {
       {/* TABLA */}
       <div className="border rounded overflow-hidden">
         <table className="w-full table-fixed border-collapse text-sm">
-          {/* ✅ Rebalanceo anchos: "¿Qué es?" más ancho, Detalle ancho, Acción/Adjuntos con espacio */}
           <colgroup>
             <col style={{ width: "7%" }} />   {/* Fecha */}
-            <col style={{ width: "12%" }} />  {/* ¿Qué es? (más ancho) */}
+            <col style={{ width: "12%" }} />  {/* ¿Qué es? */}
             <col style={{ width: "8%" }} />   {/* Tipo */}
             <col style={{ width: "7%" }} />   {/* Urgencia */}
             <col style={{ width: "22%" }} />  {/* Detalle */}
@@ -317,8 +340,8 @@ const RevisarCompras: React.FC = () => {
             <col style={{ width: "6%" }} />   {/* Aprobado */}
             <col style={{ width: "6%" }} />   {/* CEO */}
             <col style={{ width: "14%" }} />  {/* Respuesta */}
-            <col style={{ width: "7%" }} />   {/* Acción (más ancho) */}
-            <col style={{ width: "8%" }} />   {/* Adjuntos (más ancho) */}
+            <col style={{ width: "7%" }} />   {/* Acción */}
+            <col style={{ width: "8%" }} />   {/* Adjuntos */}
           </colgroup>
 
           <thead className="bg-gray-100">
@@ -352,7 +375,6 @@ const RevisarCompras: React.FC = () => {
                     {formatearFechaVista(item.created_at)}
                   </td>
 
-                  {/* ✅ "¿Qué es?" con wrap prolijo (sin cascada extrema por ancho mayor) */}
                   <td className="p-2 border whitespace-normal break-words">
                     {item.que_es}
                   </td>
@@ -365,7 +387,6 @@ const RevisarCompras: React.FC = () => {
                     {item.urgencia}
                   </td>
 
-                  {/* ✅ Detalle ancho + scroll vertical interno */}
                   <td className="p-2 border">
                     <div className="max-h-40 overflow-auto whitespace-pre-wrap break-words">
                       {item.detalle_adicional ?? "-"}
@@ -392,7 +413,6 @@ const RevisarCompras: React.FC = () => {
                     {item.supervisor_nombre ?? "-"}
                   </td>
 
-                  {/* RESPUESTA */}
                   <td className="p-2 border">
                     {esAdmin ? (
                       <div className="space-y-2">
@@ -428,7 +448,6 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
-                  {/* ✅ ACCIÓN: botón ocupa todo el ancho de la celda, sin solape */}
                   <td className="p-2 border text-center">
                     {esAdmin ? (
                       <button
@@ -445,7 +464,6 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
-                  {/* ✅ ADJUNTOS: botón ocupa todo el ancho de la celda, sin solape */}
                   <td className="p-2 border text-center">
                     {tieneAdjuntos ? (
                       <button
