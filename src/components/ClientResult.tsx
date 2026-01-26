@@ -10,13 +10,15 @@ import {
 import { ClienteData } from "../types";
 
 const PROMO_CATEGORIES: Record<string, string[]> = {
-  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta", "queso"],
+  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta", "queso", "Cremoso", "Nuyun"],
   Peñaflor: ["vino", "cerveza", "trapiche", "alma mora", "dada"],
   Hamburguesas: ["hamburguesa", "paty"],
-  Salchichas: ["viena", "vss"],
+  Salchichas: ["viena", "vss", "ICB" ],
   Azucar: ["azucar"],
   Yerba: ["yerba", "manto"],
   Vanuts: ["vanuts"],
+  Manteca: ["manteca"],
+  QuesoRallado: ["rallado"],
   Otros: [],
 };
 
