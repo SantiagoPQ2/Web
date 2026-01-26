@@ -79,8 +79,9 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
     const active = tab === value;
     return (
       <button
+        type="button"
         onClick={() => setTab(value)}
-        className={`px-3 py-1.5 rounded-md text-sm font-semibold border ${
+        className={`px-3 py-1.5 rounded-md text-sm font-semibold border transition-colors w-full sm:w-auto ${
           active
             ? "bg-red-700 text-white border-red-700"
             : "border-red-300 text-red-700 hover:bg-red-50"
@@ -133,15 +134,22 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
 
       {/* Promos */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
+        {/* ✅ Header responsivo: mobile apila; desktop mantiene fila */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center">
             <FileText className="h-5 w-5 mr-2 text-red-700" />
             <h3 className="font-semibold">Promos</h3>
           </div>
-          <div className="flex gap-2">
+
+          {/* ✅ Mobile: grilla 2 columnas; Desktop: fila */}
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2 sm:justify-end">
             <TabButton value="estrategicas" label="Estrategicas" />
             <TabButton value="operativas" label="Operativas" />
             <TabButton value="escalas" label="Escalas" />
+
+            {/* Para que la grilla en mobile quede pareja (2 columnas).
+               En desktop no afecta visualmente. */}
+            <div className="hidden sm:block" />
           </div>
         </div>
 
