@@ -1,18 +1,18 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { User, FileText, List, Info, ChevronDown, Building } from "lucide-react";
 import { ClienteData } from "../types";
 
 const PROMO_CATEGORIES: Record<string, string[]> = {
-  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "nuyun", "paleta", "Cremoso", "Queso"],
-  Peñaflor: ["dada", "frizze", "vino", "cerveza", "SMF", "gordons", "MSD", "trapiche", "Alma Mora", "Alaris", "Navarro", "San Telmo", "Cazador", "Trapiche", "Brut", "80094", "Bubble"],
+  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "nuyun", "paleta", "cremoso", "queso"],
+  Peñaflor: ["dada", "frizze", "vino", "cerveza", "smf", "gordons", "msd", "trapiche", "alma mora", "alaris", "navarro", "san telmo", "cazador", "brut", "80094", "bubble"],
   Hamburguesas: ["hamburguesa", "paty"],
-  Salchichas: ["VSS", "ICB", "PatyViena"],
-  Azucar: ["Azucar"],
-  Softys: ["Softy"],
-  Molinos: ["Molino", "Snack"],
+  Salchichas: ["vss", "icb", "patyviena"],
+  Azucar: ["azucar"],
+  Softys: ["softy"],
+  Molinos: ["molino", "snack"],
   QuesoRallado: ["rallado"],
-  Yerba: ["Manto","yerba"],
-  Vanuts: ["Vanuts"],
+  Yerba: ["manto", "yerba"],
+  Vanuts: ["vanuts"],
   Otros: [],
 };
 
@@ -47,9 +47,56 @@ function categorizePromos(promosRaw: string | undefined) {
   return categorized;
 }
 
+type PromoTab = "estrategicas" | "operativas" | "escalas";
+
+const tabLabel: Record<PromoTab, string> = {
+  estrategicas: "Estrategicas",
+  operativas: "Operativas",
+  escalas: "Escalas",
+};
+
 const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
-  const categorizedPromos = categorizePromos(cliente.columnaD);
+  const [tab, setTab] = useState<PromoTab>("estrategicas");
+
+  // Elegimos el texto a mostrar según tab.
+  // Compatibilidad:
+  // - Estrategicas: usa columnaE si existe; si no, usa columnaD (Promos legacy)
+  // - Operativas/Escalas: si no existen, quedan vacías
+  const promosText = useMemo(() => {
+    if (tab === "estrategicas") {
+      return (
+        cliente.columnaE ||
+        cliente.promos_estrategicas ||
+        cliente.columnaD ||
+        ""
+      );
+    }
+    if (tab === "operativas") {
+      return cliente.columnaF || cliente.promos_operativas || "";
+    }
+    return cliente.columnaG || cliente.promos_escalas || "";
+  }, [tab, cliente]);
+
+  const categorizedPromos = useMemo(() => categorizePromos(promosText), [promosText]);
   const categories = Object.keys(categorizedPromos);
+
+  const TabButton: React.FC<{ value: PromoTab }> = ({ value }) => {
+    const active = tab === value;
+    return (
+      <button
+        type="button"
+        onClick={() => setTab(value)}
+        className={[
+          "px-3 py-1.5 rounded-md text-sm font-semibold border transition-colors",
+          active
+            ? "bg-red-700 border-red-700 text-white"
+            : "bg-white dark:bg-gray-800 border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30",
+        ].join(" ")}
+      >
+        {tabLabel[value]}
+      </button>
+    );
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-6 animate-fadeIn transition-colors duration-300">
@@ -98,15 +145,24 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
           </p>
         </div>
 
-        {/* Promos categorizadas */}
-        {categories.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center mb-2">
+        {/* Promos + Tabs */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+            <div className="flex items-center">
               <FileText className="h-5 w-5 text-red-800 dark:text-red-400 mr-2" />
               <h3 className="font-semibold text-gray-800 dark:text-gray-100">Promos</h3>
             </div>
 
-            {categories.map((cat) => (
+            <div className="flex items-center gap-2">
+              <TabButton value="estrategicas" />
+              <TabButton value="operativas" />
+              <TabButton value="escalas" />
+            </div>
+          </div>
+
+          {/* Si hay promos en la tab actual */}
+          {categories.length > 0 ? (
+            categories.map((cat) => (
               <div
                 key={cat}
                 className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-800 rounded-lg p-4 transition-colors duration-300"
@@ -127,20 +183,13 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Si no hay promos */}
-        {categories.length === 0 && (
-          <div className="bg-red-100 dark:bg-red-900/40 rounded-lg p-4 transition-colors duration-300">
-            <div className="flex items-center mb-2">
-              <FileText className="h-5 w-5 text-red-800 dark:text-red-400 mr-2" />
-              <h3 className="font-semibold text-gray-800 dark:text-gray-100">Promos</h3>
+            ))
+          ) : (
+            <div className="bg-red-100 dark:bg-red-900/40 rounded-lg p-4 transition-colors duration-300">
+              <p className="text-gray-700 dark:text-gray-200">Sin información</p>
             </div>
-            <p className="text-gray-700 dark:text-gray-200">Sin información</p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
