@@ -74,7 +74,7 @@ function ProtectedApp() {
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
 
         {/* ✅ Compras: vendedor carga pedido */}
-        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        
       </Routes>
     );
   }
@@ -97,8 +97,9 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
-
-        {/* ❌ Revisar Compras NO para supervisor */}
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        <Route path="/revisar-compras" element={<RevisarCompras />} />
+        
       </Routes>
     );
   }
