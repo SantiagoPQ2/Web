@@ -205,12 +205,6 @@ const Navigation: React.FC = () => {
         description: "Solicitar baja o cambio de ruta",
       },
       {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
         name: "Chat",
         path: "/chat",
         icon: MessageSquare,
@@ -233,6 +227,18 @@ const Navigation: React.FC = () => {
         path: "/",
         icon: Search,
         description: "Consultar información de clientes",
+      },
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Ver pedidos de compra",
       },
       {
         name: "Bonificaciones",
