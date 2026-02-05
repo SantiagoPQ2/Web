@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { ClienteData } from "../types";
 
+// ✅ Import del PDF como asset (Netlify lo copia al build sí o sí)
+import escalasPdf from "../assets/Escalas.pdf";
+
 const PROMO_CATEGORIES: Record<string, string[]> = {
   Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta", "queso", "Cremoso", "Nuyun"],
   Peñaflor: ["vino", "cerveza", "trapiche", "alma mora", "dada"],
@@ -53,7 +56,7 @@ function categorizePromos(promosRaw: string) {
 
 type PromoTab = "estrategicas" | "operativas" | "escalas";
 
-const ESCALAS_PDF_URL = "/Escalas.pdf";
+const ESCALAS_PDF_URL = escalasPdf;
 
 const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
   const [tab, setTab] = useState<PromoTab>("estrategicas");
@@ -61,13 +64,14 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
   const promosText = useMemo(() => {
     if (tab === "estrategicas") return cliente.columnaD || "";
     if (tab === "operativas") return cliente.columnaF || "";
-    return ""; // IMPORTANT: en "escalas" NO mostramos texto, mostramos PDF
+    return ""; // ✅ En "escalas" NO mostramos texto, mostramos PDF
   }, [tab, cliente]);
 
   const categorizedPromos = useMemo(
     () => categorizePromos(promosText),
     [promosText]
   );
+
   const categories = Object.keys(categorizedPromos);
 
   const TabButton = ({
@@ -135,14 +139,14 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
 
       {/* Promos / Tabs */}
       <div className="space-y-3">
-        {/* Header responsivo */}
+        {/* ✅ Header responsivo: mobile apila; desktop mantiene fila */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center">
             <FileText className="h-5 w-5 mr-2 text-red-700" />
             <h3 className="font-semibold">Promos</h3>
           </div>
 
-          {/* Mobile: grilla 2 columnas; Desktop: fila */}
+          {/* ✅ Mobile: grilla 2 columnas; Desktop: fila */}
           <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2 sm:justify-end">
             <TabButton value="estrategicas" label="Estrategicas" />
             <TabButton value="operativas" label="Operativas" />
@@ -155,9 +159,7 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
         {tab === "escalas" ? (
           <div className="bg-white border rounded-lg p-3">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-              <p className="text-sm text-gray-700">
-                Escalas (PDF)
-              </p>
+              <p className="text-sm text-gray-700">Escalas (PDF)</p>
 
               <a
                 href={ESCALAS_PDF_URL}
@@ -169,16 +171,12 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
               </a>
             </div>
 
-            {/* Visor PDF */}
             <div className="w-full overflow-hidden rounded-md border">
               <object
                 data={ESCALAS_PDF_URL}
                 type="application/pdf"
                 className="w-full"
-                style={{
-                  // Mobile: buen alto; Desktop: más alto
-                  height: "70vh",
-                }}
+                style={{ height: "70vh" }}
               >
                 <div className="p-4 text-sm">
                   Tu navegador no puede mostrar el PDF acá.{" "}
@@ -196,7 +194,6 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
             </div>
           </div>
         ) : (
-          /* Estratégicas / Operativas: lista categorizada como antes */
           <>
             {categories.length > 0 ? (
               categories.map((cat) => (
