@@ -61,6 +61,20 @@ const ESCALAS_PDF_URL = escalasPdf;
 const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
   const [tab, setTab] = useState<PromoTab>("estrategicas");
 
+  // ✅ Link a Google Viewer para que en celular abra SIEMPRE
+  const escalasAbsoluteUrl = useMemo(() => {
+    // asegura URL absoluta para gview
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}${ESCALAS_PDF_URL}`;
+  }, []);
+
+  const escalasGViewUrl = useMemo(() => {
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(
+      escalasAbsoluteUrl
+    )}`;
+  }, [escalasAbsoluteUrl]);
+
   const promosText = useMemo(() => {
     if (tab === "estrategicas") return cliente.columnaD || "";
     if (tab === "operativas") return cliente.columnaF || "";
@@ -139,14 +153,14 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
 
       {/* Promos / Tabs */}
       <div className="space-y-3">
-        {/* ✅ Header responsivo: mobile apila; desktop mantiene fila */}
+        {/* Header responsivo */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center">
             <FileText className="h-5 w-5 mr-2 text-red-700" />
             <h3 className="font-semibold">Promos</h3>
           </div>
 
-          {/* ✅ Mobile: grilla 2 columnas; Desktop: fila */}
+          {/* Mobile: grilla 2 columnas; Desktop: fila */}
           <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2 sm:justify-end">
             <TabButton value="estrategicas" label="Estrategicas" />
             <TabButton value="operativas" label="Operativas" />
@@ -155,14 +169,15 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
           </div>
         </div>
 
-        {/* ✅ Si el tab es "Escalas", mostramos SOLO el PDF */}
+        {/* ✅ Si el tab es "Escalas", mostramos SOLO el PDF (gview para mobile) */}
         {tab === "escalas" ? (
           <div className="bg-white border rounded-lg p-3">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
               <p className="text-sm text-gray-700">Escalas (PDF)</p>
 
+              {/* ✅ En mobile abre el visor gview, no el PDF nativo */}
               <a
-                href={ESCALAS_PDF_URL}
+                href={escalasGViewUrl}
                 target="_blank"
                 rel="noreferrer"
                 className="text-sm font-semibold text-red-700 hover:underline"
@@ -171,26 +186,14 @@ const ClientResult: React.FC<{ cliente: ClienteData }> = ({ cliente }) => {
               </a>
             </div>
 
+            {/* ✅ Embebido con gview (más compatible en celulares) */}
             <div className="w-full overflow-hidden rounded-md border">
-              <object
-                data={ESCALAS_PDF_URL}
-                type="application/pdf"
+              <iframe
+                title="Escalas PDF"
+                src={escalasGViewUrl}
                 className="w-full"
                 style={{ height: "70vh" }}
-              >
-                <div className="p-4 text-sm">
-                  Tu navegador no puede mostrar el PDF acá.{" "}
-                  <a
-                    className="text-red-700 font-semibold hover:underline"
-                    href={ESCALAS_PDF_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Abrilo haciendo click acá
-                  </a>
-                  .
-                </div>
-              </object>
+              />
             </div>
           </div>
         ) : (
