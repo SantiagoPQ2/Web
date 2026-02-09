@@ -13,7 +13,7 @@ import { ClienteData } from "../types";
 import escalasPdf from "../assets/Escalas.pdf";
 
 const PROMO_CATEGORIES: Record<string, string[]> = {
-  Fiambres: ["fiambres", "jamon", "mortadela", "salame", "paleta", "queso", "Cremoso", "Nuyun","1153";"593030";"1154";"Ibarazi"],
+  Fiambres: ["cremoso", "fiambres", "jamon", "mortadela", "salame", "paleta", "queso", "Cremoso", "Nuyun","cremoso", "nuyun","1153";"593030";"1154";"Ibarazi"],
   Peñaflor: ["vino", "cerveza", "trapiche", "alma mora", "dada"],
   Hamburguesas: ["hamburguesa", "paty"],
   Salchichas: ["viena", "vss", "ICB", "Vienissima" ],
