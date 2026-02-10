@@ -146,6 +146,10 @@ const Navigation: React.FC = () => {
       case "/revisar-compras":
         return "Revisar Compras";
 
+      // ✅ VIDEO LOG (solo test por ahora)
+      case "/video-log":
+        return "Video Log";
+
       // === B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
@@ -170,7 +174,7 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // ✅ TEST (igual a vendedor para pruebas)
+  // ✅ TEST (igual a vendedor para pruebas) + ✅ incluye Video Log
   if (user?.role === "test") {
     menuItems = [
       {
@@ -209,6 +213,15 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
       },
+
+      // ✅ NUEVO: SOLO TEST
+      {
+        name: "Video Log",
+        path: "/video-log",
+        icon: FileText,
+        description: "Registro de videos vistos",
+      },
+
       {
         name: "Chat",
         path: "/chat",
@@ -681,3 +694,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
+
