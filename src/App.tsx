@@ -25,6 +25,7 @@ import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
 import PDFs from "./pages/PDFs";
+import VideoWatchLog from "./pages/VideoWatchLog";
 
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
@@ -51,6 +52,9 @@ import MandatoryVideoGate from "./components/MandatoryVideoGate";
 
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
+
+// ✅ ID del video: si mañana cambiás el video, cambiás este string (v2, v3, etc.)
+const INTRO_VIDEO_ID = "capsula_intro_v1";
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -80,6 +84,7 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+        <Route path="/video-log" element={<VideoWatchLog />} />
 
         {/* ✅ evita pantallas vacías */}
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -238,7 +243,12 @@ function ProtectedApp() {
 
   // ✅ SOLO "test" ve el gate
   return role === "test" ? (
-    <MandatoryVideoGate roleToEnforce="test" videoSrc={INTRO_VIDEO_URL} oncePerDay>
+    <MandatoryVideoGate
+      roleToEnforce="test"
+      videoId={INTRO_VIDEO_ID}
+      videoSrc={INTRO_VIDEO_URL}
+      oncePerDay
+    >
       {appLayout}
     </MandatoryVideoGate>
   ) : (
@@ -257,3 +267,4 @@ function App() {
 }
 
 export default App;
+
