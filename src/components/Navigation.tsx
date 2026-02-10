@@ -64,7 +64,6 @@ const Navigation: React.FC = () => {
 
   const marcarLeidas = async () => {
     if (!user?.username) return;
-
     await supabase
       .from("notificaciones")
       .update({ leida: true })
@@ -74,8 +73,6 @@ const Navigation: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!user?.username) return;
-
     cargarNotificaciones();
 
     const sub = supabase
@@ -84,18 +81,15 @@ const Navigation: React.FC = () => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones" },
         (payload) => {
-          if ((payload as any)?.new?.usuario_username === user?.username) {
+          if (payload.new.usuario_username === user?.username) {
             cargarNotificaciones();
           }
         }
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(sub);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.username]);
+    return () => supabase.removeChannel(sub);
+  }, [user]);
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
@@ -103,6 +97,7 @@ const Navigation: React.FC = () => {
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
+        // Para administracion-cordoba "/" es Pedido de Compra, para los demás sigue siendo Buscar Cliente
         return user?.role === "administracion-cordoba"
           ? "Pedido de Compra"
           : "Buscar Cliente";
@@ -170,62 +165,8 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // ✅ TEST (igual a vendedor para pruebas)
-  if (user?.role === "test") {
-    menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas de crédito",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y clientes del día",
-      },
-      {
-        name: "Baja / Cambio Ruta",
-        path: "/baja-cliente",
-        icon: FileText,
-        description: "Solicitar baja o cambio de ruta",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
-    ];
-  }
-
   // VENDEDOR
-  else if (user?.role === "vendedor") {
+  if (user?.role === "vendedor") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -262,6 +203,12 @@ const Navigation: React.FC = () => {
         path: "/baja-cliente",
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
+      },
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
       },
       {
         name: "Chat",
@@ -286,18 +233,6 @@ const Navigation: React.FC = () => {
         path: "/",
         icon: Search,
         description: "Consultar información de clientes",
-      },
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Ver pedidos de compra",
       },
       {
         name: "Bonificaciones",
@@ -511,6 +446,10 @@ const Navigation: React.FC = () => {
       },
     ];
   }
+
+  // -------------------------
+  // COMPONENTE
+  // -------------------------
 
   const hideSettingsEverywhere = user?.role === "administracion-cordoba";
 
