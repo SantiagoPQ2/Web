@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -45,10 +45,6 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
 
-// ✅ Video gate
-import MandatoryVideoGate from "./components/MandatoryVideoGate";
-import { supabase } from "./config/supabase";
-
 function ProtectedApp() {
   const { user } = useAuth();
   const hasUpdate = useVersionChecker(60000);
@@ -60,41 +56,12 @@ function ProtectedApp() {
   if (!user) return <Login />;
 
   const role = user.role;
-
-  // ✅ Video desde Supabase Storage (bucket documentos_pdf)
-  // IMPORTANTE: esto requiere que el bucket/archivo sea público
-  const videoSrc = useMemo(() => {
-    const { data } = supabase.storage
-      .from("documentos_pdf")
-      .getPublicUrl("Capsula Introduccion.mp4");
-    return data.publicUrl;
-  }, []);
-
   let allowedRoutes;
-
-  // ---------------------------
-  // 🚀 0) TEST (para probar sin romper)
-  // ---------------------------
-  if (role === "test") {
-    // ✅ Lo dejé igual a vendedor para que test tenga lo mismo
-    allowedRoutes = (
-      <Routes>
-        <Route path="/" element={<SearchPage />} />
-        <Route path="/bonificaciones" element={<Bonificaciones />} />
-        <Route path="/notas-credito" element={<NotasCredito />} />
-        <Route path="/gps-logger" element={<GpsLogger />} />
-        <Route path="/informacion" element={<Informacion />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
-      </Routes>
-    );
-  }
 
   // ---------------------------
   // 🚀 1) VENDEDOR
   // ---------------------------
-  else if (role === "vendedor") {
+  if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -105,6 +72,9 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        {/* ✅ Compras: vendedor carga pedido */}
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
       </Routes>
     );
   }
@@ -127,8 +97,8 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
-        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
-        <Route path="/revisar-compras" element={<RevisarCompras />} />
+
+        {/* ❌ Revisar Compras NO para supervisor */}
       </Routes>
     );
   }
@@ -170,7 +140,11 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
         <Route path="/pdfs" element={<PDFs />} />
+
+        {/* ✅ Compras */}
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+
+        {/* ✅ Revisar Compras solo admin (y administracion-cordoba en su bloque) */}
         <Route path="/revisar-compras" element={<RevisarCompras />} />
 
         {/* 🌟 B2B */}
@@ -187,9 +161,14 @@ function ProtectedApp() {
   else if (role === "administracion-cordoba") {
     allowedRoutes = (
       <Routes>
+        {/* Que al entrar a "/" vaya directo al formulario */}
         <Route path="/" element={<PedidoDeCompra />} />
+
+        {/* Las dos páginas permitidas */}
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
+
+        {/* Catch-all para evitar pantallas vacías */}
         <Route path="*" element={<PedidoDeCompra />} />
       </Routes>
     );
@@ -215,8 +194,7 @@ function ProtectedApp() {
     location.pathname === "/b2b/carrito" ||
     location.pathname === "/b2b/pedidos";
 
-  // ✅ Layout principal (lo envolvemos con gate SOLO si role === "test")
-  const appLayout = (
+  return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
 
@@ -231,18 +209,6 @@ function ProtectedApp() {
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
-
-  return role === "test" ? (
-    <MandatoryVideoGate
-      roleToEnforce="test"
-      videoSrc={videoSrc}
-      oncePerDay={true}
-    >
-      {appLayout}
-    </MandatoryVideoGate>
-  ) : (
-    appLayout
-  );
 }
 
 function App() {
@@ -256,5 +222,4 @@ function App() {
 }
 
 export default App;
-
 
