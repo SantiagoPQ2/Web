@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   useLocation,
+  Navigate,
 } from "react-router-dom";
 
 import Navigation from "./components/Navigation";
@@ -45,6 +46,12 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
 
+// ✅ Video gate
+import MandatoryVideoGate from "./components/MandatoryVideoGate";
+
+const INTRO_VIDEO_URL =
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
+
 function ProtectedApp() {
   const { user } = useAuth();
   const hasUpdate = useVersionChecker(60000);
@@ -56,12 +63,13 @@ function ProtectedApp() {
   if (!user) return <Login />;
 
   const role = user.role;
-  let allowedRoutes;
+
+  let allowedRoutes: React.ReactNode;
 
   // ---------------------------
-  // 🚀 1) VENDEDOR
+  // 🚀 0) TEST (igual a vendedor) + catch-all
   // ---------------------------
-  if (role === "vendedor") {
+  if (role === "test") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -73,14 +81,34 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
 
-        {/* ✅ Compras: vendedor carga pedido */}
-        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        {/* ✅ evita pantallas vacías */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
 
   // ---------------------------
-  // 🚀 2) SUPERVISOR
+  // 🚀 1) VENDEDOR + catch-all
+  // ---------------------------
+  else if (role === "vendedor") {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<SearchPage />} />
+        <Route path="/bonificaciones" element={<Bonificaciones />} />
+        <Route path="/notas-credito" element={<NotasCredito />} />
+        <Route path="/gps-logger" element={<GpsLogger />} />
+        <Route path="/informacion" element={<Informacion />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
+
+  // ---------------------------
+  // 🚀 2) SUPERVISOR + catch-all
   // ---------------------------
   else if (role === "supervisor") {
     allowedRoutes = (
@@ -97,14 +125,16 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        <Route path="/revisar-compras" element={<RevisarCompras />} />
 
-        {/* ❌ Revisar Compras NO para supervisor */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
 
   // ---------------------------
-  // 🚀 3) LOGÍSTICA
+  // 🚀 3) LOGÍSTICA + catch-all
   // ---------------------------
   else if (role === "logistica") {
     allowedRoutes = (
@@ -114,12 +144,14 @@ function ProtectedApp() {
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
+
+        <Route path="*" element={<Navigate to="/rechazos/nuevo" replace />} />
       </Routes>
     );
   }
 
   // ---------------------------
-  // 🚀 4) ADMIN (incluye B2B)
+  // 🚀 4) ADMIN (incluye B2B) + catch-all
   // ---------------------------
   else if (role === "admin") {
     allowedRoutes = (
@@ -140,47 +172,41 @@ function ProtectedApp() {
         <Route path="/powerbi" element={<PowerBIPage />} />
         <Route path="/revisar-bajas" element={<RevisarBajas />} />
         <Route path="/pdfs" element={<PDFs />} />
-
-        {/* ✅ Compras */}
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
-
-        {/* ✅ Revisar Compras solo admin (y administracion-cordoba en su bloque) */}
         <Route path="/revisar-compras" element={<RevisarCompras />} />
 
         {/* 🌟 B2B */}
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
 
   // ---------------------------
-  // 🚀 5) ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
+  // 🚀 5) ADMINISTRACION - CÓRDOBA + catch-all
   // ---------------------------
   else if (role === "administracion-cordoba") {
     allowedRoutes = (
       <Routes>
-        {/* Que al entrar a "/" vaya directo al formulario */}
         <Route path="/" element={<PedidoDeCompra />} />
-
-        {/* Las dos páginas permitidas */}
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
-
-        {/* Catch-all para evitar pantallas vacías */}
-        <Route path="*" element={<PedidoDeCompra />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
 
   // ---------------------------
-  // 🚀 6) Default
+  // 🚀 6) Default + catch-all
   // ---------------------------
   else {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
@@ -194,7 +220,7 @@ function ProtectedApp() {
     location.pathname === "/b2b/carrito" ||
     location.pathname === "/b2b/pedidos";
 
-  return (
+  const appLayout = (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
 
@@ -209,6 +235,15 @@ function ProtectedApp() {
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
+
+  // ✅ SOLO "test" ve el gate
+  return role === "test" ? (
+    <MandatoryVideoGate roleToEnforce="test" videoSrc={INTRO_VIDEO_URL} oncePerDay>
+      {appLayout}
+    </MandatoryVideoGate>
+  ) : (
+    appLayout
+  );
 }
 
 function App() {
@@ -222,4 +257,3 @@ function App() {
 }
 
 export default App;
-
