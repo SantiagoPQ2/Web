@@ -1,146 +1,80 @@
+// src/components/MandatoryVideoGate.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 
 type Props = {
-  rolesToEnforce: string[];      // ej: ["vendedor"] o ["test","vendedor"]
-  videoId: string;              // ej: "capsula_intro_v1"
-  videoSrc: string;             // URL pública supabase storage
-  oncePerDay?: boolean;         // true
   children: React.ReactNode;
+  roleToEnforce: string; // "test" o "vendedor"
+  videoId: string; // ej: "capsula_intro_v1"
+  videoSrc: string; // URL pública del mp4
+  oncePerDay?: boolean; // default true
 };
 
-function getLocalYYYYMMDD(d = new Date()) {
+function getLocalDayKey() {
+  // Clave por día local del dispositivo: YYYY-MM-DD
+  const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
+function canPlayInline() {
+  // Safari iOS necesita playsInline + muted para autoplays; acá no usamos autoplay,
+  // pero ayuda a que no rompa layout.
+  return true;
+}
+
 const MandatoryVideoGate: React.FC<Props> = ({
-  rolesToEnforce,
+  children,
+  roleToEnforce,
   videoId,
   videoSrc,
   oncePerDay = true,
-  children,
 }) => {
-  const [loading, setLoading] = useState(true);
-  const [mustWatch, setMustWatch] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [readyToUnlock, setReadyToUnlock] = useState(false);
+  const { user } = useAuth();
+
+  const [checking, setChecking] = useState(true);
+  const [allowed, setAllowed] = useState(false);
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [completedNow, setCompletedNow] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const lastAllowedTimeRef = useRef(0);
 
-  // Traemos user desde tu storage (como venís haciendo en la app)
-  const currentUser = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("user") || "{}");
-    } catch {
-      return {};
-    }
-  }, []);
+  const dayKey = useMemo(() => getLocalDayKey(), []);
+  const storageKey = useMemo(() => {
+    // fallback local para "no repetir hoy aunque se desloguee"
+    // incluye user.id (si existe) + role + videoId + dayKey
+    const uid = (user as any)?.id || (user as any)?.user_id || "unknown";
+    return `mandatory_video_done:${uid}:${roleToEnforce}:${videoId}:${dayKey}`;
+  }, [user, roleToEnforce, videoId, dayKey]);
 
-  const role = currentUser?.role;
-  const userId = currentUser?.id;
+  const mustEnforce = useMemo(() => {
+    if (!user) return false;
+    return user.role === roleToEnforce;
+  }, [user, roleToEnforce]);
 
-  const shouldEnforce =
-    !!role && rolesToEnforce.includes(role) && !!userId && !!videoSrc;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const run = async () => {
-      setError(null);
-
-      if (!shouldEnforce) {
-        setMustWatch(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-
-        if (!oncePerDay) {
-          if (!cancelled) {
-            setMustWatch(true);
-            setLoading(false);
-          }
-          return;
-        }
-
-        const today = getLocalYYYYMMDD();
-
-        const { data, error: selErr } = await supabase
-          .from("video_watch_daily")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("video_id", videoId)
-          .eq("watched_on", today)
-          .limit(1);
-
-        if (selErr) throw selErr;
-
-        const alreadyWatchedToday = (data?.length ?? 0) > 0;
-
-        if (!cancelled) {
-          setMustWatch(!alreadyWatchedToday);
-          setLoading(false);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setError(e?.message || "Error verificando el video obligatorio.");
-          // Si falla el check, por seguridad pedimos verlo igual
-          setMustWatch(true);
-          setLoading(false);
-        }
-      }
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldEnforce, oncePerDay, userId, videoId]);
-
-  const markCompleted = async () => {
-    try {
-      if (!userId) return;
-
-      const today = getLocalYYYYMMDD();
-
-      // Insert con unique index => si ya existe no hace falta duplicar
-      const { error: insErr } = await supabase
-        .from("video_watch_daily")
-        .insert([
-          {
-            user_id: userId,
-            video_id: videoId,
-            watched_on: today,
-            completed: true,
-          },
-        ]);
-
-      // Si es conflicto por unique (ya estaba), lo ignoramos
-      const msg = insErr?.message?.toLowerCase?.() || "";
-      const isUniqueConflict =
-        msg.includes("duplicate key") || msg.includes("unique");
-
-      if (insErr && !isUniqueConflict) throw insErr;
-
-      setReadyToUnlock(true);
-      setMustWatch(false);
-    } catch (e: any) {
-      setError(e?.message || "No se pudo guardar el completion del video.");
-    }
-  };
-
-  // Anti-adelantar (best effort)
+  // 🔒 Anti-seek (dificulta adelantar, no es 100% imposible)
+  const lastTimeRef = useRef(0);
+  const allowSeekTolerance = 0.75; // segs permitidos por buffering
   const onTimeUpdate = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.currentTime > lastAllowedTimeRef.current) {
-      lastAllowedTimeRef.current = v.currentTime;
+
+    const t = v.currentTime;
+
+    // si salta hacia adelante más de la tolerancia, volvemos atrás
+    if (t > lastTimeRef.current + allowSeekTolerance) {
+      v.currentTime = lastTimeRef.current;
+      return;
+    }
+
+    // registramos avance "normal"
+    if (t > lastTimeRef.current) {
+      lastTimeRef.current = t;
     }
   };
 
@@ -148,71 +82,193 @@ const MandatoryVideoGate: React.FC<Props> = ({
     const v = videoRef.current;
     if (!v) return;
 
-    // permite retroceder, bloquea adelantar “brusco”
-    const attempted = v.currentTime;
-    const last = lastAllowedTimeRef.current;
+    // si intentan adelantar, volvemos al último tiempo válido
+    if (v.currentTime > lastTimeRef.current + allowSeekTolerance) {
+      v.currentTime = lastTimeRef.current;
+    }
+  };
 
-    if (attempted > last + 0.4) {
-      v.currentTime = last;
+  const markDoneLocally = () => {
+    try {
+      localStorage.setItem(storageKey, "1");
+    } catch {}
+  };
+
+  const isDoneLocally = () => {
+    try {
+      return localStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
+  };
+
+  const checkAlreadyDone = async () => {
+    // Si no aplica el gate, dejamos pasar
+    if (!mustEnforce) {
+      setAllowed(true);
+      setChecking(false);
+      return;
+    }
+
+    // Si ya está marcado localmente (para que sea 1 vez al día aunque cierre sesión)
+    if (oncePerDay && isDoneLocally()) {
+      setAllowed(true);
+      setChecking(false);
+      return;
+    }
+
+    // Intentamos chequear en DB también (si existe el registro)
+    // Si falla por RLS u otro, igual dejamos que el flujo siga,
+    // pero el usuario tendrá que verlo (porque no tenemos confirmación).
+    const uid = (user as any)?.id || (user as any)?.user_id;
+    if (!uid) {
+      setAllowed(false);
+      setChecking(false);
+      return;
+    }
+
+    try {
+      setErrorMsg(null);
+
+      // Buscar registro de hoy (si oncePerDay) o en general por videoId (si no)
+      const q = supabase
+        .from("video_watch_daily")
+        .select("id, completed, watched_on, video_id")
+        .eq("user_id", uid)
+        .eq("video_id", videoId);
+
+      const { data, error } = oncePerDay
+        ? await q.eq("watched_on", dayKey).maybeSingle()
+        : await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
+
+      if (error) {
+        // No bloqueamos por error de lectura, simplemente forzamos ver el video
+        console.warn("video_watch_daily select error:", error.message);
+        setAllowed(false);
+      } else {
+        if (data?.completed) {
+          if (oncePerDay) markDoneLocally();
+          setAllowed(true);
+        } else {
+          setAllowed(false);
+        }
+      }
+    } catch (e: any) {
+      console.warn("video_watch_daily check exception:", e?.message || e);
+      setAllowed(false);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    checkAlreadyDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mustEnforce, videoId]);
+
+  const saveCompletion = async () => {
+    if (!user) return;
+    const uid = (user as any)?.id || (user as any)?.user_id;
+    if (!uid) return;
+
+    setSaving(true);
+    setErrorMsg(null);
+
+    try {
+      // Upsert por (user_id, video_id, watched_on) idealmente con unique constraint.
+      // Si no la tenés, esto igual funciona pero puede duplicar filas.
+      const payload: any = {
+        user_id: uid,
+        username: user.username,
+        role: user.role,
+        video_id: videoId,
+        watched_on: dayKey, // YYYY-MM-DD
+        completed: true,
+        completed_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from("video_watch_daily").insert([payload]);
+
+      if (error) {
+        console.warn("video_watch_daily insert error:", error.message);
+        setErrorMsg(error.message);
+        // Igual marcamos local para cumplir "una vez al día" aunque no guarde.
+        // Si querés que NO pase sin guardar, sacá estas 2 líneas.
+        if (oncePerDay) markDoneLocally();
+        setAllowed(true);
+        setCompletedNow(true);
+        return;
+      }
+
+      if (oncePerDay) markDoneLocally();
+      setAllowed(true);
+      setCompletedNow(true);
+    } catch (e: any) {
+      console.warn("saveCompletion exception:", e?.message || e);
+      setErrorMsg(e?.message || "Error guardando el video.");
+      // fallback local para no romper operación
+      if (oncePerDay) markDoneLocally();
+      setAllowed(true);
+      setCompletedNow(true);
+    } finally {
+      setSaving(false);
     }
   };
 
   const onEnded = async () => {
-    await markCompleted();
+    // Cuando termina el video, liberamos la app
+    await saveCompletion();
   };
 
-  // Si no aplica, render normal
-  if (!shouldEnforce) return <>{children}</>;
+  if (!mustEnforce) return <>{children}</>;
+  if (checking) return <>{children}</>; // no bloqueamos con loader para no "pantalla vacía"
+  if (allowed) return <>{children}</>;
 
-  // Mientras verifica si ya lo vio hoy
-  if (loading) return <>{children}</>;
-
-  // Si no hace falta gate
-  if (!mustWatch && readyToUnlock) return <>{children}</>;
-  if (!mustWatch) return <>{children}</>;
-
-  // Gate overlay
   return (
-    <div className="relative">
-      {/* bloqueamos UI debajo */}
-      <div className="pointer-events-none select-none opacity-40">{children}</div>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-3xl rounded-xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <div className="p-5">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+            Video obligatorio
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+            Tenés que verlo completo para poder usar la app.
+          </p>
 
-      <div className="fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center p-4">
-        <div className="w-full max-w-3xl bg-white dark:bg-gray-900 rounded-xl shadow-xl overflow-hidden">
-          <div className="p-5 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              Video obligatorio
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-              Tenés que verlo completo para poder usar la app.
-            </p>
-            {error ? (
-              <p className="text-sm text-red-600 mt-2">{error}</p>
-            ) : null}
-          </div>
+          {errorMsg && (
+            <p className="mt-2 text-sm text-red-600 break-words">{errorMsg}</p>
+          )}
+        </div>
 
-          <div className="p-5">
+        <div className="px-5 pb-5">
+          <div className="rounded-lg overflow-hidden bg-black">
             <video
               ref={videoRef}
               src={videoSrc}
-              className="w-full rounded-lg bg-black"
               controls
-              // ocultamos acelerar + descargar (no es infalible)
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture
-              playsInline
+              playsInline={canPlayInline()}
               onTimeUpdate={onTimeUpdate}
               onSeeking={onSeeking}
               onEnded={onEnded}
-              onLoadedMetadata={() => {
-                lastAllowedTimeRef.current = 0;
-                if (videoRef.current) videoRef.current.currentTime = 0;
-              }}
+              className="w-full h-auto max-h-[70vh]"
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-              *Nota: se dificulta el adelanto, pero no existe bloqueo 100% sin
-              DRM/streaming controlado.
-            </p>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              *Se dificulta el adelanto, pero no existe bloqueo 100% sin DRM/streaming
+              controlado.
+            </div>
+
+            <button
+              disabled
+              className="px-4 py-2 rounded-md bg-gray-200 text-gray-500 text-sm cursor-not-allowed"
+              title="Se habilita cuando termine el video"
+            >
+              {saving ? "Guardando..." : completedNow ? "Listo" : "Bloqueado"}
+            </button>
           </div>
         </div>
       </div>
