@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useState } from "react";
 import {
   BrowserRouter as Router,
@@ -27,8 +26,10 @@ import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
 import PDFs from "./pages/PDFs";
 import VideoWatchLog from "./pages/VideoWatchLog";
+
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
+
 import PedidoDeCompra from "./pages/PedidoDeCompra";
 import RevisarCompras from "./pages/RevisarCompras";
 
@@ -42,23 +43,27 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
+
 import MandatoryVideoGate from "./components/MandatoryVideoGate";
 
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
+
 const INTRO_VIDEO_ID = "capsula_intro_v1";
 
 function ProtectedApp() {
   const { user } = useAuth();
   const hasUpdate = useVersionChecker(60000);
   const location = useLocation();
+
   const [openChat, setOpenChat] = useState(false);
 
   if (!user) return <Login />;
+
   const role = user.role;
+
   let allowedRoutes: React.ReactNode;
 
-  // Rutas para cada rol (incluyendo /video-log para test y vendedor)
   if (role === "test") {
     allowedRoutes = (
       <Routes>
@@ -141,9 +146,20 @@ function ProtectedApp() {
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
+
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  } else if (role === "administracion-cordoba") {
+    allowedRoutes = (
+      <Routes>
+        <Route path="/" element={<PedidoDeCompra />} />
+        <Route path="/pedido-compra" element={<PedidoDeCompra />} />
+        <Route path="/revisar-compras" element={<RevisarCompras />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -156,34 +172,43 @@ function ProtectedApp() {
     );
   }
 
-  const showChatBot = location.pathname.startsWith("/b2b");
+  const showChatBot =
+    location.pathname.startsWith("/b2b") ||
+    location.pathname === "/b2b/catalogo" ||
+    location.pathname === "/b2b/carrito" ||
+    location.pathname === "/b2b/pedidos";
+
   const appLayout = (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
-      <main className="flex-1">{allowedRoutes}</main>
+      <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
+
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
-      {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
+
+      {showChatBot && !openChat && (
+        <ChatBubble onOpen={() => setOpenChat(true)} />
+      )}
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
 
-  // Sólo el rol test debe ver el video obligatorio
-  if (role === "test") {
-    return (
-      <MandatoryVideoGate
-        rolesToEnforce={["test"]}
-        videoId={INTRO_VIDEO_ID}
-        videoSrc={INTRO_VIDEO_URL}
-        oncePerDay
-      >
-        {appLayout}
-      </MandatoryVideoGate>
-    );
-  }
-  return appLayout;
+  // ✅ SOLO TEST ve el popup obligatorio
+  return role === "test" ? (
+    <MandatoryVideoGate
+      rolesToEnforce={["test"]}
+      videoId={INTRO_VIDEO_ID}
+      videoSrc={INTRO_VIDEO_URL}
+      oncePerDay
+      dailyTable="video_watch_daily"
+    >
+      {appLayout}
+    </MandatoryVideoGate>
+  ) : (
+    appLayout
+  );
 }
 
-export default function App() {
+function App() {
   return (
     <AuthProvider>
       <Router>
@@ -192,3 +217,5 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+export default App;
