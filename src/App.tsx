@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useState } from "react";
 import {
   BrowserRouter as Router,
@@ -71,7 +72,7 @@ function ProtectedApp() {
   let allowedRoutes: React.ReactNode;
 
   // ---------------------------
-  // 🚀 0) TEST + catch-all
+  // 🚀 0) TEST (igual a vendedor) + catch-all
   // ---------------------------
   if (role === "test") {
     allowedRoutes = (
@@ -85,9 +86,10 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
 
-        {/* ✅ Videoteca */}
+        {/* ✅ Página para ver videos (mantenemos la ruta) */}
         <Route path="/video-log" element={<VideoWatchLog />} />
 
+        {/* ✅ evita pantallas vacías */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -108,7 +110,7 @@ function ProtectedApp() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
 
-        {/* ✅ Videoteca también para vendedor */}
+        {/* ✅ Página para ver videos (también para vendedor) */}
         <Route path="/video-log" element={<VideoWatchLog />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -245,19 +247,21 @@ function ProtectedApp() {
     </div>
   );
 
-  // ✅ Gate para TEST y VENDEDOR (una vez por día, guardado en Supabase)
-  return role === "test" || role === "vendedor" ? (
-    <MandatoryVideoGate
-      rolesToEnforce={["test", "vendedor"]}
-      videoId={INTRO_VIDEO_ID}
-      videoSrc={INTRO_VIDEO_URL}
-      oncePerDay
-    >
-      {appLayout}
-    </MandatoryVideoGate>
-  ) : (
-    appLayout
-  );
+  // ✅ TEST y VENDEDOR: mostrar gate 1 vez por día
+  if (role === "test" || role === "vendedor") {
+    return (
+      <MandatoryVideoGate
+        roleToEnforce={role} // 👈 enforcea el rol actual (test o vendedor)
+        videoId={INTRO_VIDEO_ID}
+        videoSrc={INTRO_VIDEO_URL}
+        oncePerDay
+      >
+        {appLayout}
+      </MandatoryVideoGate>
+    );
+  }
+
+  return appLayout;
 }
 
 function App() {
