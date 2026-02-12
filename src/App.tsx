@@ -192,10 +192,11 @@ function ProtectedApp() {
     </div>
   );
 
-  // ✅ SOLO TEST ve el popup obligatorio
-  return role === "test" ? (
+  // ✅ TEST y VENDEDOR ven el video obligatorio (1 vez por día)
+if (role === "test" || role === "vendedor") {
+  return (
     <MandatoryVideoGate
-      rolesToEnforce={["test"]}
+      rolesToEnforce={["test", "vendedor"]}
       videoId={INTRO_VIDEO_ID}
       videoSrc={INTRO_VIDEO_URL}
       oncePerDay
@@ -203,9 +204,11 @@ function ProtectedApp() {
     >
       {appLayout}
     </MandatoryVideoGate>
-  ) : (
-    appLayout
   );
+}
+
+return appLayout;
+
 }
 
 function App() {
