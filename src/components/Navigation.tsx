@@ -99,6 +99,33 @@ const Navigation: React.FC = () => {
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
+  // ✅ Logout sin borrar el “once per day” del video gate
+  const handleLogout = () => {
+    try {
+      const keep: Record<string, string> = {};
+
+      // guardamos todas las keys del gate
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith("mandatory_video_done:")) {
+          const v = localStorage.getItem(k);
+          if (v !== null) keep[k] = v;
+        }
+      }
+
+      localStorage.clear();
+
+      // restauramos keys del gate
+      Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
+    } catch {
+      // si falla, al menos no rompemos logout
+      localStorage.clear();
+    }
+
+    window.location.href = "/";
+  };
+
   // Nombre de página actual
   const getCurrentPageName = () => {
     switch (location.pathname) {
@@ -146,7 +173,7 @@ const Navigation: React.FC = () => {
       case "/revisar-compras":
         return "Revisar Compras";
 
-      // ✅ VIDEOS
+      // ✅ VIDEO (lista para ver videos)
       case "/video-log":
         return "Videos";
 
@@ -174,7 +201,7 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // ✅ TEST (igual a vendedor para pruebas) + ✅ incluye Videos
+  // ✅ TEST (igual a vendedor) + ✅ incluye Videos
   if (user?.role === "test") {
     menuItems = [
       {
@@ -213,15 +240,12 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
       },
-
-      // ✅ NUEVO: Videos (videoteca)
       {
         name: "Videos",
         path: "/video-log",
         icon: FileText,
         description: "Ver videos disponibles",
       },
-
       {
         name: "Chat",
         path: "/chat",
@@ -237,7 +261,7 @@ const Navigation: React.FC = () => {
     ];
   }
 
-  // VENDEDOR (✅ también incluye Videos)
+  // ✅ VENDEDOR + ✅ incluye Videos
   else if (user?.role === "vendedor") {
     menuItems = [
       {
@@ -276,15 +300,12 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
       },
-
-      // ✅ NUEVO: Videos (videoteca)
       {
         name: "Videos",
         path: "/video-log",
         icon: FileText,
         description: "Ver videos disponibles",
       },
-
       {
         name: "Chat",
         path: "/chat",
@@ -631,10 +652,7 @@ const Navigation: React.FC = () => {
 
                   <button
                     className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                    onClick={() => {
-                      localStorage.clear();
-                      window.location.href = "/";
-                    }}
+                    onClick={handleLogout}
                   >
                     Cerrar sesión
                   </button>
@@ -703,4 +721,3 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
-
