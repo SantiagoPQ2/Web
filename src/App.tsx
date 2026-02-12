@@ -71,7 +71,7 @@ function ProtectedApp() {
   let allowedRoutes: React.ReactNode;
 
   // ---------------------------
-  // 🚀 0) TEST (igual a vendedor) + catch-all
+  // 🚀 0) TEST + catch-all
   // ---------------------------
   if (role === "test") {
     allowedRoutes = (
@@ -84,9 +84,10 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        {/* ✅ Videoteca */}
         <Route path="/video-log" element={<VideoWatchLog />} />
 
-        {/* ✅ evita pantallas vacías */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -106,6 +107,9 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/baja-cliente" element={<BajaClienteCambioRuta />} />
+
+        {/* ✅ Videoteca también para vendedor */}
+        <Route path="/video-log" element={<VideoWatchLog />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -241,10 +245,10 @@ function ProtectedApp() {
     </div>
   );
 
-  // ✅ SOLO "test" ve el gate
-  return role === "test" ? (
+  // ✅ Gate para TEST y VENDEDOR (una vez por día, guardado en Supabase)
+  return role === "test" || role === "vendedor" ? (
     <MandatoryVideoGate
-      roleToEnforce="test"
+      rolesToEnforce={["test", "vendedor"]}
       videoId={INTRO_VIDEO_ID}
       videoSrc={INTRO_VIDEO_URL}
       oncePerDay
@@ -267,4 +271,3 @@ function App() {
 }
 
 export default App;
-
