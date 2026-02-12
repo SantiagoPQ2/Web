@@ -251,10 +251,11 @@ function ProtectedApp() {
   if (role === "test" || role === "vendedor") {
     return (
       <MandatoryVideoGate
-        roleToEnforce={role} // 👈 enforcea el rol actual (test o vendedor)
+        rolesToEnforce={["test", "vendedor"]}
         videoId={INTRO_VIDEO_ID}
         videoSrc={INTRO_VIDEO_URL}
         oncePerDay
+        // logTable queda por default: "video_watch_daily"
       >
         {appLayout}
       </MandatoryVideoGate>
