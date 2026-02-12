@@ -4,10 +4,12 @@ import { useAuth } from "../context/AuthContext";
 
 type Props = {
   children: React.ReactNode;
-  roleToEnforce: string; // "test" o "vendedor"
-  videoId: string;       // ej: "capsula_intro_v1"
-  videoSrc: string;      // URL pública del mp4
-  oncePerDay?: boolean;  // default true
+  rolesToEnforce: string[]; // ej: ["test"] o ["test","vendedor"]
+  videoId: string;          // ej: "capsula_intro_v1"
+  videoSrc: string;         // URL pública del mp4
+  oncePerDay?: boolean;     // default true
+  // si querés loguear en DB, nombre de tabla (si no existe o no querés usar DB, dejalo null)
+  logTable?: string | null; // ej: "video_watch_daily"
 };
 
 function getLocalDayKey() {
@@ -20,10 +22,11 @@ function getLocalDayKey() {
 
 const MandatoryVideoGate: React.FC<Props> = ({
   children,
-  roleToEnforce,
+  rolesToEnforce,
   videoId,
   videoSrc,
   oncePerDay = true,
+  logTable = "video_watch_daily",
 }) => {
   const { user } = useAuth();
 
@@ -37,37 +40,18 @@ const MandatoryVideoGate: React.FC<Props> = ({
   const dayKey = useMemo(() => getLocalDayKey(), []);
   const mustEnforce = useMemo(() => {
     if (!user) return false;
-    return user.role === roleToEnforce;
-  }, [user, roleToEnforce]);
+    return rolesToEnforce.includes(user.role);
+  }, [user, rolesToEnforce]);
 
-  // 🔑 IMPORTANTE: usamos el UID real de Supabase Auth (no el id de tu tabla users)
-  const [authUid, setAuthUid] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const { data, error } = await supabase.auth.getUser();
-        if (!mounted) return;
-        if (error) {
-          setAuthUid(null);
-          return;
-        }
-        setAuthUid(data.user?.id ?? null);
-      } catch {
-        if (!mounted) return;
-        setAuthUid(null);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // ✅ tu “user_id real” viene de tu tabla auxiliar
+  const userId = user?.id ?? null; // OJO: este es el id de usuarios_app
+  const username = user?.username ?? "";
+  const role = user?.role ?? "";
 
   const storageKey = useMemo(() => {
-    const uid = authUid || "unknown";
-    return `mandatory_video_done:${uid}:${roleToEnforce}:${videoId}:${dayKey}`;
-  }, [authUid, roleToEnforce, videoId, dayKey]);
+    const uid = userId ? String(userId) : "unknown";
+    return `mandatory_video_done:${uid}:${role}:${videoId}:${dayKey}`;
+  }, [userId, role, videoId, dayKey]);
 
   const markDoneLocally = () => {
     try {
@@ -83,31 +67,25 @@ const MandatoryVideoGate: React.FC<Props> = ({
     }
   };
 
-  // 🔒 Anti-seek (no es DRM, pero dificulta bastante)
+  // 🔒 Anti-seek (no es DRM, pero dificulta adelantar)
   const lastTimeRef = useRef(0);
   const allowSeekTolerance = 0.75;
 
   const onTimeUpdate = () => {
     const v = videoRef.current;
     if (!v) return;
-
     const t = v.currentTime;
 
-    // intento de adelanto grande
     if (t > lastTimeRef.current + allowSeekTolerance) {
       v.currentTime = lastTimeRef.current;
       return;
     }
-
-    if (t > lastTimeRef.current) {
-      lastTimeRef.current = t;
-    }
+    if (t > lastTimeRef.current) lastTimeRef.current = t;
   };
 
   const onSeeking = () => {
     const v = videoRef.current;
     if (!v) return;
-
     if (v.currentTime > lastTimeRef.current + allowSeekTolerance) {
       v.currentTime = lastTimeRef.current;
     }
@@ -120,27 +98,36 @@ const MandatoryVideoGate: React.FC<Props> = ({
       return;
     }
 
-    // Si es once-per-day y ya está marcado localmente, listo
+    // ✅ la regla de “una vez por día” la resolvemos 100% del lado del cliente
+    // (porque tu auth no es supabase auth)
     if (oncePerDay && isDoneLocally()) {
       setAllowed(true);
       setChecking(false);
       return;
     }
 
-    // Si todavía no tenemos auth uid, no podemos chequear DB de forma confiable
-    if (!authUid) {
+    // si no hay userId no podemos validar nada
+    if (!userId) {
       setAllowed(false);
       setChecking(false);
       return;
     }
 
-    setErrorMsg(null);
+    // Si querés, acá podrías también chequear DB, pero SOLO si la tabla no tiene RLS
+    // o tiene una policy que permita insertar/leer sin auth.
+    // Para no romper, lo dejamos optativo:
+    if (!logTable) {
+      setAllowed(false);
+      setChecking(false);
+      return;
+    }
 
     try {
+      // si existe un registro "completed" hoy, lo dejamos pasar
       const q = supabase
-        .from("video_watch_daily")
+        .from(logTable)
         .select("id, completed, watched_on, video_id")
-        .eq("user_id", authUid)
+        .eq("user_id", String(userId))
         .eq("video_id", videoId);
 
       const { data, error } = oncePerDay
@@ -148,19 +135,16 @@ const MandatoryVideoGate: React.FC<Props> = ({
         : await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
 
       if (error) {
-        // Si falla por RLS u otra cosa, lo dejamos bloqueado (así ves el error)
-        setErrorMsg(error.message);
+        // si falla por RLS u otra cosa, seguimos usando solo localStorage (bloquea hasta ver)
+        setErrorMsg(null);
         setAllowed(false);
+      } else if (data?.completed) {
+        if (oncePerDay) markDoneLocally();
+        setAllowed(true);
       } else {
-        if (data?.completed) {
-          if (oncePerDay) markDoneLocally();
-          setAllowed(true);
-        } else {
-          setAllowed(false);
-        }
+        setAllowed(false);
       }
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Error verificando el video.");
+    } catch {
       setAllowed(false);
     } finally {
       setChecking(false);
@@ -168,47 +152,45 @@ const MandatoryVideoGate: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    // re-chequea cuando ya conocemos el authUid
-    if (!mustEnforce) {
-      setAllowed(true);
-      setChecking(false);
-      return;
-    }
     setChecking(true);
+    setErrorMsg(null);
     checkAlreadyDone();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mustEnforce, authUid, videoId]);
+  }, [mustEnforce, userId, videoId]);
 
   const saveCompletion = async () => {
-    if (!authUid) return;
+    // ✅ siempre marcamos local primero (esto garantiza once-per-day aunque se deslogueen)
+    if (oncePerDay) markDoneLocally();
+
+    if (!logTable || !userId) {
+      setAllowed(true);
+      return;
+    }
 
     setSaving(true);
     setErrorMsg(null);
 
     try {
-      // ✅ insert “simple” (si querés evitar duplicados, hacemos upsert con unique constraint)
       const payload: any = {
-        user_id: authUid,
-        username: user?.username ?? null,
-        role: user?.role ?? null,
+        user_id: String(userId),     // id de usuarios_app, no auth.uid
+        username,
+        role,
         video_id: videoId,
         watched_on: dayKey,
         completed: true,
         completed_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from("video_watch_daily").insert([payload]);
+      const { error } = await supabase.from(logTable).insert([payload]);
 
+      // Si falla (RLS, etc) no frenamos el uso: ya está marcado localmente
       if (error) {
-        // si RLS está mal, lo vas a ver acá
-        setErrorMsg(error.message);
-        return;
+        setErrorMsg(null);
       }
 
-      if (oncePerDay) markDoneLocally();
       setAllowed(true);
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Error guardando el video.");
+    } catch {
+      setAllowed(true);
     } finally {
       setSaving(false);
     }
@@ -233,9 +215,8 @@ const MandatoryVideoGate: React.FC<Props> = ({
             Tenés que verlo completo para poder usar la app.
           </p>
 
-          {errorMsg && (
-            <p className="mt-2 text-sm text-red-600 break-words">{errorMsg}</p>
-          )}
+          {/* Si querés mostrar error, lo dejamos apagado para no confundir */}
+          {/* {errorMsg && <p className="mt-2 text-sm text-red-600">{errorMsg}</p>} */}
         </div>
 
         <div className="px-5 pb-5">
@@ -258,7 +239,6 @@ const MandatoryVideoGate: React.FC<Props> = ({
             <button
               disabled
               className="px-4 py-2 rounded-md bg-gray-200 text-gray-500 text-sm cursor-not-allowed"
-              title="Se habilita cuando termine el video"
             >
               {saving ? "Guardando..." : "Bloqueado"}
             </button>
