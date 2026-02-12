@@ -1,11 +1,13 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Film, Play, ExternalLink } from "lucide-react";
+import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 
 type VideoItem = {
-  id: string; // identificador (ideal para "renovar": cambiás el id y listo)
+  id: string;
   title: string;
   description?: string;
-  src: string; // URL pública (Supabase Storage)
+  src: string;
   tags?: string[];
 };
 
@@ -17,18 +19,11 @@ const VIDEOS: VideoItem[] = [
     src: "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4",
     tags: ["introducción", "obligatorio"],
   },
-
-  // ✅ Para agregar/renovar: duplicás un bloque así y cambiás id, title y src.
-  // {
-  //   id: "capsula_intro_v2",
-  //   title: "Cápsula de Introducción (v2)",
-  //   description: "Versión actualizada",
-  //   src: "https://.../NuevoVideo.mp4",
-  //   tags: ["introducción"],
-  // },
 ];
 
 const VideoWatchLog: React.FC = () => {
+  const { user } = useAuth();
+
   const [selectedId, setSelectedId] = useState<string>(VIDEOS[0]?.id ?? "");
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -39,19 +34,38 @@ const VideoWatchLog: React.FC = () => {
 
   const onPick = (id: string) => {
     setSelectedId(id);
-    // Reinicia reproducción cuando cambia el video
     requestAnimationFrame(() => {
-      if (videoRef.current) {
-        try {
-          videoRef.current.pause();
-          videoRef.current.currentTime = 0;
-          // autoplay “suave” (algunos browsers lo bloquean sin interacción)
-          videoRef.current.play().catch(() => {});
-        } catch {
-          // ignore
-        }
+      if (!videoRef.current) return;
+      try {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {});
+      } catch {
+        // ignore
       }
     });
+  };
+
+  // ✅ Opcional: registrar en tabla cuando finaliza el video desde la videoteca
+  const logWatch = async (video: VideoItem) => {
+    if (!user?.username) return;
+
+    // Ajustá nombres de tabla/columnas si tus columnas son distintas
+    const payload = {
+      username: user.username,
+      role: user.role,
+      video_id: video.id,
+      video_title: video.title,
+      video_url: video.src,
+      source: "library", // para diferenciar de "gate" si querés
+      completed: true,
+      watched_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("video_watch_log").insert([payload]);
+
+    // si tu tabla se llama distinto o no existe, acá te va a tirar error
+    if (error) console.error("video_watch_log insert error:", error.message);
   };
 
   return (
@@ -69,7 +83,6 @@ const VideoWatchLog: React.FC = () => {
           </div>
         </div>
 
-        {/* Layout: en desktop 2 columnas, en mobile stack */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Lista */}
           <div className="lg:col-span-1">
@@ -96,14 +109,14 @@ const VideoWatchLog: React.FC = () => {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <div className="font-semibold text-gray-900 dark:text-gray-100">
-                              {v.title}
-                            </div>
+                            <div className="font-semibold">{v.title}</div>
+
                             {v.description && (
                               <div className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                                 {v.description}
                               </div>
                             )}
+
                             {v.tags?.length ? (
                               <div className="flex flex-wrap gap-2 mt-2">
                                 {v.tags.map((t) => (
@@ -167,37 +180,24 @@ const VideoWatchLog: React.FC = () => {
 
               <div className="p-4">
                 {selected?.src ? (
-                  <div className="w-full">
-                    <video
-                      ref={videoRef}
-                      src={selected.src}
-                      controls
-                      controlsList="nodownload noplaybackrate"
-                      playsInline
-                      className="w-full rounded-lg bg-black"
-                    />
-                    <p className="text-xs text-gray-500 dark:text-gray-300 mt-3">
-                      Nota: esto es una videoteca. El bloqueo “anti-adelantar”
-                      del video obligatorio se controla en el componente del
-                      gate (MandatoryVideoGate).
-                    </p>
-                  </div>
+                  <video
+                    ref={videoRef}
+                    src={selected.src}
+                    controls
+                    controlsList="nodownload noplaybackrate"
+                    playsInline
+                    className="w-full rounded-lg bg-black"
+                    onEnded={() => {
+                      // ✅ opcional: log cuando termina
+                      logWatch(selected).catch(() => {});
+                    }}
+                  />
                 ) : (
                   <div className="text-sm text-gray-500">
                     Elegí un video del panel izquierdo.
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Tip para renovar */}
-            <div className="mt-4 text-xs text-gray-500 dark:text-gray-300">
-              Tip: para “renovar” el video, agregá un nuevo item en{" "}
-              <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700">
-                VIDEOS
-              </code>{" "}
-              con otro <b>id</b> y otra <b>URL</b>. No necesitás tocar rutas ni
-              menús.
             </div>
           </div>
         </div>
