@@ -12,18 +12,11 @@ type Props = {
 };
 
 function getLocalDayKey() {
-  // Clave por día local del dispositivo: YYYY-MM-DD
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function canPlayInline() {
-  // Safari iOS necesita playsInline + muted para autoplays; acá no usamos autoplay,
-  // pero ayuda a que no rompa layout.
-  return true;
+  return `${y}-${m}-${day}`; // YYYY-MM-DD
 }
 
 const MandatoryVideoGate: React.FC<Props> = ({
@@ -40,53 +33,20 @@ const MandatoryVideoGate: React.FC<Props> = ({
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [completedNow, setCompletedNow] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const dayKey = useMemo(() => getLocalDayKey(), []);
-  const storageKey = useMemo(() => {
-    // fallback local para "no repetir hoy aunque se desloguee"
-    // incluye user.id (si existe) + role + videoId + dayKey
-    const uid = (user as any)?.id || (user as any)?.user_id || "unknown";
-    return `mandatory_video_done:${uid}:${roleToEnforce}:${videoId}:${dayKey}`;
-  }, [user, roleToEnforce, videoId, dayKey]);
 
   const mustEnforce = useMemo(() => {
     if (!user) return false;
     return user.role === roleToEnforce;
   }, [user, roleToEnforce]);
 
-  // 🔒 Anti-seek (dificulta adelantar, no es 100% imposible)
-  const lastTimeRef = useRef(0);
-  const allowSeekTolerance = 0.75; // segs permitidos por buffering
-  const onTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    const t = v.currentTime;
-
-    // si salta hacia adelante más de la tolerancia, volvemos atrás
-    if (t > lastTimeRef.current + allowSeekTolerance) {
-      v.currentTime = lastTimeRef.current;
-      return;
-    }
-
-    // registramos avance "normal"
-    if (t > lastTimeRef.current) {
-      lastTimeRef.current = t;
-    }
-  };
-
-  const onSeeking = () => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    // si intentan adelantar, volvemos al último tiempo válido
-    if (v.currentTime > lastTimeRef.current + allowSeekTolerance) {
-      v.currentTime = lastTimeRef.current;
-    }
-  };
+  const storageKey = useMemo(() => {
+    const uid = (user as any)?.id || (user as any)?.user_id || "unknown";
+    return `mandatory_video_done:${uid}:${roleToEnforce}:${videoId}:${dayKey}`;
+  }, [user, roleToEnforce, videoId, dayKey]);
 
   const markDoneLocally = () => {
     try {
@@ -102,24 +62,48 @@ const MandatoryVideoGate: React.FC<Props> = ({
     }
   };
 
+  // 🔒 Anti-seek (dificulta adelantar, no es 100% imposible)
+  const lastTimeRef = useRef(0);
+  const allowSeekTolerance = 0.75; // segs permitidos por buffering
+
+  const onTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    const t = v.currentTime;
+
+    if (t > lastTimeRef.current + allowSeekTolerance) {
+      v.currentTime = lastTimeRef.current;
+      return;
+    }
+
+    if (t > lastTimeRef.current) {
+      lastTimeRef.current = t;
+    }
+  };
+
+  const onSeeking = () => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (v.currentTime > lastTimeRef.current + allowSeekTolerance) {
+      v.currentTime = lastTimeRef.current;
+    }
+  };
+
   const checkAlreadyDone = async () => {
-    // Si no aplica el gate, dejamos pasar
     if (!mustEnforce) {
       setAllowed(true);
       setChecking(false);
       return;
     }
 
-    // Si ya está marcado localmente (para que sea 1 vez al día aunque cierre sesión)
     if (oncePerDay && isDoneLocally()) {
       setAllowed(true);
       setChecking(false);
       return;
     }
 
-    // Intentamos chequear en DB también (si existe el registro)
-    // Si falla por RLS u otro, igual dejamos que el flujo siga,
-    // pero el usuario tendrá que verlo (porque no tenemos confirmación).
     const uid = (user as any)?.id || (user as any)?.user_id;
     if (!uid) {
       setAllowed(false);
@@ -130,7 +114,6 @@ const MandatoryVideoGate: React.FC<Props> = ({
     try {
       setErrorMsg(null);
 
-      // Buscar registro de hoy (si oncePerDay) o en general por videoId (si no)
       const q = supabase
         .from("video_watch_daily")
         .select("id, completed, watched_on, video_id")
@@ -142,7 +125,6 @@ const MandatoryVideoGate: React.FC<Props> = ({
         : await q.order("created_at", { ascending: false }).limit(1).maybeSingle();
 
       if (error) {
-        // No bloqueamos por error de lectura, simplemente forzamos ver el video
         console.warn("video_watch_daily select error:", error.message);
         setAllowed(false);
       } else {
@@ -175,14 +157,12 @@ const MandatoryVideoGate: React.FC<Props> = ({
     setErrorMsg(null);
 
     try {
-      // Upsert por (user_id, video_id, watched_on) idealmente con unique constraint.
-      // Si no la tenés, esto igual funciona pero puede duplicar filas.
       const payload: any = {
         user_id: uid,
         username: user.username,
         role: user.role,
         video_id: videoId,
-        watched_on: dayKey, // YYYY-MM-DD
+        watched_on: dayKey,
         completed: true,
         completed_at: new Date().toISOString(),
       };
@@ -192,36 +172,33 @@ const MandatoryVideoGate: React.FC<Props> = ({
       if (error) {
         console.warn("video_watch_daily insert error:", error.message);
         setErrorMsg(error.message);
-        // Igual marcamos local para cumplir "una vez al día" aunque no guarde.
-        // Si querés que NO pase sin guardar, sacá estas 2 líneas.
+
+        // ✅ fallback local para que sea 1 vez al día aunque falle el insert
         if (oncePerDay) markDoneLocally();
         setAllowed(true);
-        setCompletedNow(true);
         return;
       }
 
       if (oncePerDay) markDoneLocally();
       setAllowed(true);
-      setCompletedNow(true);
     } catch (e: any) {
       console.warn("saveCompletion exception:", e?.message || e);
       setErrorMsg(e?.message || "Error guardando el video.");
-      // fallback local para no romper operación
+
+      // ✅ fallback local para no romper operación
       if (oncePerDay) markDoneLocally();
       setAllowed(true);
-      setCompletedNow(true);
     } finally {
       setSaving(false);
     }
   };
 
   const onEnded = async () => {
-    // Cuando termina el video, liberamos la app
     await saveCompletion();
   };
 
   if (!mustEnforce) return <>{children}</>;
-  if (checking) return <>{children}</>; // no bloqueamos con loader para no "pantalla vacía"
+  if (checking) return <>{children}</>;
   if (allowed) return <>{children}</>;
 
   return (
@@ -248,7 +225,7 @@ const MandatoryVideoGate: React.FC<Props> = ({
               controls
               controlsList="nodownload noplaybackrate"
               disablePictureInPicture
-              playsInline={canPlayInline()}
+              playsInline
               onTimeUpdate={onTimeUpdate}
               onSeeking={onSeeking}
               onEnded={onEnded}
@@ -267,7 +244,7 @@ const MandatoryVideoGate: React.FC<Props> = ({
               className="px-4 py-2 rounded-md bg-gray-200 text-gray-500 text-sm cursor-not-allowed"
               title="Se habilita cuando termine el video"
             >
-              {saving ? "Guardando..." : completedNow ? "Listo" : "Bloqueado"}
+              {saving ? "Guardando..." : "Bloqueado"}
             </button>
           </div>
         </div>
