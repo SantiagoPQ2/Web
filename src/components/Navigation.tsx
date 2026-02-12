@@ -146,9 +146,9 @@ const Navigation: React.FC = () => {
       case "/revisar-compras":
         return "Revisar Compras";
 
-      // ✅ VIDEO LOG (solo test por ahora)
+      // ✅ VIDEOS
       case "/video-log":
-        return "Video Log";
+        return "Videos";
 
       // === B2B ===
       case "/b2b/catalogo":
@@ -174,7 +174,7 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // ✅ TEST (igual a vendedor para pruebas) + ✅ incluye Video Log
+  // ✅ TEST (igual a vendedor para pruebas) + ✅ incluye Videos
   if (user?.role === "test") {
     menuItems = [
       {
@@ -214,12 +214,12 @@ const Navigation: React.FC = () => {
         description: "Solicitar baja o cambio de ruta",
       },
 
-      // ✅ NUEVO: SOLO TEST
+      // ✅ NUEVO: Videos (videoteca)
       {
-        name: "Video Log",
+        name: "Videos",
         path: "/video-log",
         icon: FileText,
-        description: "Registro de videos vistos",
+        description: "Ver videos disponibles",
       },
 
       {
@@ -237,7 +237,7 @@ const Navigation: React.FC = () => {
     ];
   }
 
-  // VENDEDOR
+  // VENDEDOR (✅ también incluye Videos)
   else if (user?.role === "vendedor") {
     menuItems = [
       {
@@ -276,6 +276,15 @@ const Navigation: React.FC = () => {
         icon: FileText,
         description: "Solicitar baja o cambio de ruta",
       },
+
+      // ✅ NUEVO: Videos (videoteca)
+      {
+        name: "Videos",
+        path: "/video-log",
+        icon: FileText,
+        description: "Ver videos disponibles",
+      },
+
       {
         name: "Chat",
         path: "/chat",
