@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useState } from "react";
 import {
   BrowserRouter as Router,
@@ -26,10 +27,8 @@ import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
 import PDFs from "./pages/PDFs";
 import VideoWatchLog from "./pages/VideoWatchLog";
-
 import BajaClienteCambioRuta from "./pages/BajaClienteCambioRuta";
 import RevisarBajas from "./pages/RevisarBajas";
-
 import PedidoDeCompra from "./pages/PedidoDeCompra";
 import RevisarCompras from "./pages/RevisarCompras";
 
@@ -43,12 +42,10 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
-
 import MandatoryVideoGate from "./components/MandatoryVideoGate";
 
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
-
 const INTRO_VIDEO_ID = "capsula_intro_v1";
 
 function ProtectedApp() {
@@ -58,13 +55,10 @@ function ProtectedApp() {
   const [openChat, setOpenChat] = useState(false);
 
   if (!user) return <Login />;
-
   const role = user.role;
   let allowedRoutes: React.ReactNode;
 
-  // ---------------------------
-  // TEST
-  // ---------------------------
+  // Rutas para cada rol (incluyendo /video-log para test y vendedor)
   if (role === "test") {
     allowedRoutes = (
       <Routes>
@@ -80,12 +74,7 @@ function ProtectedApp() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
-  }
-
-  // ---------------------------
-  // VENDEDOR (SIN VIDEO OBLIGATORIO)
-  // ---------------------------
-  else if (role === "vendedor") {
+  } else if (role === "vendedor") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -100,12 +89,7 @@ function ProtectedApp() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
-  }
-
-  // ---------------------------
-  // SUPERVISOR
-  // ---------------------------
-  else if (role === "supervisor") {
+  } else if (role === "supervisor") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -125,12 +109,7 @@ function ProtectedApp() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
-  }
-
-  // ---------------------------
-  // LOGISTICA
-  // ---------------------------
-  else if (role === "logistica") {
+  } else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
@@ -141,12 +120,7 @@ function ProtectedApp() {
         <Route path="*" element={<Navigate to="/rechazos/nuevo" replace />} />
       </Routes>
     );
-  }
-
-  // ---------------------------
-  // ADMIN
-  // ---------------------------
-  else if (role === "admin") {
+  } else if (role === "admin") {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -173,9 +147,7 @@ function ProtectedApp() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
-  }
-
-  else {
+  } else {
     allowedRoutes = (
       <Routes>
         <Route path="/" element={<SearchPage />} />
@@ -185,7 +157,6 @@ function ProtectedApp() {
   }
 
   const showChatBot = location.pathname.startsWith("/b2b");
-
   const appLayout = (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <Navigation />
@@ -196,7 +167,7 @@ function ProtectedApp() {
     </div>
   );
 
-  // 🔒 SOLO TEST TIENE VIDEO OBLIGATORIO
+  // Sólo el rol test debe ver el video obligatorio
   if (role === "test") {
     return (
       <MandatoryVideoGate
@@ -209,11 +180,10 @@ function ProtectedApp() {
       </MandatoryVideoGate>
     );
   }
-
   return appLayout;
 }
 
-function App() {
+export default function App() {
   return (
     <AuthProvider>
       <Router>
@@ -222,5 +192,3 @@ function App() {
     </AuthProvider>
   );
 }
-
-export default App;
