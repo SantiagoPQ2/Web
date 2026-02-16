@@ -11,7 +11,7 @@ import Navigation from "./components/Navigation";
 
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
-import RevisarBonificaciones from "./pages/RevisarBonificaciones"; // ✅ NUEVO
+import RevisarBonificaciones from "./pages/RevisarBonificaciones";
 
 import RechazosForm from "./pages/RechazosForm";
 import CoordsPage from "./pages/CoordsPage";
@@ -46,12 +46,17 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
 
-import MandatoryVideoGate from "./components/MandatoryVideoGate";
+// ✅ NUEVO: gate video + quiz
+import DailyTrainingGate from "./components/DailyTrainingGate";
 
+// ✅ VIDEO NUEVO
 const INTRO_VIDEO_URL =
-  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%201.mp4";
 
-const INTRO_VIDEO_ID = "capsula_intro_v1";
+const INTRO_VIDEO_ID = "capsula_1_v1";
+
+// ✅ QUIZ en /public/Quiz.xlsx
+const QUIZ_XLSX_PATH = "/Quiz.xlsx";
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -62,7 +67,6 @@ function ProtectedApp() {
 
   if (!user) return <Login />;
 
-  // ✅ según tu código, el role vive en user.role
   const role = user.role;
 
   let allowedRoutes: React.ReactNode;
@@ -102,13 +106,10 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
-
-        {/* ✅ NUEVO: visible para supervisor */}
         <Route
           path="/revisar-bonificaciones"
           element={<RevisarBonificaciones />}
         />
-
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
@@ -140,13 +141,10 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
-
-        {/* ✅ NUEVO: visible para admin */}
         <Route
           path="/revisar-bonificaciones"
           element={<RevisarBonificaciones />}
         />
-
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
@@ -163,11 +161,9 @@ function ProtectedApp() {
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
-
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -202,23 +198,27 @@ function ProtectedApp() {
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
-      {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
-      {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
+      {showChatBot && !openChat && (
+        <ChatBubble onOpen={() => setOpenChat(true)} />
+      )}
+      {showChatBot && openChat && (
+        <ChatBot onClose={() => setOpenChat(false)} />
+      )}
     </div>
   );
 
-  // ✅ TEST y VENDEDOR ven el video obligatorio (1 vez por día)
+  // ✅ TEST y VENDEDOR: Video + Quiz obligatorio (1 vez por día)
   if (role === "test" || role === "vendedor") {
     return (
-      <MandatoryVideoGate
+      <DailyTrainingGate
         rolesToEnforce={["test", "vendedor"]}
         videoId={INTRO_VIDEO_ID}
         videoSrc={INTRO_VIDEO_URL}
-        oncePerDay
-        dailyTable="video_watch_daily"
+        quizXlsxPath={QUIZ_XLSX_PATH}
+        passingScorePct={100}
       >
         {appLayout}
-      </MandatoryVideoGate>
+      </DailyTrainingGate>
     );
   }
 
