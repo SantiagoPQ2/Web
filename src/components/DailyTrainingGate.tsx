@@ -24,7 +24,6 @@ type Props = {
   passingScorePct?: number; // default 90
 };
 
-// YYYY-MM-DD (local)
 function getLocalDayKeyISO(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -62,12 +61,12 @@ export default function DailyTrainingGate({
 
   const [showVideoInQuiz, setShowVideoInQuiz] = useState(false);
 
-  // Para garantizar “guardar solo primer intento”
+  // ✅ clave: para que SOLO se guarde 1 vez
   const [firstAttemptAlreadySaved, setFirstAttemptAlreadySaved] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 1) cargar estado diario desde supabase
+  // cargar estado
   useEffect(() => {
     let alive = true;
 
@@ -112,7 +111,7 @@ export default function DailyTrainingGate({
     };
   }, [user, enforce, dayKey, videoId]);
 
-  // 2) cargar quiz desde /public/Quiz.xlsx cuando corresponde
+  // cargar quiz xlsx
   useEffect(() => {
     let alive = true;
 
@@ -133,7 +132,6 @@ export default function DailyTrainingGate({
 
         const json = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[];
 
-        // Espera columnas: module,id,question,a,b,c,d,e,correct
         const parsed: QuizQuestion[] = json
           .map((r) => ({
             module: String(r.module ?? "").trim(),
@@ -166,17 +164,15 @@ export default function DailyTrainingGate({
   async function markVideoDone() {
     if (!user) return;
 
-    const { error } = await supabase
-      .from("training_daily")
-      .upsert(
-        {
-          user_id: user.id,
-          day_key: dayKey,
-          video_id: videoId,
-          video_completed_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,day_key,video_id" }
-      );
+    const { error } = await supabase.from("training_daily").upsert(
+      {
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+        video_completed_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,day_key,video_id" }
+    );
 
     if (error) {
       console.error("video upsert error:", error);
@@ -200,7 +196,6 @@ export default function DailyTrainingGate({
         correct,
         isCorrect,
         chosenText: (q as any)[chosen] ?? "",
-        // NO mostramos correctText al usuario, pero lo podemos guardar en 1er intento si querés:
         correctText: (q as any)[correct] ?? "",
       };
     });
@@ -212,31 +207,78 @@ export default function DailyTrainingGate({
     return { perQuestion, total, correctCount, scorePct };
   }
 
-  async function saveFirstAttemptIfNeeded(firstAttemptPayload: any, scorePct: number) {
+  // ✅ guarda SOLO primer intento: 10 filas + snapshot training_daily
+  async function saveFirstAttemptIfNeeded(payload: {
+    perQuestion: ReturnType<typeof computeResult>["perQuestion"];
+    total: number;
+    correctCount: number;
+    scorePct: number;
+    answersSnapshot: Record<string, string>;
+  }) {
     if (!user) return;
 
-    // Si ya se guardó, no hacemos nada
     if (firstAttemptAlreadySaved) return;
 
-    // Guardar SOLO el primer intento en training_daily
-    const { error } = await supabase
-      .from("training_daily")
-      .upsert(
-        {
-          user_id: user.id,
-          day_key: dayKey,
-          video_id: videoId,
-          quiz_first_attempt_at: new Date().toISOString(),
-          quiz_first_attempt_score: scorePct,
-          quiz_first_attempt_answers: firstAttemptPayload,
-        },
-        { onConflict: "user_id,day_key,video_id" }
-      );
+    // 1) Insertar 10 filas en training_quiz_answers (primer intento)
+    const rows = payload.perQuestion.map((x) => ({
+      user_id: user.id,
+      day_key: dayKey,
+      video_id: videoId,
+      question_id: x.id,
+      module: x.module,
+      question: x.question,
+      chosen: x.chosen,
+      correct: x.correct,
+      is_correct: x.isCorrect,
+      chosen_text: x.chosenText,
+      correct_text: x.correctText,
+    }));
 
-    if (error) {
-      console.error("save first attempt error:", error);
-      // Si falla, igual no dejamos pasar, porque querés registro del 1er intento
-      throw new Error("No pude guardar el primer intento. Revisá RLS / permisos.");
+    // Usamos upsert pero SOLO se llama 1 vez, así que no se sobreescribe por reintentos.
+    const { error: pqErr } = await supabase.from("training_quiz_answers").upsert(rows, {
+      onConflict: "user_id,day_key,video_id,question_id",
+    });
+
+    if (pqErr) {
+      console.error("training_quiz_answers upsert error:", pqErr);
+      throw new Error("No pude guardar las respuestas del primer intento (tabla training_quiz_answers).");
+    }
+
+    // 2) Guardar snapshot del primer intento en training_daily
+    const firstAttemptSnapshot = {
+      video_id: videoId,
+      day_key: dayKey,
+      total: payload.total,
+      correctCount: payload.correctCount,
+      scorePct: payload.scorePct,
+      answers: payload.answersSnapshot,
+      perQuestion: payload.perQuestion.map((x) => ({
+        id: x.id,
+        module: x.module,
+        question: x.question,
+        chosen: x.chosen,
+        correct: x.correct,
+        isCorrect: x.isCorrect,
+        chosenText: x.chosenText,
+        correctText: x.correctText,
+      })),
+    };
+
+    const { error: dailyErr } = await supabase.from("training_daily").upsert(
+      {
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+        quiz_first_attempt_at: new Date().toISOString(),
+        quiz_first_attempt_score: payload.scorePct,
+        quiz_first_attempt_answers: firstAttemptSnapshot,
+      },
+      { onConflict: "user_id,day_key,video_id" }
+    );
+
+    if (dailyErr) {
+      console.error("training_daily first attempt upsert error:", dailyErr);
+      throw new Error("No pude guardar el primer intento (training_daily).");
     }
 
     setFirstAttemptAlreadySaved(true);
@@ -245,22 +287,20 @@ export default function DailyTrainingGate({
   async function markQuizCompleted(finalScorePct: number) {
     if (!user) return;
 
-    const { error } = await supabase
-      .from("training_daily")
-      .upsert(
-        {
-          user_id: user.id,
-          day_key: dayKey,
-          video_id: videoId,
-          quiz_completed_at: new Date().toISOString(),
-          quiz_score: finalScorePct, // score final
-        },
-        { onConflict: "user_id,day_key,video_id" }
-      );
+    const { error } = await supabase.from("training_daily").upsert(
+      {
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+        quiz_completed_at: new Date().toISOString(),
+        quiz_score: finalScorePct,
+      },
+      { onConflict: "user_id,day_key,video_id" }
+    );
 
     if (error) {
       console.error("mark quiz completed error:", error);
-      throw new Error("No pude marcar el quiz como completado. Revisá RLS / permisos.");
+      throw new Error("No pude marcar el quiz como completado.");
     }
   }
 
@@ -268,11 +308,9 @@ export default function DailyTrainingGate({
     if (!user) return;
     setSubmitMsg(null);
 
-    // validar respondidas
+    // validar respondidas (excepto las lockeadas)
     for (const q of questions) {
-      // si está lockeada como correcta, ya está respondida
       if (lockedCorrectIds.has(q.id)) continue;
-
       if (!answers[q.id]) {
         setSubmitMsg("Respondé todas las preguntas para poder continuar.");
         return;
@@ -281,7 +319,7 @@ export default function DailyTrainingGate({
 
     const { perQuestion, total, correctCount, scorePct } = computeResult();
 
-    // update UI sets (lock correct, mark incorrect)
+    // actualizar UI: lock correctas, marcar incorrectas
     const newlyCorrect = new Set(lockedCorrectIds);
     const newlyIncorrect = new Set<string>();
 
@@ -293,32 +331,16 @@ export default function DailyTrainingGate({
     setLockedCorrectIds(newlyCorrect);
     setIncorrectIds(newlyIncorrect);
 
-    // preparar payload del PRIMER intento (solo 1 vez)
-    const firstAttemptPayload = {
-      video_id: videoId,
-      day_key: dayKey,
-      total,
-      correctCount,
-      scorePct,
-      // Guardamos detalle por pregunta (incluye correct para auditoría interna)
-      perQuestion: perQuestion.map((x) => ({
-        id: x.id,
-        module: x.module,
-        question: x.question,
-        chosen: x.chosen,
-        correct: x.correct,
-        isCorrect: x.isCorrect,
-        chosenText: x.chosenText,
-        correctText: x.correctText,
-      })),
-      answers, // snapshot del primer submit
-    };
-
     try {
-      // ✅ Solo primer intento se guarda
-      await saveFirstAttemptIfNeeded(firstAttemptPayload, scorePct);
+      // ✅ Guardar SOLO el primer submit
+      await saveFirstAttemptIfNeeded({
+        perQuestion,
+        total,
+        correctCount,
+        scorePct,
+        answersSnapshot: { ...answers },
+      });
 
-      // Gate por 90%
       if (scorePct >= passingScorePct) {
         await markQuizCompleted(scorePct);
         setSubmitMsg(`Resultado: ${scorePct}% (${correctCount}/${total}). ✅ Aprobado.`);
@@ -333,10 +355,8 @@ export default function DailyTrainingGate({
     }
   }
 
-  // si no aplica, render normal
   if (!enforce) return <>{children}</>;
 
-  // loading
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -345,7 +365,7 @@ export default function DailyTrainingGate({
     );
   }
 
-  // VIDEO
+  // VIDEO gate
   if (!videoDone) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
@@ -372,7 +392,7 @@ export default function DailyTrainingGate({
     );
   }
 
-  // QUIZ
+  // QUIZ gate
   if (!quizDone) {
     return (
       <div className="min-h-screen bg-white">
@@ -382,7 +402,6 @@ export default function DailyTrainingGate({
             Tenés que alcanzar <b>{passingScorePct}%</b> para continuar.
           </p>
 
-          {/* Botón para re-ver video */}
           <div className="mt-4 flex items-center gap-3">
             <button
               onClick={() => setShowVideoInQuiz((v) => !v)}
@@ -392,9 +411,7 @@ export default function DailyTrainingGate({
             </button>
 
             {firstAttemptAlreadySaved && (
-              <span className="text-sm text-gray-500">
-                (El primer intento ya quedó registrado)
-              </span>
+              <span className="text-sm text-gray-500">(El primer intento ya quedó registrado)</span>
             )}
           </div>
 
@@ -455,7 +472,7 @@ export default function DailyTrainingGate({
                         const label = (q as any)[opt] as string;
                         if (!label) return null;
 
-                        const disabled = isLockedCorrect; // si está correcta, bloqueamos cambios
+                        const disabled = isLockedCorrect;
                         const checked = (answers[q.id] ?? "") === opt;
 
                         return (
@@ -486,7 +503,6 @@ export default function DailyTrainingGate({
                       })}
                     </div>
 
-                    {/* Nota: NO mostramos la correcta */}
                     {isIncorrect && !isLockedCorrect && (
                       <div className="mt-3 text-sm text-amber-800">
                         Esta respuesta está incorrecta. Volvé a intentarlo.
@@ -521,6 +537,5 @@ export default function DailyTrainingGate({
     );
   }
 
-  // si completó todo, app normal
   return <>{children}</>;
 }
