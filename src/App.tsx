@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
@@ -59,17 +60,22 @@ function ProtectedApp() {
 
   const [openChat, setOpenChat] = useState(false);
 
-  if (!user) return <Login />;
+  // ✅ OJO: role puede ser undefined mientras user sea null
+  const role = user?.role;
 
-  const role = user.role;
-
-  // ✅ HARD reset de overlays “raros” al cambiar de rol o ruta (PC suele quedar pegado)
+  // ✅ FIX React error #310:
+  // Este hook SIEMPRE se ejecuta (no retornamos antes de declararlo)
   useEffect(() => {
+    // reseteo defensivo de overlays / estados al cambiar de rol o ruta
     setOpenChat(false);
-    // por si algún modal dejó el body bloqueado
+
+    // por si algún modal dejó bloqueado el body
     document.body.style.overflow = "";
     document.body.style.pointerEvents = "";
   }, [role, location.pathname]);
+
+  // ✅ Recién después de los hooks podemos cortar el render
+  if (!user) return <Login />;
 
   let allowedRoutes: React.ReactNode;
 
@@ -189,19 +195,22 @@ function ProtectedApp() {
 
   const appLayout = (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      {/* ✅ key fuerza remount al cambiar de rol/usuario */}
-      <Navigation key={`${user.username}-${role}`} />
+      {/* ✅ remount Navigation al cambiar rol/usuario para limpiar overlays pegados */}
+      <Navigation key={`${user.username}-${user.role}`} />
 
-      {/* ✅ en PC evita bugs de overlay/fixed */}
+      {/* ✅ en desktop evita bugs de fixed/overlay */}
       <main className="flex-1 overflow-auto">{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
-      {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
+      {showChatBot && !openChat && (
+        <ChatBubble onOpen={() => setOpenChat(true)} />
+      )}
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
 
+  // ✅ TEST y VENDEDOR ven el video obligatorio (1 vez por día)
   if (role === "test" || role === "vendedor") {
     return (
       <MandatoryVideoGate
@@ -230,4 +239,3 @@ function App() {
 }
 
 export default App;
-
