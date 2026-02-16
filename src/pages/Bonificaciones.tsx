@@ -1,5 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle, Package, DollarSign, User, FileText } from "lucide-react";
+// src/pages/Bonificaciones.tsx
+import React, { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Package,
+  DollarSign,
+  User,
+  FileText,
+  Save,
+} from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -35,7 +44,7 @@ const MOTIVOS: Motivo[] = [
 ];
 
 const Bonificaciones: React.FC = () => {
-  const { user, role } = useAuth(); // asumo que tu AuthContext expone role
+  const { user } = useAuth(); // user viene de tu tabla usuarios_app
   const [formData, setFormData] = useState<FormData>({
     cliente: "",
     articulo: "",
@@ -47,12 +56,12 @@ const Bonificaciones: React.FC = () => {
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  const canUsePage = useMemo(() => {
-    // si querés limitar quién carga, ajustá acá (ej: vendedor/admin/supervisor)
-    return !!user;
-  }, [user]);
+  const canUsePage = useMemo(() => !!user, [user]);
 
   const validate = (): boolean => {
     const e: FormErrors = {};
@@ -63,19 +72,24 @@ const Bonificaciones: React.FC = () => {
     if (!formData.bultos.trim()) e.bultos = "Bultos es obligatorio";
     else {
       const n = Number(formData.bultos);
-      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) e.bultos = "Bultos debe ser entero > 0";
+      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n))
+        e.bultos = "Bultos debe ser entero > 0";
     }
 
-    if (!formData.porcentajeBonificacion.trim()) e.porcentajeBonificacion = "%Bonificación es obligatorio";
+    if (!formData.porcentajeBonificacion.trim())
+      e.porcentajeBonificacion = "%Bonificación es obligatorio";
     else {
       const n = Number(formData.porcentajeBonificacion);
-      if (!Number.isFinite(n) || n < 0) e.porcentajeBonificacion = "%Bonificación debe ser >= 0";
+      if (!Number.isFinite(n) || n < 0)
+        e.porcentajeBonificacion = "%Bonificación debe ser >= 0";
     }
 
-    if (!formData.montoAdicional.trim()) e.montoAdicional = "Monto adicional es obligatorio (0 si no aplica)";
+    if (formData.montoAdicional.trim() === "")
+      e.montoAdicional = "Monto adicional es obligatorio (0 si no aplica)";
     else {
       const n = Number(formData.montoAdicional);
-      if (!Number.isFinite(n) || n < 0) e.montoAdicional = "Monto adicional debe ser >= 0";
+      if (!Number.isFinite(n) || n < 0)
+        e.montoAdicional = "Monto adicional debe ser >= 0";
     }
 
     if (!formData.motivo) e.motivo = "Motivo es obligatorio";
@@ -86,7 +100,8 @@ const Bonificaciones: React.FC = () => {
 
   const setField = (k: keyof FormData, v: string) => {
     setFormData((p) => ({ ...p, [k]: v }));
-    if (errors[k as keyof FormErrors]) setErrors((p) => ({ ...p, [k]: undefined }));
+    if (errors[k as keyof FormErrors])
+      setErrors((p) => ({ ...p, [k]: undefined }));
     if (message) setMessage(null);
   };
 
@@ -94,6 +109,16 @@ const Bonificaciones: React.FC = () => {
     ev.preventDefault();
     if (!canUsePage) return;
     if (!validate()) return;
+
+    // ✅ CLAVE: tu sistema NO usa Supabase Auth.
+    // created_by debe venir de usuarios_app.id (uuid).
+    if (!user?.id) {
+      setMessage({
+        type: "error",
+        text: "❌ No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.",
+      });
+      return;
+    }
 
     setLoading(true);
     setMessage(null);
@@ -106,14 +131,15 @@ const Bonificaciones: React.FC = () => {
         porcentaje_bonificacion: Number(formData.porcentajeBonificacion),
         monto_adicional: Number(formData.montoAdicional),
         motivo: formData.motivo,
-        // estado queda 'pendiente' por default
-        // created_by queda auth.uid() por default (o por policy)
+        created_by: user.id, // ✅ FIX
+        // estado: 'pendiente' (default en DB)
       };
 
       const { error } = await supabase.from("bonificaciones").insert(payload);
       if (error) throw error;
 
       setMessage({ type: "success", text: "✅ Bonificación registrada correctamente" });
+
       setFormData({
         cliente: "",
         articulo: "",
@@ -148,7 +174,7 @@ const Bonificaciones: React.FC = () => {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center mb-6">
           <div className="bg-red-100 rounded-full p-2 mr-3">
-            <FileText className="h-6 w-6 text-red-700" />
+            <Save className="h-6 w-6 text-red-700" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Bonificaciones</h1>
@@ -233,7 +259,8 @@ const Bonificaciones: React.FC = () => {
           {/* % Bonificación */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-              <DollarSign className="h-4 w-4 mr-1" /> %Bonificación <span className="text-red-500 ml-1">*</span>
+              <DollarSign className="h-4 w-4 mr-1" /> %Bonificación{" "}
+              <span className="text-red-500 ml-1">*</span>
             </label>
             <input
               type="number"
@@ -270,7 +297,9 @@ const Bonificaciones: React.FC = () => {
               }`}
               placeholder="0 si no aplica"
             />
-            {errors.montoAdicional && <p className="mt-1 text-sm text-red-600">{errors.montoAdicional}</p>}
+            {errors.montoAdicional && (
+              <p className="mt-1 text-sm text-red-600">{errors.montoAdicional}</p>
+            )}
           </div>
 
           {/* Motivo */}
@@ -300,14 +329,32 @@ const Bonificaciones: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium ${
-                loading ? "bg-gray-400 cursor-not-allowed" : "bg-red-700 hover:bg-red-800"
+              className={`w-full flex items-center justify-center px-6 py-3 rounded-lg text-white font-medium transition-all ${
+                loading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-red-700 hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
               }`}
             >
-              {loading ? "Guardando..." : "Guardar Bonificación"}
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Guardar Bonificación
+                </>
+              )}
             </button>
           </div>
         </form>
+
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm text-gray-600">
+            <strong>Nota:</strong> Se guardará en Supabase con estado <code>pendiente</code>.
+          </p>
+        </div>
       </div>
     </div>
   );
