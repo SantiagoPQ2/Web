@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Film, Play, ExternalLink } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -9,27 +9,131 @@ type VideoItem = {
   description?: string;
   src: string;
   tags?: string[];
+  path: string; // path dentro del bucket
 };
 
-const VIDEOS: VideoItem[] = [
-  {
-    id: "capsula_intro_v1",
-    title: "Cápsula de Introducción",
-    description: "Video de inducción / introducción a la app.",
-    src: "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4",
-    tags: ["introducción", "obligatorio"],
-  },
-];
+const BUCKET = "documentos_pdf";
+const FOLDER = ""; // si los subís dentro de una carpeta, poné por ej: "2025" (sin slash final)
+
+function niceTitleFromFilename(name: string) {
+  // "Capsula Introduccion.mp4" -> "Capsula Introduccion"
+  const noExt = name.replace(/\.[^/.]+$/, "");
+  return noExt.replace(/%20/g, " ").trim();
+}
+
+function makeIdFromPath(path: string) {
+  // id estable: path normalizado
+  return path.replace(/\//g, "_").toLowerCase();
+}
+
+function tagsFromName(name: string): string[] {
+  const n = name.toLowerCase();
+  const tags: string[] = [];
+  if (n.includes("introduccion") || n.includes("intro")) tags.push("introducción");
+  if (n.includes("capsula")) tags.push("cápsula");
+  // si querés marcar obligatorio siempre:
+  tags.push("obligatorio");
+  return tags;
+}
+
+function descriptionFromName(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("introduccion") || n.includes("intro")) {
+    return "Video de inducción / introducción a la app.";
+  }
+  if (n.includes("capsula 1") || n.includes("capsula%201")) {
+    return "Cápsula 1 de capacitación.";
+  }
+  return "Video de capacitación.";
+}
 
 const VideoWatchLog: React.FC = () => {
   const { user } = useAuth();
 
-  const [selectedId, setSelectedId] = useState<string>(VIDEOS[0]?.id ?? "");
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string>("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // ✅ traer lista de videos desde Storage
+  useEffect(() => {
+    let alive = true;
+
+    async function loadVideos() {
+      setLoading(true);
+      setErrorMsg(null);
+
+      // list() SOLO lista una carpeta. Si querés "2025", poné FOLDER="2025"
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .list(FOLDER, {
+          limit: 100,
+          offset: 0,
+          sortBy: { column: "name", order: "asc" },
+        });
+
+      if (!alive) return;
+
+      if (error) {
+        console.error("storage list error:", error);
+        setErrorMsg(
+          "No pude listar los videos del Storage. Si el bucket es público pero LIST no está permitido, puedo dejarlo hardcodeado."
+        );
+        setVideos([]);
+        setLoading(false);
+        return;
+      }
+
+      // filtrar mp4 (y evitar carpetas)
+      const mp4s = (data ?? [])
+        .filter((f) => !f.id && !f.metadata) // a veces folders vienen sin metadata
+        .concat((data ?? []).filter((f) => (f.metadata as any)?.mimetype)) // por si viene distinto
+        .filter((f: any) => (f.name ?? "").toLowerCase().endsWith(".mp4"));
+
+      // alternativa robusta: solo por extensión
+      const onlyMp4 = (data ?? []).filter((f) =>
+        (f.name ?? "").toLowerCase().endsWith(".mp4")
+      );
+
+      const finalList = (onlyMp4.length ? onlyMp4 : mp4s).map((f: any) => {
+        const name = f.name as string;
+        const path = FOLDER ? `${FOLDER}/${name}` : name;
+
+        const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+
+        return {
+          id: makeIdFromPath(path),
+          title: niceTitleFromFilename(name),
+          description: descriptionFromName(name),
+          src: pub.publicUrl,
+          tags: tagsFromName(name),
+          path,
+        } as VideoItem;
+      });
+
+      setVideos(finalList);
+
+      // seleccionar primero por defecto
+      if (finalList.length && !selectedId) {
+        setSelectedId(finalList[0].id);
+      }
+
+      setLoading(false);
+    }
+
+    loadVideos();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const selected = useMemo(
-    () => VIDEOS.find((v) => v.id === selectedId) ?? null,
-    [selectedId]
+    () => videos.find((v) => v.id === selectedId) ?? null,
+    [videos, selectedId]
   );
 
   const onPick = (id: string) => {
@@ -50,21 +154,18 @@ const VideoWatchLog: React.FC = () => {
   const logWatch = async (video: VideoItem) => {
     if (!user?.username) return;
 
-    // Ajustá nombres de tabla/columnas si tus columnas son distintas
     const payload = {
       username: user.username,
       role: user.role,
       video_id: video.id,
       video_title: video.title,
       video_url: video.src,
-      source: "library", // para diferenciar de "gate" si querés
+      source: "library",
       completed: true,
       watched_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from("video_watch_log").insert([payload]);
-
-    // si tu tabla se llama distinto o no existe, acá te va a tirar error
     if (error) console.error("video_watch_log insert error:", error.message);
   };
 
@@ -83,6 +184,12 @@ const VideoWatchLog: React.FC = () => {
           </div>
         </div>
 
+        {errorMsg && (
+          <div className="mb-4 p-3 rounded-lg bg-yellow-50 text-yellow-800 border border-yellow-200">
+            {errorMsg}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Lista */}
           <div className="lg:col-span-1">
@@ -92,12 +199,14 @@ const VideoWatchLog: React.FC = () => {
               </div>
 
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {VIDEOS.length === 0 ? (
+                {loading ? (
+                  <div className="p-4 text-sm text-gray-500">Cargando videos…</div>
+                ) : videos.length === 0 ? (
                   <div className="p-4 text-sm text-gray-500">
-                    No hay videos cargados.
+                    No hay videos cargados (o no se pudo listar el bucket).
                   </div>
                 ) : (
-                  VIDEOS.map((v) => {
+                  videos.map((v) => {
                     const active = v.id === selectedId;
                     return (
                       <button
@@ -188,7 +297,6 @@ const VideoWatchLog: React.FC = () => {
                     playsInline
                     className="w-full rounded-lg bg-black"
                     onEnded={() => {
-                      // ✅ opcional: log cuando termina
                       logWatch(selected).catch(() => {});
                     }}
                   />
