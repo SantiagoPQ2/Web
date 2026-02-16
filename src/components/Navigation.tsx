@@ -136,6 +136,11 @@ const Navigation: React.FC = () => {
 
       case "/bonificaciones":
         return "Bonificaciones";
+
+      // ✅ NUEVO
+      case "/revisar-bonificaciones":
+        return "Revisar Bonificaciones";
+
       case "/notas-credito":
         return "Notas de Crédito";
       case "/gps-logger":
@@ -348,6 +353,15 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
+
+      // ✅ NUEVO: supervisor puede ver esta página
+      {
+        name: "Revisar Bonificaciones",
+        path: "/revisar-bonificaciones",
+        icon: FileText,
+        description: "Aprobar bonificaciones cargadas",
+      },
+
       {
         name: "Notas de Crédito",
         path: "/notas-credito",
@@ -474,6 +488,15 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
+
+      // ✅ NUEVO: admin puede ver esta página (pero no aprueba dentro de la página)
+      {
+        name: "Revisar Bonificaciones",
+        path: "/revisar-bonificaciones",
+        icon: FileText,
+        description: "Ver bonificaciones cargadas",
+      },
+
       {
         name: "Nuevo Rechazo",
         path: "/rechazos/nuevo",
@@ -571,7 +594,7 @@ const Navigation: React.FC = () => {
             </button>
 
             <div className="flex items-center">
-              <img src="/image.png" className="h-8 w-8 mr-2" />
+              <img src="/image.png" className="h-8 w-8 mr-2" alt="Logo" />
               <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 {getCurrentPageName()}
               </h1>
@@ -609,7 +632,7 @@ const Navigation: React.FC = () => {
                       {notificaciones.map((n) => (
                         <li
                           key={n.id}
-                          className="text-sm p-2 border-b border-gray-200"
+                          className="text-sm p-2 border-b border-gray-200 dark:border-gray-700"
                         >
                           <strong>{n.titulo}</strong>
                           <br />
@@ -638,12 +661,14 @@ const Navigation: React.FC = () => {
               </button>
 
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 p-2">
-                  <p className="px-4 py-2 text-sm border-b">{user?.username}</p>
+                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2">
+                  <p className="px-4 py-2 text-sm border-b border-gray-200 dark:border-gray-700">
+                    {user?.username}
+                  </p>
 
                   {!hideSettingsEverywhere && (
                     <button
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
                       onClick={() => (window.location.href = "/settings")}
                     >
                       <User size={16} /> Configuración
@@ -651,7 +676,7 @@ const Navigation: React.FC = () => {
                   )}
 
                   <button
-                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={handleLogout}
                   >
                     Cerrar sesión
@@ -721,3 +746,4 @@ const Navigation: React.FC = () => {
 };
 
 export default Navigation;
+
