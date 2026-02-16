@@ -55,7 +55,7 @@ const INTRO_VIDEO_URL =
 
 const INTRO_VIDEO_ID = "capsula_1_v1";
 
-// ✅ QUIZ en /public/Quiz.xlsx
+// ✅ QUIZ (en /public/Quiz.xlsx)
 const QUIZ_XLSX_PATH = "/Quiz.xlsx";
 
 function ProtectedApp() {
@@ -106,10 +106,12 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
+
         <Route
           path="/revisar-bonificaciones"
           element={<RevisarBonificaciones />}
         />
+
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
@@ -141,10 +143,12 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
+
         <Route
           path="/revisar-bonificaciones"
           element={<RevisarBonificaciones />}
         />
+
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
@@ -161,9 +165,11 @@ function ProtectedApp() {
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
+
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -215,7 +221,6 @@ function ProtectedApp() {
         videoId={INTRO_VIDEO_ID}
         videoSrc={INTRO_VIDEO_URL}
         quizXlsxPath={QUIZ_XLSX_PATH}
-        passingScorePct={100}
       >
         {appLayout}
       </DailyTrainingGate>
