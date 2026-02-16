@@ -15,12 +15,22 @@ type Row = {
   monto_adicional: number;
   motivo: string;
   estado: Estado;
+  created_by?: string; // uuid
+  aprobado_by?: string | null;
+  aprobado_at?: string | null;
 };
 
 const PAGE_SIZE = 10;
 
 const RevisarBonificaciones: React.FC = () => {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
+
+  const role = user?.role;
+  const canView = useMemo(
+    () => !!user && (role === "admin" || role === "supervisor"),
+    [user, role]
+  );
+  const canApprove = useMemo(() => role === "supervisor", [role]);
 
   const [desde, setDesde] = useState<string>("");
   const [hasta, setHasta] = useState<string>("");
@@ -31,8 +41,7 @@ const RevisarBonificaciones: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const canView = useMemo(() => !!user && (role === "admin" || role === "supervisor"), [user, role]);
-  const canApprove = useMemo(() => role === "supervisor", [role]);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const fetchData = async () => {
     if (!canView) return;
@@ -45,7 +54,7 @@ const RevisarBonificaciones: React.FC = () => {
       let q = supabase
         .from("bonificaciones")
         .select(
-          "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, estado",
+          "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, estado, created_by, aprobado_by, aprobado_at",
           { count: "exact" }
         )
         .order("created_at", { ascending: false })
@@ -59,6 +68,10 @@ const RevisarBonificaciones: React.FC = () => {
 
       setRows((data ?? []) as Row[]);
       setTotal(count ?? 0);
+    } catch (e) {
+      console.error(e);
+      setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -69,10 +82,15 @@ const RevisarBonificaciones: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, page]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
   const aprobar = async (id: number) => {
     if (!canApprove) return;
+
+    // ✅ CLAVE: tu sistema NO usa Supabase Auth.
+    // aprobado_by debe venir de usuarios_app.id (uuid).
+    if (!user?.id) {
+      alert("No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -80,14 +98,17 @@ const RevisarBonificaciones: React.FC = () => {
         .from("bonificaciones")
         .update({
           estado: "aprobada",
-          aprobado_by: user?.id ?? null,
+          aprobado_by: user.id, // ✅ FIX
           aprobado_at: new Date().toISOString(),
         })
         .eq("id", id)
         .eq("estado", "pendiente");
 
       if (error) throw error;
+
       await fetchData();
+    } catch (e: any) {
+      alert(e?.message ?? "Error al aprobar");
     } finally {
       setLoading(false);
     }
@@ -113,6 +134,7 @@ const RevisarBonificaciones: React.FC = () => {
           </div>
         </div>
 
+        {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3 items-end mb-4">
           <div>
             <label className="block text-sm text-gray-700 mb-1">Desde</label>
@@ -127,7 +149,6 @@ const RevisarBonificaciones: React.FC = () => {
               disabled={loading}
             />
           </div>
-
           <div>
             <label className="block text-sm text-gray-700 mb-1">Hasta</label>
             <input
@@ -154,6 +175,7 @@ const RevisarBonificaciones: React.FC = () => {
           </button>
         </div>
 
+        {/* Tabla */}
         <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
@@ -222,9 +244,10 @@ const RevisarBonificaciones: React.FC = () => {
           </table>
         </div>
 
+        {/* Paginación */}
         <div className="flex items-center justify-between mt-4">
           <div className="text-sm text-gray-600">
-            Página {page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))} — Total: {total}
+            Página {page} / {totalPages} — Total: {total}
           </div>
           <div className="flex gap-2">
             <button
