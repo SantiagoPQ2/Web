@@ -1,5 +1,4 @@
-// src/App.tsx
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,7 +11,7 @@ import Navigation from "./components/Navigation";
 
 import SearchPage from "./pages/SearchPage";
 import Bonificaciones from "./pages/Bonificaciones";
-import RevisarBonificaciones from "./pages/RevisarBonificaciones";
+import RevisarBonificaciones from "./pages/RevisarBonificaciones"; // ✅ NUEVO
 
 import RechazosForm from "./pages/RechazosForm";
 import CoordsPage from "./pages/CoordsPage";
@@ -51,6 +50,7 @@ import MandatoryVideoGate from "./components/MandatoryVideoGate";
 
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20Introduccion.mp4";
+
 const INTRO_VIDEO_ID = "capsula_intro_v1";
 
 function ProtectedApp() {
@@ -60,22 +60,10 @@ function ProtectedApp() {
 
   const [openChat, setOpenChat] = useState(false);
 
-  // ✅ OJO: role puede ser undefined mientras user sea null
-  const role = user?.role;
-
-  // ✅ FIX React error #310:
-  // Este hook SIEMPRE se ejecuta (no retornamos antes de declararlo)
-  useEffect(() => {
-    // reseteo defensivo de overlays / estados al cambiar de rol o ruta
-    setOpenChat(false);
-
-    // por si algún modal dejó bloqueado el body
-    document.body.style.overflow = "";
-    document.body.style.pointerEvents = "";
-  }, [role, location.pathname]);
-
-  // ✅ Recién después de los hooks podemos cortar el render
   if (!user) return <Login />;
+
+  // ✅ según tu código, el role vive en user.role
+  const role = user.role;
 
   let allowedRoutes: React.ReactNode;
 
@@ -114,7 +102,13 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
-        <Route path="/revisar-bonificaciones" element={<RevisarBonificaciones />} />
+
+        {/* ✅ NUEVO: visible para supervisor */}
+        <Route
+          path="/revisar-bonificaciones"
+          element={<RevisarBonificaciones />}
+        />
+
         <Route path="/notas-credito" element={<NotasCredito />} />
         <Route path="/gps-logger" element={<GpsLogger />} />
         <Route path="/informacion" element={<Informacion />} />
@@ -146,7 +140,13 @@ function ProtectedApp() {
       <Routes>
         <Route path="/" element={<SearchPage />} />
         <Route path="/bonificaciones" element={<Bonificaciones />} />
-        <Route path="/revisar-bonificaciones" element={<RevisarBonificaciones />} />
+
+        {/* ✅ NUEVO: visible para admin */}
+        <Route
+          path="/revisar-bonificaciones"
+          element={<RevisarBonificaciones />}
+        />
+
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
@@ -163,9 +163,11 @@ function ProtectedApp() {
         <Route path="/pdfs" element={<PDFs />} />
         <Route path="/pedido-compra" element={<PedidoDeCompra />} />
         <Route path="/revisar-compras" element={<RevisarCompras />} />
+
         <Route path="/b2b/catalogo" element={<CatalogoB2B />} />
         <Route path="/b2b/carrito" element={<CarritoB2B />} />
         <Route path="/b2b/pedidos" element={<PedidosB2B />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -194,18 +196,13 @@ function ProtectedApp() {
     location.pathname === "/b2b/pedidos";
 
   const appLayout = (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300">
-      {/* ✅ remount Navigation al cambiar rol/usuario para limpiar overlays pegados */}
-      <Navigation key={`${user.username}-${user.role}`} />
-
-      {/* ✅ en desktop evita bugs de fixed/overlay */}
-      <main className="flex-1 overflow-auto">{allowedRoutes}</main>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
+      <Navigation />
+      <main className="flex-1 overflow-hidden">{allowedRoutes}</main>
 
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
 
-      {showChatBot && !openChat && (
-        <ChatBubble onOpen={() => setOpenChat(true)} />
-      )}
+      {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
