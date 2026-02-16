@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Menu,
   Bell,
@@ -33,6 +34,13 @@ const Navigation: React.FC = () => {
   const [notisAbiertas, setNotisAbiertas] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Cerrar sidebar y dropdowns al cambiar de ruta / usuario
+  useEffect(() => {
+    setSidebarOpen(false);
+    setNotisAbiertas(false);
+    setIsUserMenuOpen(false);
+  }, [location.pathname, user?.role, user?.username]);
 
   // Cerrar dropdown user al hacer click afuera
   useEffect(() => {
@@ -104,7 +112,6 @@ const Navigation: React.FC = () => {
     try {
       const keep: Record<string, string> = {};
 
-      // guardamos todas las keys del gate
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (!k) continue;
@@ -115,11 +122,8 @@ const Navigation: React.FC = () => {
       }
 
       localStorage.clear();
-
-      // restauramos keys del gate
       Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
     } catch {
-      // si falla, al menos no rompemos logout
       localStorage.clear();
     }
 
@@ -133,14 +137,10 @@ const Navigation: React.FC = () => {
         return user?.role === "administracion-cordoba"
           ? "Pedido de Compra"
           : "Buscar Cliente";
-
       case "/bonificaciones":
         return "Bonificaciones";
-
-      // ✅ NUEVO
       case "/revisar-bonificaciones":
         return "Revisar Bonificaciones";
-
       case "/notas-credito":
         return "Notas de Crédito";
       case "/gps-logger":
@@ -171,25 +171,18 @@ const Navigation: React.FC = () => {
         return "Revisión de Bajas";
       case "/pdfs":
         return "Documentos PDF";
-
-      // ✅ COMPRAS
       case "/pedido-compra":
         return "Pedido de Compra";
       case "/revisar-compras":
         return "Revisar Compras";
-
-      // ✅ VIDEO (lista para ver videos)
       case "/video-log":
         return "Videos";
-
-      // === B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
       case "/b2b/carrito":
         return "B2B - Carrito";
       case "/b2b/pedidos":
         return "B2B - Pedidos";
-
       default:
         return "VaFood SRL - AR";
     }
@@ -198,391 +191,153 @@ const Navigation: React.FC = () => {
   // -------------------------
   // MENÚ SEGÚN ROL
   // -------------------------
+  let menuItems: { name: string; path: string; icon: any; description: string }[] = [];
 
-  let menuItems: {
-    name: string;
-    path: string;
-    icon: any;
-    description: string;
-  }[] = [];
-
-  // ✅ TEST (igual a vendedor) + ✅ incluye Videos
-  if (user?.role === "test") {
+  if (user?.role === "test" || user?.role === "vendedor") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas de crédito",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y clientes del día",
-      },
-      {
-        name: "Baja / Cambio Ruta",
-        path: "/baja-cliente",
-        icon: FileText,
-        description: "Solicitar baja o cambio de ruta",
-      },
-      {
-        name: "Videos",
-        path: "/video-log",
-        icon: FileText,
-        description: "Ver videos disponibles",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
+      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
+      { name: "Videos", path: "/video-log", icon: FileText, description: "Ver videos disponibles" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
-  }
-
-  // ✅ VENDEDOR + ✅ incluye Videos
-  else if (user?.role === "vendedor") {
+  } else if (user?.role === "supervisor") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas de crédito",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y clientes del día",
-      },
-      {
-        name: "Baja / Cambio Ruta",
-        path: "/baja-cliente",
-        icon: FileText,
-        description: "Solicitar baja o cambio de ruta",
-      },
-      {
-        name: "Videos",
-        path: "/video-log",
-        icon: FileText,
-        description: "Ver videos disponibles",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Aprobar bonificaciones cargadas" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
+      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
+      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
+      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel del supervisor" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
-  }
-
-  // SUPERVISOR
-  else if (user?.role === "supervisor") {
+  } else if (user?.role === "logistica") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Ver pedidos de compra",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-
-      // ✅ NUEVO: supervisor puede ver esta página
-      {
-        name: "Revisar Bonificaciones",
-        path: "/revisar-bonificaciones",
-        icon: FileText,
-        description: "Aprobar bonificaciones cargadas",
-      },
-
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Revisar Bajas",
-        path: "/revisar-bajas",
-        icon: FileText,
-        description: "Aprobar solicitudes de baja",
-      },
-      {
-        name: "Documentos PDF",
-        path: "/pdfs",
-        icon: File,
-        description: "Documentación interna",
-      },
-      {
-        name: "Mapa de Visitas",
-        path: "/mapa",
-        icon: Compass,
-        description: "Rutas y visitas",
-      },
-      {
-        name: "Dashboard Power BI",
-        path: "/powerbi",
-        icon: BarChart3,
-        description: "Indicadores",
-      },
-      {
-        name: "Supervisor",
-        path: "/supervisor",
-        icon: Compass,
-        description: "Panel del supervisor",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
+      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y datos" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
-  }
-
-  // LOGÍSTICA
-  else if (user?.role === "logistica") {
+  } else if (user?.role === "administracion-cordoba") {
     menuItems = [
-      {
-        name: "Nuevo Rechazo",
-        path: "/rechazos/nuevo",
-        icon: Plus,
-        description: "Registrar nuevo rechazo",
-      },
-      {
-        name: "Coordenadas",
-        path: "/coordenadas",
-        icon: MapPin,
-        description: "Consultar coordenadas",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y datos",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
     ];
-  }
-
-  // ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
-  else if (user?.role === "administracion-cordoba") {
+  } else if (user?.role === "admin") {
     menuItems = [
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Ver pedidos de compra",
-      },
-    ];
-  }
-
-  // ADMIN
-  else if (user?.role === "admin") {
-    menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-
-      // ✅ NUEVO: admin puede ver esta página (pero no aprueba dentro de la página)
-      {
-        name: "Revisar Bonificaciones",
-        path: "/revisar-bonificaciones",
-        icon: FileText,
-        description: "Ver bonificaciones cargadas",
-      },
-
-      {
-        name: "Nuevo Rechazo",
-        path: "/rechazos/nuevo",
-        icon: Plus,
-        description: "Registrar rechazos",
-      },
-      {
-        name: "Coordenadas",
-        path: "/coordenadas",
-        icon: MapPin,
-        description: "Consultar coordenadas",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar coordenadas",
-      },
-      {
-        name: "Revisar Bajas",
-        path: "/revisar-bajas",
-        icon: FileText,
-        description: "Aprobar solicitudes de baja",
-      },
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Aprobar y auditar pedidos de compra",
-      },
-      {
-        name: "Documentos PDF",
-        path: "/pdfs",
-        icon: File,
-        description: "Documentación interna",
-      },
-      {
-        name: "Mapa de Visitas",
-        path: "/mapa",
-        icon: Compass,
-        description: "Rutas y visitas",
-      },
-      {
-        name: "Dashboard Power BI",
-        path: "/powerbi",
-        icon: BarChart3,
-        description: "Indicadores",
-      },
-      {
-        name: "Panel Admin",
-        path: "/admin",
-        icon: Wrench,
-        description: "Herramientas admin",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Ver bonificaciones cargadas" },
+      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazos" },
+      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar coordenadas" },
+      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Aprobar y auditar pedidos de compra" },
+      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
+      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
+      { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
 
   const hideSettingsEverywhere = user?.role === "administracion-cordoba";
 
+  const sidebarPortal =
+    sidebarOpen && typeof document !== "undefined"
+      ? createPortal(
+          <>
+            {/* overlay con z-index FUERTE */}
+            <div
+              onClick={() => setSidebarOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.4)",
+                zIndex: 9998,
+              }}
+            />
+            {/* sidebar con z-index mayor al overlay */}
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                height: "100vh",
+                width: "min(18rem, 90vw)",
+                background: "white",
+                zIndex: 9999,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+                padding: "1rem",
+                overflowY: "auto",
+              }}
+              className="dark:bg-gray-900"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold">Menú</h2>
+                <button
+                  className="text-gray-600 hover:text-red-600"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <X size={22} />
+                </button>
+              </div>
+
+              <nav className="space-y-2">
+                {menuItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.path;
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-start gap-3 p-3 rounded-lg ${
+                        isActive
+                          ? "bg-red-50 border-l-4 border-red-500"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <Icon
+                        className={`h-5 w-5 mt-0.5 ${
+                          isActive ? "text-red-600" : "text-gray-500"
+                        }`}
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{item.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {item.description}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          </>,
+          document.body
+        )
+      : null;
+
   return (
     <>
-      {/* HEADER SUPERIOR */}
+      {/* HEADER */}
       <header className="w-full bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -601,7 +356,7 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* ICONOS DERECHA */}
+          {/* DERECHA */}
           <div className="flex items-center gap-4 relative">
             {/* NOTIFICACIONES */}
             <div className="relative">
@@ -620,7 +375,6 @@ const Navigation: React.FC = () => {
                 )}
               </button>
 
-              {/* LISTA NOTIS */}
               {notisAbiertas && (
                 <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
                   <h4 className="font-semibold mb-2">Notificaciones</h4>
@@ -661,7 +415,7 @@ const Navigation: React.FC = () => {
               </button>
 
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2">
+                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 z-50">
                   <p className="px-4 py-2 text-sm border-b border-gray-200 dark:border-gray-700">
                     {user?.username}
                   </p>
@@ -688,59 +442,8 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
-      {/* SIDEBAR */}
-      {sidebarOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 z-40"
-            onClick={() => setSidebarOpen(false)}
-          ></div>
-
-          <div className="fixed top-0 left-0 w-full max-w-xs sm:w-72 bg-white dark:bg-gray-900 h-full shadow-xl z-50 p-4 overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">Menú</h2>
-              <button
-                className="text-gray-600 hover:text-red-600"
-                onClick={() => setSidebarOpen(false)}
-              >
-                <X size={22} />
-              </button>
-            </div>
-
-            <nav className="space-y-2">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path;
-
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-start gap-3 p-3 rounded-lg ${
-                      isActive
-                        ? "bg-red-50 border-l-4 border-red-500"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    <Icon
-                      className={`h-5 w-5 mt-0.5 ${
-                        isActive ? "text-red-600" : "text-gray-500"
-                      }`}
-                    />
-                    <div>
-                      <div className="text-sm font-medium">{item.name}</div>
-                      <div className="text-xs text-gray-500">
-                        {item.description}
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        </>
-      )}
+      {/* ✅ PORTAL del sidebar (fuera de cualquier stacking context raro) */}
+      {sidebarPortal}
     </>
   );
 };
