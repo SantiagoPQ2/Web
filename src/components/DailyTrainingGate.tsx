@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 type QuizQuestion = {
   module: string;
-  id: string;
+  id: string;       // question_id
   question: string;
   a: string;
   b: string;
@@ -17,21 +17,12 @@ type QuizQuestion = {
 
 type Props = {
   children: React.ReactNode;
-
-  // Roles que deben completar video+quiz para entrar
   rolesToEnforce: string[];
-
-  // Identificador del video (versionable)
   videoId: string;
-
-  // URL pública del mp4
   videoSrc: string;
-
-  // Path al XLSX dentro de /public (ej: "/Quiz.xlsx")
   quizXlsxPath: string;
 };
 
-// YYYY-MM-DD (local)
 function getLocalDayKeyISO(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -65,7 +56,7 @@ export default function DailyTrainingGate({
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 1) cargar estado diario desde supabase
+  // 1) cargar estado diario
   useEffect(() => {
     let alive = true;
 
@@ -87,7 +78,6 @@ export default function DailyTrainingGate({
 
       if (error) {
         console.error("training_daily select error:", error);
-        // si falla, igual bloqueamos (no dejamos "saltear")
         if (alive) {
           setVideoDone(false);
           setQuizDone(false);
@@ -109,7 +99,7 @@ export default function DailyTrainingGate({
     };
   }, [user, enforce, dayKey, videoId]);
 
-  // 2) cargar quiz desde /public/Quiz.xlsx cuando corresponde
+  // 2) cargar quiz XLSX
   useEffect(() => {
     let alive = true;
 
@@ -130,7 +120,6 @@ export default function DailyTrainingGate({
 
         const json = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[];
 
-        // Espera columnas: module,id,question,a,b,c,d,e,correct
         const parsed: QuizQuestion[] = json
           .map((r) => ({
             module: String(r.module ?? "").trim(),
@@ -163,16 +152,15 @@ export default function DailyTrainingGate({
   async function markVideoDone() {
     if (!user) return;
 
-    const payload = {
-      user_id: user.id,
-      day_key: dayKey,
-      video_id: videoId,
-      video_completed_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from("training_daily")
-      .upsert(payload, { onConflict: "user_id,day_key,video_id" });
+    const { error } = await supabase.from("training_daily").upsert(
+      {
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+        video_completed_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,day_key,video_id" }
+    );
 
     if (error) {
       console.error("video upsert error:", error);
@@ -194,71 +182,68 @@ export default function DailyTrainingGate({
       }
     }
 
-    // armar detalle por pregunta (bien/mal)
+    // calcular resultados por pregunta + score
     const perQuestion = questions.map((q) => {
       const chosen = (answers[q.id] ?? "").toLowerCase();
       const correct = (q.correct ?? "").toLowerCase();
       const isCorrect = chosen === correct;
 
       return {
-        id: q.id,
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+
+        question_id: q.id,
         module: q.module,
         question: q.question,
-        chosen, // "a"|"b"|...
+
+        chosen,
         correct,
-        isCorrect,
-        chosenText: (q as any)[chosen] ?? "",
-        correctText: (q as any)[correct] ?? "",
+        is_correct: isCorrect,
+
+        chosen_text: (q as any)[chosen] ?? "",
+        correct_text: (q as any)[correct] ?? "",
       };
     });
 
-    const total = questions.length;
-    const correctCount = perQuestion.filter((x) => x.isCorrect).length;
+    const total = perQuestion.length;
+    const correctCount = perQuestion.filter((x) => x.is_correct).length;
     const scorePct = Math.round((correctCount / total) * 100);
 
-    const answersPayload = {
-      video_id: videoId,
-      day_key: dayKey,
-      scorePct,
-      correctCount,
-      total,
-      answers, // { [questionId]: "a"|"b"|... }
-      perQuestion,
-    };
+    // 1) upsert 10 filas (1 por pregunta)
+    // onConflict requiere índice único (user_id, day_key, video_id, question_id)
+    const { error: pqErr } = await supabase
+      .from("training_quiz_answers")
+      .upsert(perQuestion, {
+        onConflict: "user_id,day_key,video_id,question_id",
+      });
 
-    // 1) guardar intento (auditoría)
-    const insAttempt = await supabase.from("training_quiz_attempts").insert({
-      user_id: user.id,
-      day_key: dayKey,
-      video_id: videoId,
-      score: scorePct,
-      passed: true, // ya no hay "aprobación": siempre true para no romper schema
-      answers: answersPayload,
-      per_question: perQuestion,
-    });
-
-    if (insAttempt.error) {
-      console.error("quiz attempt insert error:", insAttempt.error);
-      // No bloqueamos por esto
+    if (pqErr) {
+      console.error("training_quiz_answers upsert error:", pqErr);
+      setSubmitMsg("No pude guardar el detalle por pregunta. Revisá RLS / permisos.");
+      return;
     }
 
-    // 2) marcar daily como completado SIEMPRE
-    const up = await supabase.from("training_daily").upsert(
+    // 2) (opcional) guardar resumen diario (para tener timestamps + score)
+    const { error: dailyErr } = await supabase.from("training_daily").upsert(
       {
         user_id: user.id,
         day_key: dayKey,
         video_id: videoId,
         quiz_completed_at: new Date().toISOString(),
         quiz_score: scorePct,
-        quiz_answers: answersPayload,
-        quiz_per_question: perQuestion,
+        quiz_answers: {
+          total,
+          correctCount,
+          scorePct,
+        },
       },
       { onConflict: "user_id,day_key,video_id" }
     );
 
-    if (up.error) {
-      console.error("quiz daily upsert error:", up.error);
-      setSubmitMsg("Guardado falló en servidor. Revisá RLS / permisos.");
+    if (dailyErr) {
+      console.error("training_daily upsert error:", dailyErr);
+      setSubmitMsg("Guardé las preguntas, pero falló el resumen diario. Revisá RLS / permisos.");
       return;
     }
 
@@ -269,7 +254,6 @@ export default function DailyTrainingGate({
   // si no aplica, render normal
   if (!enforce) return <>{children}</>;
 
-  // mientras carga estado
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -278,7 +262,7 @@ export default function DailyTrainingGate({
     );
   }
 
-  // GATE: VIDEO
+  // VIDEO
   if (!videoDone) {
     return (
       <div className="min-h-screen bg-white flex flex-col">
@@ -305,7 +289,7 @@ export default function DailyTrainingGate({
     );
   }
 
-  // GATE: QUIZ
+  // QUIZ
   if (!quizDone) {
     return (
       <div className="min-h-screen bg-white">
@@ -376,6 +360,6 @@ export default function DailyTrainingGate({
     );
   }
 
-  // si completó todo, app normal
+  // listo
   return <>{children}</>;
 }
