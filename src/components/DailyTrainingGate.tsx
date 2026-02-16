@@ -17,13 +17,21 @@ type QuizQuestion = {
 
 type Props = {
   children: React.ReactNode;
-  rolesToEnforce: string[];     // ej ["vendedor"]
-  videoId: string;             // ej "capsula_1"
-  videoSrc: string;            // URL mp4
-  quizXlsxPath: string;        // ej "/Quiz.xlsx" (en /public)
-  passingScorePct?: number;    // default 100
+
+  // Roles que deben completar video+quiz para entrar
+  rolesToEnforce: string[];
+
+  // Identificador del video (versionable)
+  videoId: string;
+
+  // URL pública del mp4
+  videoSrc: string;
+
+  // Path al XLSX dentro de /public (ej: "/Quiz.xlsx")
+  quizXlsxPath: string;
 };
 
+// YYYY-MM-DD (local)
 function getLocalDayKeyISO(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -38,7 +46,6 @@ export default function DailyTrainingGate({
   videoId,
   videoSrc,
   quizXlsxPath,
-  passingScorePct = 100,
 }: Props) {
   const { user } = useAuth();
 
@@ -80,7 +87,7 @@ export default function DailyTrainingGate({
 
       if (error) {
         console.error("training_daily select error:", error);
-        // si falla por RLS o similar, igual bloqueamos para no “saltear”
+        // si falla, igual bloqueamos (no dejamos "saltear")
         if (alive) {
           setVideoDone(false);
           setQuizDone(false);
@@ -124,17 +131,19 @@ export default function DailyTrainingGate({
         const json = XLSX.utils.sheet_to_json(ws, { defval: "" }) as any[];
 
         // Espera columnas: module,id,question,a,b,c,d,e,correct
-        const parsed: QuizQuestion[] = json.map((r) => ({
-          module: String(r.module ?? "").trim(),
-          id: String(r.id ?? "").trim(),
-          question: String(r.question ?? "").trim(),
-          a: String(r.a ?? "").trim(),
-          b: String(r.b ?? "").trim(),
-          c: String(r.c ?? "").trim(),
-          d: String(r.d ?? "").trim(),
-          e: String(r.e ?? "").trim(),
-          correct: String(r.correct ?? "").trim().toLowerCase(),
-        })).filter(q => q.id && q.question && q.correct);
+        const parsed: QuizQuestion[] = json
+          .map((r) => ({
+            module: String(r.module ?? "").trim(),
+            id: String(r.id ?? "").trim(),
+            question: String(r.question ?? "").trim(),
+            a: String(r.a ?? "").trim(),
+            b: String(r.b ?? "").trim(),
+            c: String(r.c ?? "").trim(),
+            d: String(r.d ?? "").trim(),
+            e: String(r.e ?? "").trim(),
+            correct: String(r.correct ?? "").trim().toLowerCase(),
+          }))
+          .filter((q) => q.id && q.question && q.correct);
 
         if (!parsed.length) throw new Error("El XLSX no trajo preguntas válidas.");
 
@@ -146,7 +155,9 @@ export default function DailyTrainingGate({
     }
 
     loadQuiz();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [user, enforce, videoDone, quizDone, quizXlsxPath]);
 
   async function markVideoDone() {
@@ -165,7 +176,6 @@ export default function DailyTrainingGate({
 
     if (error) {
       console.error("video upsert error:", error);
-      // si falla, no habilitamos
       return;
     }
 
@@ -184,13 +194,27 @@ export default function DailyTrainingGate({
       }
     }
 
-    const total = questions.length;
-    const correctCount = questions.reduce((acc, q) => {
-      return acc + (answers[q.id]?.toLowerCase() === q.correct ? 1 : 0);
-    }, 0);
+    // armar detalle por pregunta (bien/mal)
+    const perQuestion = questions.map((q) => {
+      const chosen = (answers[q.id] ?? "").toLowerCase();
+      const correct = (q.correct ?? "").toLowerCase();
+      const isCorrect = chosen === correct;
 
+      return {
+        id: q.id,
+        module: q.module,
+        question: q.question,
+        chosen, // "a"|"b"|...
+        correct,
+        isCorrect,
+        chosenText: (q as any)[chosen] ?? "",
+        correctText: (q as any)[correct] ?? "",
+      };
+    });
+
+    const total = questions.length;
+    const correctCount = perQuestion.filter((x) => x.isCorrect).length;
     const scorePct = Math.round((correctCount / total) * 100);
-    const passed = scorePct >= passingScorePct;
 
     const answersPayload = {
       video_id: videoId,
@@ -199,48 +223,47 @@ export default function DailyTrainingGate({
       correctCount,
       total,
       answers, // { [questionId]: "a"|"b"|... }
+      perQuestion,
     };
 
-    // 1) guardar intento
+    // 1) guardar intento (auditoría)
     const insAttempt = await supabase.from("training_quiz_attempts").insert({
       user_id: user.id,
       day_key: dayKey,
       video_id: videoId,
       score: scorePct,
-      passed,
+      passed: true, // ya no hay "aprobación": siempre true para no romper schema
       answers: answersPayload,
+      per_question: perQuestion,
     });
 
     if (insAttempt.error) {
       console.error("quiz attempt insert error:", insAttempt.error);
-      // aunque falle el log, igual intentamos marcar daily
+      // No bloqueamos por esto
     }
 
-    // 2) si aprobó, marcar daily como completado
-    if (passed) {
-      const up = await supabase.from("training_daily").upsert(
-        {
-          user_id: user.id,
-          day_key: dayKey,
-          video_id: videoId,
-          quiz_completed_at: new Date().toISOString(),
-          quiz_score: scorePct,
-          quiz_answers: answersPayload,
-        },
-        { onConflict: "user_id,day_key,video_id" }
-      );
+    // 2) marcar daily como completado SIEMPRE
+    const up = await supabase.from("training_daily").upsert(
+      {
+        user_id: user.id,
+        day_key: dayKey,
+        video_id: videoId,
+        quiz_completed_at: new Date().toISOString(),
+        quiz_score: scorePct,
+        quiz_answers: answersPayload,
+        quiz_per_question: perQuestion,
+      },
+      { onConflict: "user_id,day_key,video_id" }
+    );
 
-      if (up.error) {
-        console.error("quiz daily upsert error:", up.error);
-        setSubmitMsg("Guardado falló en servidor. Revisá RLS / permisos.");
-        return;
-      }
-
-      setQuizDone(true);
-      setSubmitMsg(null);
-    } else {
-      setSubmitMsg(`Resultado: ${scorePct}%. Tenés que alcanzar ${passingScorePct}% para continuar. Podés reintentar.`);
+    if (up.error) {
+      console.error("quiz daily upsert error:", up.error);
+      setSubmitMsg("Guardado falló en servidor. Revisá RLS / permisos.");
+      return;
     }
+
+    setSubmitMsg(`Resultado: ${scorePct}% (${correctCount}/${total}). Continuando…`);
+    setQuizDone(true);
   }
 
   // si no aplica, render normal
@@ -261,9 +284,7 @@ export default function DailyTrainingGate({
       <div className="min-h-screen bg-white flex flex-col">
         <div className="max-w-3xl w-full mx-auto p-6">
           <h1 className="text-2xl font-semibold text-gray-900">Capacitación obligatoria</h1>
-          <p className="mt-2 text-gray-600">
-            Para iniciar tu jornada, mirá el video completo.
-          </p>
+          <p className="mt-2 text-gray-600">Para iniciar tu jornada, mirá el video completo.</p>
 
           <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
             <video
@@ -290,9 +311,7 @@ export default function DailyTrainingGate({
       <div className="min-h-screen bg-white">
         <div className="max-w-4xl mx-auto p-6">
           <h1 className="text-2xl font-semibold text-gray-900">Quiz obligatorio</h1>
-          <p className="mt-2 text-gray-600">
-            Completá el quiz para poder continuar.
-          </p>
+          <p className="mt-2 text-gray-600">Completá el quiz para poder continuar.</p>
 
           {quizError && (
             <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
