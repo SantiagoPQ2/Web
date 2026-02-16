@@ -46,10 +46,10 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
 
-// ✅ NUEVO: gate video + quiz
+// ✅ gate video + quiz
 import DailyTrainingGate from "./components/DailyTrainingGate";
 
-// ✅ VIDEO NUEVO
+// ✅ VIDEO
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%201.mp4";
 
@@ -213,7 +213,7 @@ function ProtectedApp() {
     </div>
   );
 
-  // ✅ TEST y VENDEDOR: Video + Quiz obligatorio (1 vez por día)
+  // ✅ TEST y VENDEDOR: Video + Quiz obligatorio (no pasan hasta 90%)
   if (role === "test" || role === "vendedor") {
     return (
       <DailyTrainingGate
@@ -221,6 +221,7 @@ function ProtectedApp() {
         videoId={INTRO_VIDEO_ID}
         videoSrc={INTRO_VIDEO_URL}
         quizXlsxPath={QUIZ_XLSX_PATH}
+        passingScorePct={90}
       >
         {appLayout}
       </DailyTrainingGate>
