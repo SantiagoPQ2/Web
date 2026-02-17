@@ -1,4 +1,3 @@
-// src/pages/RevisarBonificaciones.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -15,9 +14,15 @@ type Row = {
   monto_adicional: number;
   motivo: string;
   estado: Estado;
-  created_by?: string; // uuid
+  created_by?: string; // uuid (usuarios_app.id)
   aprobado_by?: string | null;
   aprobado_at?: string | null;
+};
+
+type UserMini = {
+  id: string;
+  name: string | null;
+  username: string | null;
 };
 
 const PAGE_SIZE = 10;
@@ -41,6 +46,9 @@ const RevisarBonificaciones: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
+  // ✅ map para resolver created_by -> nombre
+  const [userMap, setUserMap] = useState<Record<string, UserMini>>({});
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const fetchData = async () => {
@@ -60,14 +68,48 @@ const RevisarBonificaciones: React.FC = () => {
         .order("created_at", { ascending: false })
         .range(from, to);
 
-      if (desde) q = q.gte("created_at", new Date(desde + "T00:00:00").toISOString());
-      if (hasta) q = q.lte("created_at", new Date(hasta + "T23:59:59").toISOString());
+      if (desde)
+        q = q.gte("created_at", new Date(desde + "T00:00:00").toISOString());
+      if (hasta)
+        q = q.lte("created_at", new Date(hasta + "T23:59:59").toISOString());
 
       const { data, error, count } = await q;
       if (error) throw error;
 
-      setRows((data ?? []) as Row[]);
+      const newRows = (data ?? []) as Row[];
+      setRows(newRows);
       setTotal(count ?? 0);
+
+      // ✅ traer nombres de usuarios_app para los created_by presentes en esta página
+      const creatorIds = Array.from(
+        new Set(newRows.map((r) => r.created_by).filter(Boolean) as string[])
+      );
+
+      if (creatorIds.length > 0) {
+        // Evitar re-consultar IDs que ya tenemos en el map
+        const missing = creatorIds.filter((id) => !userMap[id]);
+
+        if (missing.length > 0) {
+          const { data: usersData, error: usersErr } = await supabase
+            .from("usuarios_app")
+            .select("id, name, username")
+            .in("id", missing);
+
+          if (usersErr) {
+            console.error("usuarios_app lookup error:", usersErr);
+          } else {
+            const add: Record<string, UserMini> = {};
+            (usersData ?? []).forEach((u: any) => {
+              add[u.id] = {
+                id: u.id,
+                name: u.name ?? null,
+                username: u.username ?? null,
+              };
+            });
+            setUserMap((prev) => ({ ...prev, ...add }));
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
       setRows([]);
@@ -85,7 +127,7 @@ const RevisarBonificaciones: React.FC = () => {
   const aprobar = async (id: number) => {
     if (!canApprove) return;
 
-    // ✅ CLAVE: tu sistema NO usa Supabase Auth.
+    // ✅ tu sistema NO usa Supabase Auth real:
     // aprobado_by debe venir de usuarios_app.id (uuid).
     if (!user?.id) {
       alert("No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.");
@@ -98,7 +140,7 @@ const RevisarBonificaciones: React.FC = () => {
         .from("bonificaciones")
         .update({
           estado: "aprobada",
-          aprobado_by: user.id, // ✅ FIX
+          aprobado_by: user.id,
           aprobado_at: new Date().toISOString(),
         })
         .eq("id", id)
@@ -112,6 +154,13 @@ const RevisarBonificaciones: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getCreatorLabel = (createdBy?: string) => {
+    if (!createdBy) return "-";
+    const u = userMap[createdBy];
+    if (!u) return createdBy; // fallback: muestra uuid si aún no cargó
+    return u.name || u.username || createdBy;
   };
 
   if (!canView) {
@@ -129,7 +178,9 @@ const RevisarBonificaciones: React.FC = () => {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Revisar Bonificaciones</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Revisar Bonificaciones
+            </h1>
             <p className="text-gray-600">Listado desde Supabase</p>
           </div>
         </div>
@@ -181,6 +232,7 @@ const RevisarBonificaciones: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left p-3">Fecha</th>
+                <th className="text-left p-3">Cargado por</th>
                 <th className="text-left p-3">Cliente</th>
                 <th className="text-left p-3">Artículo</th>
                 <th className="text-left p-3">Bultos</th>
@@ -195,12 +247,22 @@ const RevisarBonificaciones: React.FC = () => {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
-                  <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td className="p-3">
+                    {new Date(r.created_at).toLocaleDateString()}
+                  </td>
+
+                  {/* ✅ NUEVO: nombre de usuarios_app */}
+                  <td className="p-3">{getCreatorLabel(r.created_by)}</td>
+
                   <td className="p-3">{r.cliente}</td>
                   <td className="p-3">{r.articulo}</td>
                   <td className="p-3">{r.bultos}</td>
-                  <td className="p-3">{Number(r.porcentaje_bonificacion).toFixed(2)}%</td>
-                  <td className="p-3">${Number(r.monto_adicional).toFixed(2)}</td>
+                  <td className="p-3">
+                    {Number(r.porcentaje_bonificacion).toFixed(2)}%
+                  </td>
+                  <td className="p-3">
+                    ${Number(r.monto_adicional).toFixed(2)}
+                  </td>
                   <td className="p-3">{r.motivo}</td>
                   <td className="p-3">
                     <span
@@ -221,7 +283,9 @@ const RevisarBonificaciones: React.FC = () => {
                         disabled={loading || r.estado !== "pendiente"}
                         onClick={() => aprobar(r.id)}
                         className={`px-3 py-1 rounded text-white ${
-                          r.estado !== "pendiente" ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+                          r.estado !== "pendiente"
+                            ? "bg-gray-400"
+                            : "bg-green-600 hover:bg-green-700"
                         }`}
                       >
                         Aprobar
@@ -235,7 +299,7 @@ const RevisarBonificaciones: React.FC = () => {
 
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td className="p-4 text-gray-600" colSpan={9}>
+                  <td className="p-4 text-gray-600" colSpan={10}>
                     Sin resultados.
                   </td>
                 </tr>
