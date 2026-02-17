@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
+import * as XLSX from "xlsx";
 
 type Estado = "pendiente" | "aprobada" | "rechazada";
 
@@ -26,6 +27,22 @@ type UserMini = {
 };
 
 const PAGE_SIZE = 10;
+const EXPORT_BATCH_SIZE = 1000;
+
+function toIsoStart(desde: string) {
+  return new Date(desde + "T00:00:00").toISOString();
+}
+function toIsoEnd(hasta: string) {
+  return new Date(hasta + "T23:59:59").toISOString();
+}
+
+function formatDate(d: string) {
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return d;
+  }
+}
 
 const RevisarBonificaciones: React.FC = () => {
   const { user } = useAuth();
@@ -46,10 +63,46 @@ const RevisarBonificaciones: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // ✅ map para resolver created_by -> nombre
+  // map para resolver created_by/aprobado_by -> nombre
   const [userMap, setUserMap] = useState<Record<string, UserMini>>({});
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const ensureUsersLoaded = async (ids: string[]) => {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0) return;
+
+    const missing = unique.filter((id) => !userMap[id]);
+    if (missing.length === 0) return;
+
+    const { data, error } = await supabase
+      .from("usuarios_app")
+      .select("id, name, username")
+      .in("id", missing);
+
+    if (error) {
+      console.error("usuarios_app lookup error:", error);
+      return;
+    }
+
+    const add: Record<string, UserMini> = {};
+    (data ?? []).forEach((u: any) => {
+      add[u.id] = {
+        id: u.id,
+        name: u.name ?? null,
+        username: u.username ?? null,
+      };
+    });
+
+    setUserMap((prev) => ({ ...prev, ...add }));
+  };
+
+  const getUserLabel = (id?: string | null) => {
+    if (!id) return "-";
+    const u = userMap[id];
+    if (!u) return id;
+    return u.name || u.username || id;
+  };
 
   const fetchData = async () => {
     if (!canView) return;
@@ -68,10 +121,8 @@ const RevisarBonificaciones: React.FC = () => {
         .order("created_at", { ascending: false })
         .range(from, to);
 
-      if (desde)
-        q = q.gte("created_at", new Date(desde + "T00:00:00").toISOString());
-      if (hasta)
-        q = q.lte("created_at", new Date(hasta + "T23:59:59").toISOString());
+      if (desde) q = q.gte("created_at", toIsoStart(desde));
+      if (hasta) q = q.lte("created_at", toIsoEnd(hasta));
 
       const { data, error, count } = await q;
       if (error) throw error;
@@ -80,36 +131,12 @@ const RevisarBonificaciones: React.FC = () => {
       setRows(newRows);
       setTotal(count ?? 0);
 
-      // ✅ traer nombres de usuarios_app para los created_by presentes en esta página
-      const creatorIds = Array.from(
-        new Set(newRows.map((r) => r.created_by).filter(Boolean) as string[])
-      );
+      // precargar users de esta página (creador + aprobador)
+      const ids = newRows
+        .flatMap((r) => [r.created_by, r.aprobado_by ?? undefined])
+        .filter(Boolean) as string[];
 
-      if (creatorIds.length > 0) {
-        // Evitar re-consultar IDs que ya tenemos en el map
-        const missing = creatorIds.filter((id) => !userMap[id]);
-
-        if (missing.length > 0) {
-          const { data: usersData, error: usersErr } = await supabase
-            .from("usuarios_app")
-            .select("id, name, username")
-            .in("id", missing);
-
-          if (usersErr) {
-            console.error("usuarios_app lookup error:", usersErr);
-          } else {
-            const add: Record<string, UserMini> = {};
-            (usersData ?? []).forEach((u: any) => {
-              add[u.id] = {
-                id: u.id,
-                name: u.name ?? null,
-                username: u.username ?? null,
-              };
-            });
-            setUserMap((prev) => ({ ...prev, ...add }));
-          }
-        }
-      }
+      await ensureUsersLoaded(ids);
     } catch (e) {
       console.error(e);
       setRows([]);
@@ -127,7 +154,7 @@ const RevisarBonificaciones: React.FC = () => {
   const aprobar = async (id: number) => {
     if (!canApprove) return;
 
-    // ✅ tu sistema NO usa Supabase Auth real:
+    // tu sistema NO usa Supabase Auth real:
     // aprobado_by debe venir de usuarios_app.id (uuid).
     if (!user?.id) {
       alert("No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.");
@@ -156,11 +183,80 @@ const RevisarBonificaciones: React.FC = () => {
     }
   };
 
-  const getCreatorLabel = (createdBy?: string) => {
-    if (!createdBy) return "-";
-    const u = userMap[createdBy];
-    if (!u) return createdBy; // fallback: muestra uuid si aún no cargó
-    return u.name || u.username || createdBy;
+  // ✅ Exporta TODO lo filtrado (no solo la página)
+  const exportXlsx = async () => {
+    if (!canView) return;
+
+    setLoading(true);
+    try {
+      const all: Row[] = [];
+
+      let offset = 0;
+      while (true) {
+        const from = offset;
+        const to = offset + EXPORT_BATCH_SIZE - 1;
+
+        let q = supabase
+          .from("bonificaciones")
+          .select(
+            "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, estado, created_by, aprobado_by, aprobado_at"
+          )
+          .order("created_at", { ascending: false })
+          .range(from, to);
+
+        if (desde) q = q.gte("created_at", toIsoStart(desde));
+        if (hasta) q = q.lte("created_at", toIsoEnd(hasta));
+
+        const { data, error } = await q;
+        if (error) throw error;
+
+        const chunk = (data ?? []) as Row[];
+        all.push(...chunk);
+
+        if (chunk.length < EXPORT_BATCH_SIZE) break;
+        offset += EXPORT_BATCH_SIZE;
+      }
+
+      // cargar users para todos los ids involucrados (creador + aprobador)
+      const ids = all
+        .flatMap((r) => [r.created_by, r.aprobado_by ?? undefined])
+        .filter(Boolean) as string[];
+
+      await ensureUsersLoaded(ids);
+
+      // armar filas para excel
+      const excelRows = all.map((r) => ({
+        Fecha: formatDate(r.created_at),
+        "Cargado por": getUserLabel(r.created_by),
+        Cliente: r.cliente,
+        Artículo: r.articulo,
+        Bultos: r.bultos,
+        "% Bonif": Number(r.porcentaje_bonificacion),
+        "Monto adicional": Number(r.monto_adicional),
+        Motivo: r.motivo,
+        Estado: r.estado,
+        "Aprobado por": r.aprobado_by ? getUserLabel(r.aprobado_by) : "-",
+        "Aprobado at": r.aprobado_at ? formatDate(r.aprobado_at) : "-",
+        "ID Bonificación": r.id,
+        "Created_by (uuid)": r.created_by ?? "",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Bonificaciones");
+
+      const stamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, "-")
+        .slice(0, 19);
+
+      XLSX.writeFile(wb, `bonificaciones_${stamp}.xlsx`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "Error exportando XLSX");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!canView) {
@@ -178,11 +274,18 @@ const RevisarBonificaciones: React.FC = () => {
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Revisar Bonificaciones
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900">Revisar Bonificaciones</h1>
             <p className="text-gray-600">Listado desde Supabase</p>
           </div>
+
+          {/* ✅ Export */}
+          <button
+            onClick={exportXlsx}
+            disabled={loading}
+            className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+          >
+            Exportar XLSX
+          </button>
         </div>
 
         {/* Filtros */}
@@ -220,7 +323,7 @@ const RevisarBonificaciones: React.FC = () => {
               fetchData();
             }}
             disabled={loading}
-            className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black"
+            className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-60"
           >
             Aplicar
           </button>
@@ -247,22 +350,13 @@ const RevisarBonificaciones: React.FC = () => {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
-                  <td className="p-3">
-                    {new Date(r.created_at).toLocaleDateString()}
-                  </td>
-
-                  {/* ✅ NUEVO: nombre de usuarios_app */}
-                  <td className="p-3">{getCreatorLabel(r.created_by)}</td>
-
+                  <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td className="p-3">{getUserLabel(r.created_by)}</td>
                   <td className="p-3">{r.cliente}</td>
                   <td className="p-3">{r.articulo}</td>
                   <td className="p-3">{r.bultos}</td>
-                  <td className="p-3">
-                    {Number(r.porcentaje_bonificacion).toFixed(2)}%
-                  </td>
-                  <td className="p-3">
-                    ${Number(r.monto_adicional).toFixed(2)}
-                  </td>
+                  <td className="p-3">{Number(r.porcentaje_bonificacion).toFixed(2)}%</td>
+                  <td className="p-3">${Number(r.monto_adicional).toFixed(2)}</td>
                   <td className="p-3">{r.motivo}</td>
                   <td className="p-3">
                     <span
