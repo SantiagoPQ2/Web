@@ -51,7 +51,7 @@ import DailyTrainingGate from "./components/DailyTrainingGate";
 
 // ✅ VIDEO
 const INTRO_VIDEO_URL =
-  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%201.mp4";
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%202.mp4";
 
 const INTRO_VIDEO_ID = "capsula_1_v1";
 
