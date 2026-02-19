@@ -14,6 +14,7 @@ type Row = {
   porcentaje_bonificacion: number;
   monto_adicional: number;
   motivo: string;
+  fecha_entrega: string; // ✅ NUEVO (date en DB)
   estado: Estado;
   created_by?: string; // uuid (usuarios_app.id)
   aprobado_by?: string | null;
@@ -36,9 +37,19 @@ function toIsoEnd(hasta: string) {
   return new Date(hasta + "T23:59:59").toISOString();
 }
 
-function formatDate(d: string) {
+function formatDateTime(d: string) {
   try {
     return new Date(d).toLocaleString();
+  } catch {
+    return d;
+  }
+}
+
+function formatDateOnly(d: string) {
+  try {
+    // d viene como "YYYY-MM-DD" (date)
+    const dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString();
   } catch {
     return d;
   }
@@ -63,7 +74,6 @@ const RevisarBonificaciones: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // map para resolver created_by/aprobado_by -> nombre
   const [userMap, setUserMap] = useState<Record<string, UserMini>>({});
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -115,7 +125,7 @@ const RevisarBonificaciones: React.FC = () => {
       let q = supabase
         .from("bonificaciones")
         .select(
-          "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, estado, created_by, aprobado_by, aprobado_at",
+          "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, fecha_entrega, estado, created_by, aprobado_by, aprobado_at",
           { count: "exact" }
         )
         .order("created_at", { ascending: false })
@@ -131,7 +141,6 @@ const RevisarBonificaciones: React.FC = () => {
       setRows(newRows);
       setTotal(count ?? 0);
 
-      // precargar users de esta página (creador + aprobador)
       const ids = newRows
         .flatMap((r) => [r.created_by, r.aprobado_by ?? undefined])
         .filter(Boolean) as string[];
@@ -154,8 +163,6 @@ const RevisarBonificaciones: React.FC = () => {
   const aprobar = async (id: number) => {
     if (!canApprove) return;
 
-    // tu sistema NO usa Supabase Auth real:
-    // aprobado_by debe venir de usuarios_app.id (uuid).
     if (!user?.id) {
       alert("No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.");
       return;
@@ -183,7 +190,6 @@ const RevisarBonificaciones: React.FC = () => {
     }
   };
 
-  // ✅ Exporta TODO lo filtrado (no solo la página)
   const exportXlsx = async () => {
     if (!canView) return;
 
@@ -199,7 +205,7 @@ const RevisarBonificaciones: React.FC = () => {
         let q = supabase
           .from("bonificaciones")
           .select(
-            "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, estado, created_by, aprobado_by, aprobado_at"
+            "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, fecha_entrega, estado, created_by, aprobado_by, aprobado_at"
           )
           .order("created_at", { ascending: false })
           .range(from, to);
@@ -217,16 +223,15 @@ const RevisarBonificaciones: React.FC = () => {
         offset += EXPORT_BATCH_SIZE;
       }
 
-      // cargar users para todos los ids involucrados (creador + aprobador)
       const ids = all
         .flatMap((r) => [r.created_by, r.aprobado_by ?? undefined])
         .filter(Boolean) as string[];
 
       await ensureUsersLoaded(ids);
 
-      // armar filas para excel
       const excelRows = all.map((r) => ({
-        Fecha: formatDate(r.created_at),
+        Fecha: formatDateTime(r.created_at),
+        "Fecha entrega": r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-",
         "Cargado por": getUserLabel(r.created_by),
         Cliente: r.cliente,
         Artículo: r.articulo,
@@ -236,20 +241,15 @@ const RevisarBonificaciones: React.FC = () => {
         Motivo: r.motivo,
         Estado: r.estado,
         "Aprobado por": r.aprobado_by ? getUserLabel(r.aprobado_by) : "-",
-        "Aprobado at": r.aprobado_at ? formatDate(r.aprobado_at) : "-",
+        "Aprobado at": r.aprobado_at ? formatDateTime(r.aprobado_at) : "-",
         "ID Bonificación": r.id,
-        "Created_by (uuid)": r.created_by ?? "",
       }));
 
       const ws = XLSX.utils.json_to_sheet(excelRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Bonificaciones");
 
-      const stamp = new Date()
-        .toISOString()
-        .replace(/[:.]/g, "-")
-        .slice(0, 19);
-
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       XLSX.writeFile(wb, `bonificaciones_${stamp}.xlsx`);
     } catch (e: any) {
       console.error(e);
@@ -278,7 +278,6 @@ const RevisarBonificaciones: React.FC = () => {
             <p className="text-gray-600">Listado desde Supabase</p>
           </div>
 
-          {/* ✅ Export */}
           <button
             onClick={exportXlsx}
             disabled={loading}
@@ -288,7 +287,6 @@ const RevisarBonificaciones: React.FC = () => {
           </button>
         </div>
 
-        {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3 items-end mb-4">
           <div>
             <label className="block text-sm text-gray-700 mb-1">Desde</label>
@@ -329,12 +327,12 @@ const RevisarBonificaciones: React.FC = () => {
           </button>
         </div>
 
-        {/* Tabla */}
         <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left p-3">Fecha</th>
+                <th className="text-left p-3">Fecha entrega</th>
                 <th className="text-left p-3">Cargado por</th>
                 <th className="text-left p-3">Cliente</th>
                 <th className="text-left p-3">Artículo</th>
@@ -351,6 +349,7 @@ const RevisarBonificaciones: React.FC = () => {
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
                   <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td className="p-3">{r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-"}</td>
                   <td className="p-3">{getUserLabel(r.created_by)}</td>
                   <td className="p-3">{r.cliente}</td>
                   <td className="p-3">{r.articulo}</td>
@@ -393,7 +392,7 @@ const RevisarBonificaciones: React.FC = () => {
 
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td className="p-4 text-gray-600" colSpan={10}>
+                  <td className="p-4 text-gray-600" colSpan={11}>
                     Sin resultados.
                   </td>
                 </tr>
@@ -402,7 +401,6 @@ const RevisarBonificaciones: React.FC = () => {
           </table>
         </div>
 
-        {/* Paginación */}
         <div className="flex items-center justify-between mt-4">
           <div className="text-sm text-gray-600">
             Página {page} / {totalPages} — Total: {total}
