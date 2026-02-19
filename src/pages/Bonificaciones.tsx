@@ -8,6 +8,7 @@ import {
   User,
   FileText,
   Save,
+  Calendar,
 } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +26,7 @@ interface FormData {
   porcentajeBonificacion: string;
   montoAdicional: string;
   motivo: Motivo | "";
+  fechaEntrega: string; // YYYY-MM-DD
 }
 
 interface FormErrors {
@@ -34,6 +36,7 @@ interface FormErrors {
   porcentajeBonificacion?: string;
   montoAdicional?: string;
   motivo?: string;
+  fechaEntrega?: string;
 }
 
 const MOTIVOS: Motivo[] = [
@@ -43,8 +46,28 @@ const MOTIVOS: Motivo[] = [
   "Ruptura/Falta de Frio/Falta de Vacio",
 ];
 
+function getTodayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(dateKey: string, days: number) {
+  const d = new Date(dateKey + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const Bonificaciones: React.FC = () => {
   const { user } = useAuth(); // user viene de tu tabla usuarios_app
+
+  const minFechaEntrega = addDays(getTodayKey(), 1); // posterior a hoy
+
   const [formData, setFormData] = useState<FormData>({
     cliente: "",
     articulo: "",
@@ -52,6 +75,7 @@ const Bonificaciones: React.FC = () => {
     porcentajeBonificacion: "",
     montoAdicional: "",
     motivo: "",
+    fechaEntrega: minFechaEntrega,
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -94,14 +118,17 @@ const Bonificaciones: React.FC = () => {
 
     if (!formData.motivo) e.motivo = "Motivo es obligatorio";
 
+    if (!formData.fechaEntrega) e.fechaEntrega = "Fecha de entrega es obligatoria";
+    else if (formData.fechaEntrega <= getTodayKey())
+      e.fechaEntrega = "La fecha de entrega debe ser posterior a hoy";
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const setField = (k: keyof FormData, v: string) => {
     setFormData((p) => ({ ...p, [k]: v }));
-    if (errors[k as keyof FormErrors])
-      setErrors((p) => ({ ...p, [k]: undefined }));
+    if (errors[k as keyof FormErrors]) setErrors((p) => ({ ...p, [k]: undefined }));
     if (message) setMessage(null);
   };
 
@@ -110,8 +137,7 @@ const Bonificaciones: React.FC = () => {
     if (!canUsePage) return;
     if (!validate()) return;
 
-    // ✅ CLAVE: tu sistema NO usa Supabase Auth.
-    // created_by debe venir de usuarios_app.id (uuid).
+    // created_by debe venir de usuarios_app.id (uuid)
     if (!user?.id) {
       setMessage({
         type: "error",
@@ -131,7 +157,8 @@ const Bonificaciones: React.FC = () => {
         porcentaje_bonificacion: Number(formData.porcentajeBonificacion),
         monto_adicional: Number(formData.montoAdicional),
         motivo: formData.motivo,
-        created_by: user.id, // ✅ FIX
+        fecha_entrega: formData.fechaEntrega, // ✅ NUEVO
+        created_by: user.id,
         // estado: 'pendiente' (default en DB)
       };
 
@@ -147,6 +174,7 @@ const Bonificaciones: React.FC = () => {
         porcentajeBonificacion: "",
         montoAdicional: "",
         motivo: "",
+        fechaEntrega: minFechaEntrega,
       });
       setErrors({});
     } catch (err: any) {
@@ -299,6 +327,27 @@ const Bonificaciones: React.FC = () => {
             />
             {errors.montoAdicional && (
               <p className="mt-1 text-sm text-red-600">{errors.montoAdicional}</p>
+            )}
+          </div>
+
+          {/* Fecha de entrega */}
+          <div>
+            <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <Calendar className="h-4 w-4 mr-1" /> Fecha de entrega{" "}
+              <span className="text-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="date"
+              min={minFechaEntrega}
+              value={formData.fechaEntrega}
+              onChange={(e) => setField("fechaEntrega", e.target.value)}
+              disabled={loading}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
+                errors.fechaEntrega ? "border-red-300 bg-red-50" : "border-gray-300"
+              }`}
+            />
+            {errors.fechaEntrega && (
+              <p className="mt-1 text-sm text-red-600">{errors.fechaEntrega}</p>
             )}
           </div>
 
