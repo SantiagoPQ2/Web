@@ -23,18 +23,34 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, Link } from "react-router-dom";
 import { supabase } from "../config/supabase";
 
+type Notificacion = {
+  id: string;
+  titulo: string;
+  mensaje: string;
+  leida: boolean;
+  created_at: string;
+  usuario_username: string;
+};
+
 const Navigation: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificaciones, setNotificaciones] = useState<any[]>([]);
+  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [notisAbiertas, setNotisAbiertas] = useState(false);
 
-  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [bellHighlight, setBellHighlight] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastNotif, setToastNotif] = useState<Notificacion | null>(null);
 
-  // Cerrar dropdown user al hacer click afuera
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const notiRef = useRef<HTMLDivElement>(null);
+  const bellTimeoutRef = useRef<number | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  // Cerrar dropdown user / notificaciones al hacer click afuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -43,34 +59,97 @@ const Navigation: React.FC = () => {
       ) {
         setIsUserMenuOpen(false);
       }
+
+      if (
+        notiRef.current &&
+        !notiRef.current.contains(event.target as Node)
+      ) {
+        setNotisAbiertas(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Cleanup timers
+  useEffect(() => {
+    return () => {
+      if (bellTimeoutRef.current) {
+        window.clearTimeout(bellTimeoutRef.current);
+      }
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const formatearFecha = (fecha: string) => {
+    try {
+      return new Date(fecha).toLocaleString("es-AR");
+    } catch {
+      return fecha;
+    }
+  };
+
+  const dispararAnimacionCampana = () => {
+    setBellHighlight(true);
+
+    if (bellTimeoutRef.current) {
+      window.clearTimeout(bellTimeoutRef.current);
+    }
+
+    bellTimeoutRef.current = window.setTimeout(() => {
+      setBellHighlight(false);
+    }, 2500);
+  };
+
+  const mostrarToast = (notif: Notificacion) => {
+    setToastNotif(notif);
+    setToastVisible(true);
+
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastVisible(false);
+    }, 4500);
+  };
+
   // Cargar notificaciones
   const cargarNotificaciones = async () => {
     if (!user?.username) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notificaciones")
       .select("*")
       .eq("usuario_username", user.username)
       .order("created_at", { ascending: false });
 
-    if (data) setNotificaciones(data);
+    if (error) {
+      console.error("Error cargando notificaciones:", error);
+      return;
+    }
+
+    if (data) setNotificaciones(data as Notificacion[]);
   };
 
   const marcarLeidas = async () => {
     if (!user?.username) return;
 
-    await supabase
+    const { error } = await supabase
       .from("notificaciones")
       .update({ leida: true })
-      .eq("usuario_username", user.username);
+      .eq("usuario_username", user.username)
+      .eq("leida", false);
 
-    cargarNotificaciones();
+    if (error) {
+      console.error("Error marcando notificaciones como leídas:", error);
+      return;
+    }
+
+    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
   useEffect(() => {
@@ -78,33 +157,52 @@ const Navigation: React.FC = () => {
 
     cargarNotificaciones();
 
-    const sub = supabase
-      .channel("notificaciones")
+    const channel = supabase
+      .channel(`notificaciones_${user.username}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones" },
         (payload) => {
-          if ((payload as any)?.new?.usuario_username === user?.username) {
-            cargarNotificaciones();
-          }
+          const nueva = (payload as any)?.new as Notificacion | undefined;
+
+          if (!nueva) return;
+          if (nueva.usuario_username !== user.username) return;
+
+          setNotificaciones((prev) => [nueva, ...prev]);
+          dispararAnimacionCampana();
+          mostrarToast(nueva);
         }
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notificaciones" },
+        (payload) => {
+          const actualizada = (payload as any)?.new as Notificacion | undefined;
+
+          if (!actualizada) return;
+          if (actualizada.usuario_username !== user.username) return;
+
+          setNotificaciones((prev) =>
+            prev.map((n) => (n.id === actualizada.id ? actualizada : n))
+          );
+        }
+      )
+      .subscribe((status) => {
+        console.log("Estado realtime notificaciones:", status);
+      });
 
     return () => {
-      supabase.removeChannel(sub);
+      supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.username]);
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
-  // ✅ Logout sin borrar el “once per day” del video gate
+  // Logout sin borrar el “once per day” del video gate
   const handleLogout = () => {
     try {
       const keep: Record<string, string> = {};
 
-      // guardamos todas las keys del gate
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (!k) continue;
@@ -116,10 +214,8 @@ const Navigation: React.FC = () => {
 
       localStorage.clear();
 
-      // restauramos keys del gate
       Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
     } catch {
-      // si falla, al menos no rompemos logout
       localStorage.clear();
     }
 
@@ -139,11 +235,9 @@ const Navigation: React.FC = () => {
       case "/bonificaciones":
         return "Bonificaciones";
 
-      // ✅ NUEVO
       case "/revisar-bonificaciones":
         return "Revisar Bonificaciones";
 
-      // ✅ NUEVO
       case "/posible-rechazos":
         return "Posible Rechazos";
 
@@ -177,18 +271,12 @@ const Navigation: React.FC = () => {
         return "Revisión de Bajas";
       case "/pdfs":
         return "Documentos PDF";
-
-      // ✅ COMPRAS
       case "/pedido-compra":
         return "Pedido de Compra";
       case "/revisar-compras":
         return "Revisar Compras";
-
-      // ✅ VIDEO (lista para ver videos)
       case "/video-log":
         return "Videos";
-
-      // === B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
       case "/b2b/carrito":
@@ -201,10 +289,6 @@ const Navigation: React.FC = () => {
     }
   };
 
-  // -------------------------
-  // MENÚ SEGÚN ROL
-  // -------------------------
-
   let menuItems: {
     name: string;
     path: string;
@@ -212,7 +296,6 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
-  // ✅ TEST (igual a vendedor) + ✅ incluye Videos
   if (user?.role === "test") {
     menuItems = [
       {
@@ -270,10 +353,7 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  }
-
-  // ✅ VENDEDOR + ✅ incluye Videos
-  else if (user?.role === "vendedor") {
+  } else if (user?.role === "vendedor") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -330,10 +410,7 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  }
-
-  // SUPERVISOR
-  else if (user?.role === "supervisor") {
+  } else if (user?.role === "supervisor") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -359,15 +436,12 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
-
-      // ✅ NUEVO: supervisor puede ver esta página
       {
         name: "Revisar Bonificaciones",
         path: "/revisar-bonificaciones",
         icon: FileText,
         description: "Aprobar bonificaciones cargadas",
       },
-
       {
         name: "Notas de Crédito",
         path: "/notas-credito",
@@ -423,10 +497,7 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  }
-
-  // LOGÍSTICA
-  else if (user?.role === "logistica") {
+  } else if (user?.role === "logistica") {
     menuItems = [
       {
         name: "Posible Rechazos",
@@ -465,10 +536,7 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  }
-
-  // ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
-  else if (user?.role === "administracion-cordoba") {
+  } else if (user?.role === "administracion-cordoba") {
     menuItems = [
       {
         name: "Pedido de Compra",
@@ -483,10 +551,7 @@ const Navigation: React.FC = () => {
         description: "Ver pedidos de compra",
       },
     ];
-  }
-
-  // ADMIN
-  else if (user?.role === "admin") {
+  } else if (user?.role === "admin") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -500,15 +565,12 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
-
-      // ✅ NUEVO: admin puede ver esta página (pero no aprueba dentro de la página)
       {
         name: "Revisar Bonificaciones",
         path: "/revisar-bonificaciones",
         icon: FileText,
         description: "Ver bonificaciones cargadas",
       },
-
       {
         name: "Posible Rechazos",
         path: "/posible-rechazos",
@@ -600,7 +662,6 @@ const Navigation: React.FC = () => {
 
   return (
     <>
-      {/* HEADER SUPERIOR */}
       <header className="w-full bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -619,46 +680,116 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
-          {/* ICONOS DERECHA */}
           <div className="flex items-center gap-4 relative">
+            {/* TOAST NOTIFICACIÓN NUEVA */}
+            {toastVisible && toastNotif && (
+              <div className="absolute right-14 top-14 z-[70] w-80 max-w-[90vw] animate-[fadeIn_0.25s_ease-out]">
+                <div className="rounded-xl border border-red-200 bg-white shadow-xl overflow-hidden">
+                  <div className="bg-red-50 px-4 py-2 border-b border-red-100">
+                    <p className="text-sm font-semibold text-red-700">
+                      Nueva notificación
+                    </p>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {toastNotif.titulo}
+                    </p>
+                    <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                      {toastNotif.mensaje}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {formatearFecha(toastNotif.created_at)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* NOTIFICACIONES */}
-            <div className="relative">
+            <div className="relative" ref={notiRef}>
               <button
-                className="relative p-2"
-                onClick={() => {
-                  setNotisAbiertas(!notisAbiertas);
-                  if (!notisAbiertas) marcarLeidas();
+                className={`relative p-2 rounded-full transition-all duration-300 ${
+                  sinLeer > 0
+                    ? "text-red-600 bg-red-50"
+                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                } ${
+                  bellHighlight
+                    ? "scale-110 shadow-[0_0_0_6px_rgba(220,38,38,0.10)] animate-pulse"
+                    : ""
+                }`}
+                onClick={async () => {
+                  const nuevoEstado = !notisAbiertas;
+                  setNotisAbiertas(nuevoEstado);
+
+                  if (nuevoEstado) {
+                    setToastVisible(false);
+                    await marcarLeidas();
+                  }
                 }}
+                title="Notificaciones"
               >
-                <Bell size={20} />
+                <Bell
+                  size={20}
+                  className={`transition-transform duration-300 ${
+                    bellHighlight ? "rotate-12" : ""
+                  }`}
+                />
+
                 {sinLeer > 0 && (
-                  <span className="absolute top-0 right-0 bg-red-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                    {sinLeer}
-                  </span>
+                  <>
+                    <span className="absolute top-0 right-0 bg-red-600 text-white text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-semibold shadow-md">
+                      {sinLeer > 99 ? "99+" : sinLeer}
+                    </span>
+                    <span className="absolute inset-0 rounded-full border border-red-300 animate-ping opacity-30"></span>
+                  </>
                 )}
               </button>
 
-              {/* LISTA NOTIS */}
               {notisAbiertas && (
-                <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
-                  <h4 className="font-semibold mb-2">Notificaciones</h4>
+                <div className="absolute right-0 mt-2 w-80 max-w-[92vw] bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 p-3 z-50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+                      Notificaciones
+                    </h4>
+                    <span className="text-xs text-gray-500">
+                      {sinLeer === 0
+                        ? "Sin pendientes"
+                        : `${sinLeer} sin leer`}
+                    </span>
+                  </div>
 
                   {notificaciones.length === 0 ? (
-                    <p className="text-sm text-gray-500">Sin notificaciones</p>
+                    <p className="text-sm text-gray-500 px-1 py-2">
+                      Sin notificaciones
+                    </p>
                   ) : (
-                    <ul className="max-h-64 overflow-y-auto">
+                    <ul className="max-h-80 overflow-y-auto space-y-2 pr-1">
                       {notificaciones.map((n) => (
                         <li
                           key={n.id}
-                          className="text-sm p-2 border-b border-gray-200 dark:border-gray-700"
+                          className={`text-sm p-3 rounded-lg border ${
+                            n.leida
+                              ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                              : "bg-red-50 border-red-200"
+                          }`}
                         >
-                          <strong>{n.titulo}</strong>
-                          <br />
-                          {n.mensaje}
-                          <br />
-                          <span className="text-xs text-gray-500">
-                            {new Date(n.created_at).toLocaleString()}
-                          </span>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                {n.titulo}
+                              </p>
+                              <p className="text-gray-700 dark:text-gray-300 mt-1 leading-relaxed break-words">
+                                {n.mensaje}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-2">
+                                {formatearFecha(n.created_at)}
+                              </p>
+                            </div>
+
+                            {!n.leida && (
+                              <span className="mt-1 inline-block w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -706,7 +837,6 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
-      {/* SIDEBAR */}
       {sidebarOpen && (
         <>
           <div
