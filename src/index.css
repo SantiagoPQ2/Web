@@ -212,3 +212,83 @@ select:focus-visible {
     transition-duration: 0.3s;
   }
 }
+
+/* ---------------- NOTIFICACIONES / CAMPANITA ---------------- */
+
+/* Toast de notificación más suave */
+@keyframes notificationFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Pequeño “sacudón” de campana al llegar una nueva */
+@keyframes bellShake {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  15% {
+    transform: rotate(14deg) scale(1.04);
+  }
+  30% {
+    transform: rotate(-10deg) scale(1.06);
+  }
+  45% {
+    transform: rotate(8deg) scale(1.05);
+  }
+  60% {
+    transform: rotate(-6deg) scale(1.03);
+  }
+  75% {
+    transform: rotate(4deg) scale(1.02);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+/* Glow rojo suave alrededor de la campana */
+@keyframes bellGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.08);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
+}
+
+.animate-notificationFadeIn {
+  animation: notificationFadeIn 0.25s ease-out;
+}
+
+.animate-bellShake {
+  animation: bellShake 0.6s ease-in-out;
+  transform-origin: top center;
+}
+
+.animate-bellGlow {
+  animation: bellGlow 1.4s ease-out;
+}
+
+.notification-toast {
+  animation: notificationFadeIn 0.25s ease-out;
+  will-change: transform, opacity;
+}
+
+/* Accesibilidad: sin animaciones si el usuario lo prefiere */
+@media (prefers-reduced-motion: reduce) {
+  .animate-notificationFadeIn,
+  .animate-bellShake,
+  .animate-bellGlow,
+  .notification-toast {
+    animation: none !important;
+  }
+}
