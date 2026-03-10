@@ -34,7 +34,6 @@ import RevisarBajas from "./pages/RevisarBajas";
 
 import PedidoDeCompra from "./pages/PedidoDeCompra";
 import RevisarCompras from "./pages/RevisarCompras";
-import PosibleRechazos from "./pages/PosibleRechazos";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -135,7 +134,6 @@ function ProtectedApp() {
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
-        <Route path="/Posibles-Rechazos" element={<PosibleRechazos />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/rechazos/nuevo" replace />} />
       </Routes>
