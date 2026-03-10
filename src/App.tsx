@@ -14,6 +14,7 @@ import Bonificaciones from "./pages/Bonificaciones";
 import RevisarBonificaciones from "./pages/RevisarBonificaciones";
 
 import RechazosForm from "./pages/RechazosForm";
+import PosibleRechazos from "./pages/PosibleRechazos";
 import CoordsPage from "./pages/CoordsPage";
 import NotasCredito from "./pages/NotasCredito";
 import GpsLogger from "./pages/GpsLogger";
@@ -130,12 +131,14 @@ function ProtectedApp() {
   } else if (role === "logistica") {
     allowedRoutes = (
       <Routes>
+        <Route path="/" element={<PosibleRechazos />} />
+        <Route path="/posible-rechazos" element={<PosibleRechazos />} />
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/informacion" element={<Informacion />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate to="/rechazos/nuevo" replace />} />
+        <Route path="*" element={<Navigate to="/posible-rechazos" replace />} />
       </Routes>
     );
   } else if (role === "admin") {
@@ -149,6 +152,7 @@ function ProtectedApp() {
           element={<RevisarBonificaciones />}
         />
 
+        <Route path="/posible-rechazos" element={<PosibleRechazos />} />
         <Route path="/rechazos/nuevo" element={<RechazosForm />} />
         <Route path="/coordenadas" element={<CoordsPage />} />
         <Route path="/notas-credito" element={<NotasCredito />} />
