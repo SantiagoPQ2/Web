@@ -429,12 +429,6 @@ const Navigation: React.FC = () => {
         description: "Registrar nuevo rechazo",
       },
       {
-        name: "Posible Rechazo",
-        path: "posibles-rechazos",
-        icon: save,
-        description: "Registrar nuevo rechazo",
-      },
-      {
         name: "Coordenadas",
         path: "/coordenadas",
         icon: MapPin,
