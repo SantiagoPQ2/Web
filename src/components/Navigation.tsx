@@ -132,6 +132,8 @@ const Navigation: React.FC = () => {
       case "/":
         return user?.role === "administracion-cordoba"
           ? "Pedido de Compra"
+          : user?.role === "logistica"
+          ? "Posible Rechazos"
           : "Buscar Cliente";
 
       case "/bonificaciones":
@@ -140,6 +142,10 @@ const Navigation: React.FC = () => {
       // ✅ NUEVO
       case "/revisar-bonificaciones":
         return "Revisar Bonificaciones";
+
+      // ✅ NUEVO
+      case "/posible-rechazos":
+        return "Posible Rechazos";
 
       case "/notas-credito":
         return "Notas de Crédito";
@@ -423,6 +429,12 @@ const Navigation: React.FC = () => {
   else if (user?.role === "logistica") {
     menuItems = [
       {
+        name: "Posible Rechazos",
+        path: "/posible-rechazos",
+        icon: Plus,
+        description: "Registrar cliente y monto aproximado",
+      },
+      {
         name: "Nuevo Rechazo",
         path: "/rechazos/nuevo",
         icon: Plus,
@@ -497,6 +509,12 @@ const Navigation: React.FC = () => {
         description: "Ver bonificaciones cargadas",
       },
 
+      {
+        name: "Posible Rechazos",
+        path: "/posible-rechazos",
+        icon: Plus,
+        description: "Registrar cliente y monto aproximado",
+      },
       {
         name: "Nuevo Rechazo",
         path: "/rechazos/nuevo",
