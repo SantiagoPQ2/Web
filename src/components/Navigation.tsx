@@ -17,7 +17,6 @@ import {
   BarChart3,
   File,
   ShoppingCart,
-  AlertTriangle,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -100,11 +99,12 @@ const Navigation: React.FC = () => {
 
   const sinLeer = notificaciones.filter((n) => !n.leida).length;
 
-  // Logout sin borrar el “once per day” del video gate
+  // ✅ Logout sin borrar el “once per day” del video gate
   const handleLogout = () => {
     try {
       const keep: Record<string, string> = {};
 
+      // guardamos todas las keys del gate
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (!k) continue;
@@ -116,27 +116,28 @@ const Navigation: React.FC = () => {
 
       localStorage.clear();
 
+      // restauramos keys del gate
       Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
     } catch {
+      // si falla, al menos no rompemos logout
       localStorage.clear();
     }
 
     window.location.href = "/";
   };
 
+  // Nombre de página actual
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
-        if (user?.role === "administracion-cordoba") return "Pedido de Compra";
-        if (user?.role === "logistica") return "Posible Rechazos";
-        return "Buscar Cliente";
-
-      case "/posible-rechazos":
-        return "Posible Rechazos";
+        return user?.role === "administracion-cordoba"
+          ? "Pedido de Compra"
+          : "Buscar Cliente";
 
       case "/bonificaciones":
         return "Bonificaciones";
 
+      // ✅ NUEVO
       case "/revisar-bonificaciones":
         return "Revisar Bonificaciones";
 
@@ -170,13 +171,18 @@ const Navigation: React.FC = () => {
         return "Revisión de Bajas";
       case "/pdfs":
         return "Documentos PDF";
+
+      // ✅ COMPRAS
       case "/pedido-compra":
         return "Pedido de Compra";
       case "/revisar-compras":
         return "Revisar Compras";
+
+      // ✅ VIDEO (lista para ver videos)
       case "/video-log":
         return "Videos";
 
+      // === B2B ===
       case "/b2b/catalogo":
         return "B2B - Catálogo";
       case "/b2b/carrito":
@@ -189,6 +195,10 @@ const Navigation: React.FC = () => {
     }
   };
 
+  // -------------------------
+  // MENÚ SEGÚN ROL
+  // -------------------------
+
   let menuItems: {
     name: string;
     path: string;
@@ -196,6 +206,7 @@ const Navigation: React.FC = () => {
     description: string;
   }[] = [];
 
+  // ✅ TEST (igual a vendedor) + ✅ incluye Videos
   if (user?.role === "test") {
     menuItems = [
       {
@@ -253,7 +264,10 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  } else if (user?.role === "vendedor") {
+  }
+
+  // ✅ VENDEDOR + ✅ incluye Videos
+  else if (user?.role === "vendedor") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -310,7 +324,10 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  } else if (user?.role === "supervisor") {
+  }
+
+  // SUPERVISOR
+  else if (user?.role === "supervisor") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -336,12 +353,15 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
+
+      // ✅ NUEVO: supervisor puede ver esta página
       {
         name: "Revisar Bonificaciones",
         path: "/revisar-bonificaciones",
         icon: FileText,
         description: "Aprobar bonificaciones cargadas",
       },
+
       {
         name: "Notas de Crédito",
         path: "/notas-credito",
@@ -397,16 +417,46 @@ const Navigation: React.FC = () => {
         description: "Configuración del usuario",
       },
     ];
-  } else if (user?.role === "logistica") {
+  }
+
+  // LOGÍSTICA
+  else if (user?.role === "logistica") {
     menuItems = [
       {
-        name: "Posible Rechazos",
-        path: "/posible-rechazos",
-        icon: AlertTriangle,
-        description: "Registrar cliente y monto aproximado",
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar nuevo rechazo",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y datos",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
       },
     ];
-  } else if (user?.role === "administracion-cordoba") {
+  }
+
+  // ADMINISTRACION - CÓRDOBA (SOLO 2 PÁGINAS)
+  else if (user?.role === "administracion-cordoba") {
     menuItems = [
       {
         name: "Pedido de Compra",
@@ -421,7 +471,10 @@ const Navigation: React.FC = () => {
         description: "Ver pedidos de compra",
       },
     ];
-  } else if (user?.role === "admin") {
+  }
+
+  // ADMIN
+  else if (user?.role === "admin") {
     menuItems = [
       {
         name: "Buscar Cliente",
@@ -435,12 +488,15 @@ const Navigation: React.FC = () => {
         icon: Save,
         description: "Registrar bonificaciones",
       },
+
+      // ✅ NUEVO: admin puede ver esta página (pero no aprueba dentro de la página)
       {
         name: "Revisar Bonificaciones",
         path: "/revisar-bonificaciones",
         icon: FileText,
         description: "Ver bonificaciones cargadas",
       },
+
       {
         name: "Nuevo Rechazo",
         path: "/rechazos/nuevo",
@@ -526,6 +582,7 @@ const Navigation: React.FC = () => {
 
   return (
     <>
+      {/* HEADER SUPERIOR */}
       <header className="w-full bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -544,7 +601,9 @@ const Navigation: React.FC = () => {
             </div>
           </div>
 
+          {/* ICONOS DERECHA */}
           <div className="flex items-center gap-4 relative">
+            {/* NOTIFICACIONES */}
             <div className="relative">
               <button
                 className="relative p-2"
@@ -561,6 +620,7 @@ const Navigation: React.FC = () => {
                 )}
               </button>
 
+              {/* LISTA NOTIS */}
               {notisAbiertas && (
                 <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-3 z-50">
                   <h4 className="font-semibold mb-2">Notificaciones</h4>
@@ -589,6 +649,7 @@ const Navigation: React.FC = () => {
               )}
             </div>
 
+            {/* USUARIO */}
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -627,6 +688,7 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
+      {/* SIDEBAR */}
       {sidebarOpen && (
         <>
           <div
