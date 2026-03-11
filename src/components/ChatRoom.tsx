@@ -629,13 +629,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                   >
                     {m.imagen_url && (
                       <img
-                        src={m.imagen_url}
-                        alt="adjunto"
-                        className="rounded-xl mb-2 max-w-[240px] md:max-w-[360px] cursor-pointer"
-                        onClick={() => window.open(m.imagen_url!, "_blank")}
-                        onLoad={() => scrollToBottom(true)}
-                      />
-                    )}
+                      src={m.imagen_url}
+                      alt="adjunto"
+                      className="rounded-xl mb-2 w-auto max-w-[180px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[300px] max-h-[320px] object-cover cursor-pointer"
+                      onClick={() => window.open(m.imagen_url!, "_blank")}
+                      onLoad={() => scrollToBottom(true)}
+                    />
+                        )}
 
                     {m.audio_url && <AudioBubble src={m.audio_url} soyYo={soyYo} />}
 
