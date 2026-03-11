@@ -1,56 +1,108 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ChatSidebar from "../components/ChatSidebar";
 import ChatRoom from "../components/ChatRoom";
 
+const MOBILE_BREAKPOINT = 768;
+
 const ChatPage: React.FC = () => {
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialUser = searchParams.get("user");
+
+  const [selectedUser, setSelectedUser] = useState<string | null>(initialUser);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
+  const [viewportHeight, setViewportHeight] = useState<number>(
+    window.visualViewport?.height || window.innerHeight
+  );
 
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", onResize);
-    // bloquear scroll del body mientras estoy en /chat
-    const prev = document.body.style.overflow;
+    const syncViewport = () => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+      setViewportHeight(window.visualViewport?.height || window.innerHeight);
+    };
+
+    syncViewport();
+
+    window.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("scroll", syncViewport);
+
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
     return () => {
-      window.removeEventListener("resize", onResize);
-      document.body.style.overflow = prev;
+      window.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("scroll", syncViewport);
+
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
     };
   }, []);
 
+  useEffect(() => {
+    const paramUser = searchParams.get("user");
+    if (paramUser && paramUser !== selectedUser) {
+      setSelectedUser(paramUser);
+    }
+    if (!paramUser && selectedUser && !isMobile) {
+      setSelectedUser(selectedUser);
+    }
+  }, [searchParams, selectedUser, isMobile]);
+
+  const handleSelectUser = (username: string) => {
+    setSelectedUser(username);
+    setSearchParams({ user: username });
+  };
+
+  const handleBack = () => {
+    setSelectedUser(null);
+    setSearchParams({});
+  };
+
+  const chatHeight = useMemo(() => {
+    return Math.max(320, viewportHeight - 64);
+  }, [viewportHeight]);
+
   return (
-    // fijamos la vista: de borde a borde bajo el header (ajusta el top si tu header es más alto)
-    <div className="fixed inset-x-0 bottom-0 top-16 md:top-16 bg-gray-50">
-      <div className="h-full w-full flex md:flex-row flex-col overflow-hidden">
+    <div
+      className="fixed inset-x-0 top-16 bg-[#e9eef6]"
+      style={{ height: `${chatHeight}px` }}
+    >
+      <div className="h-full w-full flex overflow-hidden">
         {/* Sidebar */}
         <div
-          className={`transition-all duration-300 bg-white border-r ${
-            isMobile ? (selectedUser ? "hidden" : "block h-full w-full") : "block h-full w-80"
+          className={`h-full bg-white border-r border-gray-200 ${
+            isMobile
+              ? selectedUser
+                ? "hidden"
+                : "block w-full"
+              : "block w-[360px] shrink-0"
           }`}
         >
-          <ChatSidebar onSelectUser={setSelectedUser} selectedUser={selectedUser} />
+          <ChatSidebar
+            onSelectUser={handleSelectUser}
+            selectedUser={selectedUser}
+          />
         </div>
 
-        {/* Chat */}
-        <div className={`flex-1 h-full ${isMobile && !selectedUser ? "hidden" : "block"}`}>
+        {/* Sala */}
+        <div
+          className={`h-full min-w-0 flex-1 ${
+            isMobile && !selectedUser ? "hidden" : "block"
+          }`}
+        >
           {selectedUser ? (
-            <ChatRoom destino={selectedUser} volverSidebar={() => setSelectedUser(null)} />
+            <ChatRoom destino={selectedUser} volverSidebar={handleBack} />
           ) : (
             <div className="h-full flex items-center justify-center text-gray-400">
-              Seleccioná un contacto para comenzar a chatear 💬
+              Seleccioná un contacto para comenzar a chatear
             </div>
           )}
         </div>
-
-        {/* botón volver solo en mobile */}
-        {isMobile && selectedUser && (
-          <button
-            className="fixed top-20 left-4 z-50 p-2 bg-white rounded-full shadow border"
-            onClick={() => setSelectedUser(null)}
-          >
-            ←
-          </button>
-        )}
       </div>
     </div>
   );
