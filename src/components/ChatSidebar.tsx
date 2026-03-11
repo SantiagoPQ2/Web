@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -7,8 +8,8 @@ type ChatListItem = {
   name: string | null;
   role?: string | null;
   lastMessage: string;
-  lastAt: string | null;          // ISO date string
-  unread: number;                 // no leídos
+  lastAt: string | null;
+  unread: number;
 };
 
 interface Props {
@@ -16,29 +17,16 @@ interface Props {
   selectedUser: string | null;
 }
 
-/**
- * Sidebar estilo WhatsApp:
- * - Ordenado por última actividad (lastAt desc)
- * - Contador de no leídos (unread)
- * - Preview del último mensaje
- * - Realtime: INSERT/UPDATE en "mensajes"
- */
 const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
   const { user } = useAuth();
   const [items, setItems] = useState<ChatListItem[]>([]);
   const [query, setQuery] = useState("");
 
-  // --------------------------------------------
-  // Carga inicial: usuarios + mensajes relacionados
-  // --------------------------------------------
   useEffect(() => {
     if (!user) return;
-    (async () => {
-      await loadContactsAndMessages();
-    })();
+    loadContactsAndMessages();
   }, [user]);
 
-  // Si el usuario abre un chat, dejamos en 0 el contador local de ese contacto.
   useEffect(() => {
     if (!selectedUser) return;
     setItems((prev) =>
@@ -48,21 +36,16 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
     );
   }, [selectedUser]);
 
-  // --------------------------------------------
-  // Realtime: INSERT (mensaje nuevo) y UPDATE (lecturas)
-  // --------------------------------------------
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel("sidebar_mensajes")
-      // Mensajes nuevos -> subir contacto a tope y actualizar preview/contador
+      .channel(`sidebar_mensajes_${user.username}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "mensajes" },
         (payload) => {
           const m: any = payload.new;
-          const isMine = m.remitente_username === user.username;
           const other =
             m.remitente_username === user.username
               ? m.destinatario_username
@@ -70,14 +53,15 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
 
           setItems((prev) => {
             const idx = prev.findIndex((u) => u.username === other);
-            if (idx === -1) return prev; // si no está en la lista (p.ej. un usuario que no listamos), ignoramos
+            if (idx === -1) return prev;
 
-            const preview =
-              m.imagen_url
-                ? "Foto"
-                : (m.contenido?.trim() || "Adjunto"); // fallback
+            const preview = m.audio_url
+              ? "Audio"
+              : m.imagen_url
+              ? "Foto"
+              : (m.contenido?.trim() || "Adjunto");
 
-            // Si el mensaje es para mí y ese chat NO está abierto, sumar no leídos
+            const isMine = m.remitente_username === user.username;
             const addUnread =
               !isMine &&
               m.destinatario_username === user.username &&
@@ -91,21 +75,19 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
             };
 
             const arr = [...prev];
-            // quitar y poner al inicio (sube al tope)
             arr.splice(idx, 1);
             return [updated, ...arr];
           });
         }
       )
-      // Actualizaciones de lectura: cuando ChatRoom marca leídos
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "mensajes" },
         (payload) => {
           const m: any = payload.new;
-          // si me marcaron como leído mensajes que me enviaron desde 'other', ajusto contador si estuviera mal
+          const other = m.remitente_username;
+
           if (m.leido && m.destinatario_username === user.username) {
-            const other = m.remitente_username;
             setItems((prev) =>
               prev.map((it) =>
                 it.username === other ? { ...it, unread: 0 } : it
@@ -121,31 +103,27 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
     };
   }, [user, selectedUser]);
 
-  // --------------------------------------------
-  // Carga inicial combinando usuarios y mensajes
-  // --------------------------------------------
   const loadContactsAndMessages = async () => {
-    // 1) Usuarios excepto el propio
+    if (!user) return;
+
     const { data: usersData, error: uErr } = await supabase
       .from("usuarios_app")
       .select("username, name, role")
-      .neq("username", user!.username);
+      .neq("username", user.username);
 
     if (uErr || !usersData) return;
 
-    // 2) Todos los mensajes donde yo soy remitente o destinatario (orden desc)
     const { data: msgs, error: mErr } = await supabase
       .from("mensajes")
       .select(
-        "id, remitente_username, destinatario_username, contenido, imagen_url, leido, created_at"
+        "id, remitente_username, destinatario_username, contenido, imagen_url, audio_url, leido, created_at"
       )
       .or(
-        `remitente_username.eq.${user!.username},destinatario_username.eq.${user!.username}`
+        `remitente_username.eq.${user.username},destinatario_username.eq.${user.username}`
       )
       .order("created_at", { ascending: false });
 
     if (mErr || !msgs) {
-      // si no hay mensajes todavía, construimos lista básica
       const base = usersData.map((u) => ({
         username: u.username,
         name: u.name,
@@ -154,19 +132,19 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
         lastAt: null as string | null,
         unread: 0,
       }));
-      // ordenar por nombre
-      base.sort((a, b) =>
-        (a.name || "").localeCompare(b.name || "") ||
-        a.username.localeCompare(b.username)
+
+      base.sort(
+        (a, b) =>
+          (a.name || "").localeCompare(b.name || "") ||
+          a.username.localeCompare(b.username)
       );
+
       setItems(base);
       return;
     }
 
-    // 3) Mapear por contacto: último mensaje + no leídos
     const map = new Map<string, ChatListItem>();
 
-    // inicializamos con usuarios
     for (const u of usersData) {
       map.set(u.username, {
         username: u.username,
@@ -178,29 +156,29 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
       });
     }
 
-    // recorremos mensajes más recientes primero
     for (const m of msgs) {
       const other =
-        m.remitente_username === user!.username
+        m.remitente_username === user.username
           ? m.destinatario_username
           : m.remitente_username;
 
       if (!map.has(other)) continue;
 
-      // setear último mensaje solo si no está aún (como están desc, el primero que toque es el último)
       const current = map.get(other)!;
 
       if (!current.lastAt) {
-        const preview =
-          m.imagen_url ? "Foto" : (m.contenido?.trim() || "Adjunto");
+        const preview = m.audio_url
+          ? "Audio"
+          : m.imagen_url
+          ? "Foto"
+          : (m.contenido?.trim() || "Adjunto");
 
         current.lastAt = m.created_at;
         current.lastMessage = preview;
       }
 
-      // contador de no leídos: mensajes dirigidos a mí sin leer
       if (
-        m.destinatario_username === user!.username &&
+        m.destinatario_username === user.username &&
         m.remitente_username === other &&
         m.leido === false
       ) {
@@ -210,13 +188,11 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
       map.set(other, current);
     }
 
-    // 4) Pasar a array y ordenar por lastAt desc; sin lastAt quedan abajo
     const arr = Array.from(map.values());
     arr.sort((a, b) => {
       if (a.lastAt && b.lastAt) return a.lastAt < b.lastAt ? 1 : -1;
       if (a.lastAt && !b.lastAt) return -1;
       if (!a.lastAt && b.lastAt) return 1;
-      // si ninguno tiene lastAt, ordenar por nombre
       return (
         (a.name || "").localeCompare(b.name || "") ||
         a.username.localeCompare(b.username)
@@ -226,12 +202,10 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
     setItems(arr);
   };
 
-  // --------------------------------------------
-  // Filtro de búsqueda (por name o username)
-  // --------------------------------------------
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
+
     return items.filter(
       (it) =>
         it.username.toLowerCase().includes(q) ||
@@ -239,47 +213,55 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
     );
   }, [items, query]);
 
-  // --------------------------------------------
-  // UI
-  // --------------------------------------------
   return (
-    <div className="flex flex-col h-full">
-      {/* Buscador */}
-      <div className="p-2">
-        <input
-          className="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
-          placeholder="Buscar contacto..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+    <div className="flex h-full flex-col bg-white">
+      <div className="border-b border-gray-200 px-4 py-3">
+        <h2 className="text-base font-semibold text-gray-800">Chats</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Conversaciones internas en tiempo real
+        </p>
       </div>
 
-      {/* Lista de conversaciones */}
+      <div className="px-3 py-3 border-b border-gray-100 bg-white">
+        <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2">
+          <Search size={16} className="text-gray-400 shrink-0" />
+          <input
+            className="w-full bg-transparent text-sm outline-none text-gray-700 placeholder:text-gray-400 border-none focus:ring-0"
+            placeholder="Buscar contacto..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto">
         {filtered.map((it) => {
           const active = selectedUser === it.username;
+
           return (
             <button
               key={it.username}
               onClick={() => onSelectUser(it.username)}
-              className={`w-full text-left px-3 py-3 border-b flex items-center gap-3 transition ${
+              className={`w-full text-left px-4 py-3 border-b border-gray-100 flex items-center gap-3 transition ${
                 active ? "bg-red-50" : "hover:bg-gray-50"
               }`}
             >
-              {/* Inicial del contacto (círculo) */}
-              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-semibold">
+              <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-semibold shrink-0">
                 {(it.name?.[0] || it.username[0] || "?").toUpperCase()}
               </div>
 
-              {/* Texto */}
               <div className="min-w-0 flex-1">
-                <div className="flex items-center">
-                  <p className="font-medium text-sm truncate">
-                    {it.username} – {it.name || "Sin nombre"}
+                <div className="flex items-start gap-2">
+                  <p className="font-medium text-sm truncate text-gray-900">
+                    {it.name || it.username}
                   </p>
-                  {/* fecha/hora del último mensaje */}
+
                   {it.lastAt && (
-                    <span className="ml-auto text-[11px] text-gray-500">
+                    <span
+                      className={`ml-auto text-[11px] shrink-0 ${
+                        it.unread > 0 ? "text-red-600 font-semibold" : "text-gray-500"
+                      }`}
+                    >
                       {new Date(it.lastAt).toLocaleTimeString([], {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -287,24 +269,35 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 truncate">
-                  {it.lastMessage || "Sin mensajes"}
-                </p>
-              </div>
 
-              {/* burbuja de no leídos */}
-              {it.unread > 0 && (
-                <span className="ml-2 bg-red-600 text-white rounded-full px-2 py-0.5 text-[11px]">
-                  {it.unread}
-                </span>
-              )}
+                <div className="flex items-center gap-2 mt-1">
+                  <p
+                    className={`text-xs truncate ${
+                      it.unread > 0 ? "text-gray-800 font-medium" : "text-gray-500"
+                    }`}
+                  >
+                    {it.lastMessage || "Sin mensajes"}
+                  </p>
+
+                  {it.unread > 0 && (
+                    <span className="ml-auto bg-red-600 text-white rounded-full min-w-[20px] h-5 px-1.5 text-[11px] flex items-center justify-center font-semibold shrink-0">
+                      {it.unread}
+                    </span>
+                  )}
+                </div>
+              </div>
             </button>
           );
         })}
+
+        {filtered.length === 0 && (
+          <div className="p-6 text-center text-sm text-gray-400">
+            No se encontraron contactos
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default ChatSidebar;
-
