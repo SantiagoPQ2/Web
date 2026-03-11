@@ -52,7 +52,9 @@ const Navigation: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notisAbiertas, setNotisAbiertas] = useState(false);
 
-  const [systemNotifications, setSystemNotifications] = useState<SystemNotification[]>([]);
+  const [systemNotifications, setSystemNotifications] = useState<
+    SystemNotification[]
+  >([]);
   const [chatNotifications, setChatNotifications] = useState<BellItem[]>([]);
 
   const [bellHighlight, setBellHighlight] = useState(false);
@@ -73,10 +75,7 @@ const Navigation: React.FC = () => {
         setIsUserMenuOpen(false);
       }
 
-      if (
-        notiRef.current &&
-        !notiRef.current.contains(event.target as Node)
-      ) {
+      if (notiRef.current && !notiRef.current.contains(event.target as Node)) {
         setNotisAbiertas(false);
       }
     };
@@ -98,6 +97,16 @@ const Navigation: React.FC = () => {
     } catch {
       return fecha;
     }
+  };
+
+  const esNotificacionGenericaDeChat = (titulo?: string, mensaje?: string) => {
+    const t = (titulo || "").trim().toLowerCase();
+    const m = (mensaje || "").trim().toLowerCase();
+
+    return (
+      t === "nuevo mensaje" ||
+      m === "tienes un mensaje nuevo en el chat."
+    );
   };
 
   const dispararAnimacionCampana = () => {
@@ -207,30 +216,36 @@ const Navigation: React.FC = () => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones" },
         (payload) => {
-          const nueva = (payload as any)?.new as SystemNotification | undefined;
+          const nueva = (payload as any)?.new as
+            | SystemNotification
+            | undefined;
           if (!nueva) return;
           if (nueva.usuario_username !== user.username) return;
 
           setSystemNotifications((prev) => [nueva, ...prev]);
 
-          const bellItem: BellItem = {
-            id: `sys_${nueva.id}`,
-            titulo: nueva.titulo,
-            mensaje: nueva.mensaje,
-            created_at: nueva.created_at,
-            leida: nueva.leida,
-            tipo: "sistema",
-          };
+          if (!esNotificacionGenericaDeChat(nueva.titulo, nueva.mensaje)) {
+            const bellItem: BellItem = {
+              id: `sys_${nueva.id}`,
+              titulo: nueva.titulo,
+              mensaje: nueva.mensaje,
+              created_at: nueva.created_at,
+              leida: nueva.leida,
+              tipo: "sistema",
+            };
 
-          dispararAnimacionCampana();
-          mostrarToast(bellItem);
+            dispararAnimacionCampana();
+            mostrarToast(bellItem);
+          }
         }
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "notificaciones" },
         (payload) => {
-          const actualizada = (payload as any)?.new as SystemNotification | undefined;
+          const actualizada = (payload as any)?.new as
+            | SystemNotification
+            | undefined;
           if (!actualizada) return;
           if (actualizada.usuario_username !== user.username) return;
 
@@ -297,7 +312,9 @@ const Navigation: React.FC = () => {
 
       setChatNotifications((prev) =>
         prev.map((n) =>
-          n.tipo === "chat" && n.chatUser === withUser ? { ...n, leida: true } : n
+          n.tipo === "chat" && n.chatUser === withUser
+            ? { ...n, leida: true }
+            : n
         )
       );
     };
@@ -312,14 +329,16 @@ const Navigation: React.FC = () => {
   }, [user?.username]);
 
   const bellItems = useMemo(() => {
-    const fromSystem: BellItem[] = systemNotifications.map((n) => ({
-      id: `sys_${n.id}`,
-      titulo: n.titulo,
-      mensaje: n.mensaje,
-      created_at: n.created_at,
-      leida: n.leida,
-      tipo: "sistema",
-    }));
+    const fromSystem: BellItem[] = systemNotifications
+      .filter((n) => !esNotificacionGenericaDeChat(n.titulo, n.mensaje))
+      .map((n) => ({
+        id: `sys_${n.id}`,
+        titulo: n.titulo,
+        mensaje: n.mensaje,
+        created_at: n.created_at,
+        leida: n.leida,
+        tipo: "sistema" as const,
+      }));
 
     const merged = [...chatNotifications, ...fromSystem];
 
@@ -435,78 +454,363 @@ const Navigation: React.FC = () => {
 
   if (user?.role === "test") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
-      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
-      { name: "Videos", path: "/video-log", icon: FileText, description: "Ver videos disponibles" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas de crédito",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y clientes del día",
+      },
+      {
+        name: "Baja / Cambio Ruta",
+        path: "/baja-cliente",
+        icon: FileText,
+        description: "Solicitar baja o cambio de ruta",
+      },
+      {
+        name: "Videos",
+        path: "/video-log",
+        icon: FileText,
+        description: "Ver videos disponibles",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   } else if (user?.role === "vendedor") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
-      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
-      { name: "Videos", path: "/video-log", icon: FileText, description: "Ver videos disponibles" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas de crédito",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y clientes del día",
+      },
+      {
+        name: "Baja / Cambio Ruta",
+        path: "/baja-cliente",
+        icon: FileText,
+        description: "Solicitar baja o cambio de ruta",
+      },
+      {
+        name: "Videos",
+        path: "/video-log",
+        icon: FileText,
+        description: "Ver videos disponibles",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   } else if (user?.role === "supervisor") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
-      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Aprobar bonificaciones cargadas" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
-      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
-      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
-      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
-      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel del supervisor" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Ver pedidos de compra",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Revisar Bonificaciones",
+        path: "/revisar-bonificaciones",
+        icon: FileText,
+        description: "Aprobar bonificaciones cargadas",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar y ver coordenadas GPS",
+      },
+      {
+        name: "Revisar Bajas",
+        path: "/revisar-bajas",
+        icon: FileText,
+        description: "Aprobar solicitudes de baja",
+      },
+      {
+        name: "Documentos PDF",
+        path: "/pdfs",
+        icon: File,
+        description: "Documentación interna",
+      },
+      {
+        name: "Mapa de Visitas",
+        path: "/mapa",
+        icon: Compass,
+        description: "Rutas y visitas",
+      },
+      {
+        name: "Dashboard Power BI",
+        path: "/powerbi",
+        icon: BarChart3,
+        description: "Indicadores",
+      },
+      {
+        name: "Supervisor",
+        path: "/supervisor",
+        icon: Compass,
+        description: "Panel del supervisor",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   } else if (user?.role === "logistica") {
     menuItems = [
-      { name: "Posible Rechazos", path: "/posible-rechazos", icon: Plus, description: "Registrar cliente y monto aproximado" },
-      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
-      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y datos" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Posible Rechazos",
+        path: "/posible-rechazos",
+        icon: Plus,
+        description: "Registrar cliente y monto aproximado",
+      },
+      {
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar nuevo rechazo",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas",
+      },
+      {
+        name: "Información",
+        path: "/informacion",
+        icon: Info,
+        description: "Resumen y datos",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   } else if (user?.role === "administracion-cordoba") {
     menuItems = [
-      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
-      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Ver pedidos de compra",
+      },
     ];
   } else if (user?.role === "admin") {
     menuItems = [
-      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
-      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
-      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Ver bonificaciones cargadas" },
-      { name: "Posible Rechazos", path: "/posible-rechazos", icon: Plus, description: "Registrar cliente y monto aproximado" },
-      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazos" },
-      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
-      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
-      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar coordenadas" },
-      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
-      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
-      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Aprobar y auditar pedidos de compra" },
-      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
-      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
-      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
-      { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
-      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
-      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
+      {
+        name: "Buscar Cliente",
+        path: "/",
+        icon: Search,
+        description: "Consultar información de clientes",
+      },
+      {
+        name: "Bonificaciones",
+        path: "/bonificaciones",
+        icon: Save,
+        description: "Registrar bonificaciones",
+      },
+      {
+        name: "Revisar Bonificaciones",
+        path: "/revisar-bonificaciones",
+        icon: FileText,
+        description: "Ver bonificaciones cargadas",
+      },
+      {
+        name: "Posible Rechazos",
+        path: "/posible-rechazos",
+        icon: Plus,
+        description: "Registrar cliente y monto aproximado",
+      },
+      {
+        name: "Nuevo Rechazo",
+        path: "/rechazos/nuevo",
+        icon: Plus,
+        description: "Registrar rechazos",
+      },
+      {
+        name: "Coordenadas",
+        path: "/coordenadas",
+        icon: MapPin,
+        description: "Consultar coordenadas",
+      },
+      {
+        name: "Notas de Crédito",
+        path: "/notas-credito",
+        icon: FileText,
+        description: "Registrar notas",
+      },
+      {
+        name: "GPS Logger",
+        path: "/gps-logger",
+        icon: MapPin,
+        description: "Registrar coordenadas",
+      },
+      {
+        name: "Revisar Bajas",
+        path: "/revisar-bajas",
+        icon: FileText,
+        description: "Aprobar solicitudes de baja",
+      },
+      {
+        name: "Pedido de Compra",
+        path: "/pedido-compra",
+        icon: ShoppingCart,
+        description: "Cargar un pedido de compra",
+      },
+      {
+        name: "Revisar Compras",
+        path: "/revisar-compras",
+        icon: FileText,
+        description: "Aprobar y auditar pedidos de compra",
+      },
+      {
+        name: "Documentos PDF",
+        path: "/pdfs",
+        icon: File,
+        description: "Documentación interna",
+      },
+      {
+        name: "Mapa de Visitas",
+        path: "/mapa",
+        icon: Compass,
+        description: "Rutas y visitas",
+      },
+      {
+        name: "Dashboard Power BI",
+        path: "/powerbi",
+        icon: BarChart3,
+        description: "Indicadores",
+      },
+      {
+        name: "Panel Admin",
+        path: "/admin",
+        icon: Wrench,
+        description: "Herramientas admin",
+      },
+      {
+        name: "Chat",
+        path: "/chat",
+        icon: MessageSquare,
+        description: "Comunicación interna",
+      },
+      {
+        name: "Configuración",
+        path: "/settings",
+        icon: SettingsIcon,
+        description: "Configuración del usuario",
+      },
     ];
   }
 
@@ -542,7 +846,9 @@ const Navigation: React.FC = () => {
                 <div className="rounded-xl border border-red-200 bg-white shadow-xl overflow-hidden">
                   <div className="bg-red-50 px-4 py-2 border-b border-red-100">
                     <p className="text-sm font-semibold text-red-700">
-                      {toastNotif.tipo === "chat" ? "Nuevo mensaje" : "Nueva notificación"}
+                      {toastNotif.tipo === "chat"
+                        ? "Nuevo mensaje"
+                        : "Nueva notificación"}
                     </p>
                   </div>
                   <div className="p-4">
