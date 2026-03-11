@@ -377,3 +377,94 @@ body {
     overflow: hidden;
   }
 }
+
+/* ---------------- AUDIO CHAT TIPO WHATSAPP ---------------- */
+
+.chat-audio-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 210px;
+  max-width: 280px;
+}
+
+.chat-audio-play {
+  height: 34px;
+  width: 34px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat-audio-play-me {
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+}
+
+.chat-audio-play-other {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.chat-audio-wave {
+  position: relative;
+  height: 28px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-audio-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 9999px;
+  z-index: 1;
+  transition: width 0.15s linear;
+}
+
+.chat-audio-progress-me {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.chat-audio-progress-other {
+  background: rgba(220, 38, 38, 0.10);
+}
+
+.chat-audio-bars {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 8px;
+}
+
+.chat-audio-bars span {
+  width: 3px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+/* barras claras cuando soy yo */
+.bg-\[\#dc2626\] .chat-audio-bars span,
+.chat-audio-play-me + div .chat-audio-bars span {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* barras grises cuando es otro */
+.chat-audio-play-other + div .chat-audio-bars span {
+  background: rgba(107, 114, 128, 0.75);
+}
+
+@media (max-width: 640px) {
+  .chat-audio-bubble {
+    min-width: 180px;
+    max-width: 240px;
+  }
+}
