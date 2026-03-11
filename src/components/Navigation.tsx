@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   Menu,
   Bell,
@@ -20,10 +20,10 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabase";
 
-type Notificacion = {
+type SystemNotification = {
   id: string;
   titulo: string;
   mensaje: string;
@@ -32,25 +32,38 @@ type Notificacion = {
   usuario_username: string;
 };
 
+type BellItem = {
+  id: string;
+  titulo: string;
+  mensaje: string;
+  created_at: string;
+  leida: boolean;
+  tipo: "sistema" | "chat";
+  chatUser?: string;
+  rawId?: number;
+};
+
 const Navigation: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [notisAbiertas, setNotisAbiertas] = useState(false);
+
+  const [systemNotifications, setSystemNotifications] = useState<SystemNotification[]>([]);
+  const [chatNotifications, setChatNotifications] = useState<BellItem[]>([]);
 
   const [bellHighlight, setBellHighlight] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
-  const [toastNotif, setToastNotif] = useState<Notificacion | null>(null);
+  const [toastNotif, setToastNotif] = useState<BellItem | null>(null);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notiRef = useRef<HTMLDivElement>(null);
   const bellTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
-  // Cerrar dropdown user / notificaciones al hacer click afuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -72,15 +85,10 @@ const Navigation: React.FC = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Cleanup timers
   useEffect(() => {
     return () => {
-      if (bellTimeoutRef.current) {
-        window.clearTimeout(bellTimeoutRef.current);
-      }
-      if (toastTimeoutRef.current) {
-        window.clearTimeout(toastTimeoutRef.current);
-      }
+      if (bellTimeoutRef.current) window.clearTimeout(bellTimeoutRef.current);
+      if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
     };
   }, []);
 
@@ -104,7 +112,7 @@ const Navigation: React.FC = () => {
     }, 2500);
   };
 
-  const mostrarToast = (notif: Notificacion) => {
+  const mostrarToast = (notif: BellItem) => {
     setToastNotif(notif);
     setToastVisible(true);
 
@@ -117,8 +125,7 @@ const Navigation: React.FC = () => {
     }, 4500);
   };
 
-  // Cargar notificaciones
-  const cargarNotificaciones = async () => {
+  const cargarNotificacionesSistema = async () => {
     if (!user?.username) return;
 
     const { data, error } = await supabase
@@ -132,10 +139,46 @@ const Navigation: React.FC = () => {
       return;
     }
 
-    if (data) setNotificaciones(data as Notificacion[]);
+    setSystemNotifications((data || []) as SystemNotification[]);
   };
 
-  const marcarLeidas = async () => {
+  const cargarNotificacionesChat = async () => {
+    if (!user?.username) return;
+
+    const { data, error } = await supabase
+      .from("mensajes")
+      .select(
+        "id, remitente_username, destinatario_username, contenido, imagen_url, audio_url, leido, created_at"
+      )
+      .eq("destinatario_username", user.username)
+      .eq("leido", false)
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    if (error) {
+      console.error("Error cargando notificaciones de chat:", error);
+      return;
+    }
+
+    const mapped: BellItem[] = (data || []).map((m: any) => ({
+      id: `chat_${m.id}`,
+      titulo: `Mensaje de ${m.remitente_username}`,
+      mensaje: m.audio_url
+        ? "Te envió un audio"
+        : m.imagen_url
+        ? "Te envió una foto"
+        : (m.contenido?.trim() || "Te envió un mensaje"),
+      created_at: m.created_at,
+      leida: !!m.leido,
+      tipo: "chat",
+      chatUser: m.remitente_username,
+      rawId: m.id,
+    }));
+
+    setChatNotifications(mapped);
+  };
+
+  const marcarLeidasSistema = async () => {
     if (!user?.username) return;
 
     const { error } = await supabase
@@ -149,56 +192,156 @@ const Navigation: React.FC = () => {
       return;
     }
 
-    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
+    setSystemNotifications((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
   useEffect(() => {
     if (!user?.username) return;
 
-    cargarNotificaciones();
+    cargarNotificacionesSistema();
+    cargarNotificacionesChat();
 
-    const channel = supabase
+    const systemChannel = supabase
       .channel(`notificaciones_${user.username}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notificaciones" },
         (payload) => {
-          const nueva = (payload as any)?.new as Notificacion | undefined;
-
+          const nueva = (payload as any)?.new as SystemNotification | undefined;
           if (!nueva) return;
           if (nueva.usuario_username !== user.username) return;
 
-          setNotificaciones((prev) => [nueva, ...prev]);
+          setSystemNotifications((prev) => [nueva, ...prev]);
+
+          const bellItem: BellItem = {
+            id: `sys_${nueva.id}`,
+            titulo: nueva.titulo,
+            mensaje: nueva.mensaje,
+            created_at: nueva.created_at,
+            leida: nueva.leida,
+            tipo: "sistema",
+          };
+
           dispararAnimacionCampana();
-          mostrarToast(nueva);
+          mostrarToast(bellItem);
         }
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "notificaciones" },
         (payload) => {
-          const actualizada = (payload as any)?.new as Notificacion | undefined;
-
+          const actualizada = (payload as any)?.new as SystemNotification | undefined;
           if (!actualizada) return;
           if (actualizada.usuario_username !== user.username) return;
 
-          setNotificaciones((prev) =>
+          setSystemNotifications((prev) =>
             prev.map((n) => (n.id === actualizada.id ? actualizada : n))
           );
         }
       )
-      .subscribe((status) => {
-        console.log("Estado realtime notificaciones:", status);
-      });
+      .subscribe();
+
+    const chatChannel = supabase
+      .channel(`mensajes_bell_${user.username}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "mensajes" },
+        (payload) => {
+          const m: any = payload.new;
+          if (m.destinatario_username !== user.username) return;
+
+          const nueva: BellItem = {
+            id: `chat_${m.id}`,
+            titulo: `Mensaje de ${m.remitente_username}`,
+            mensaje: m.audio_url
+              ? "Te envió un audio"
+              : m.imagen_url
+              ? "Te envió una foto"
+              : (m.contenido?.trim() || "Te envió un mensaje"),
+            created_at: m.created_at,
+            leida: !!m.leido,
+            tipo: "chat",
+            chatUser: m.remitente_username,
+            rawId: m.id,
+          };
+
+          setChatNotifications((prev) => {
+            const exists = prev.some((x) => x.id === nueva.id);
+            return exists ? prev : [nueva, ...prev];
+          });
+
+          dispararAnimacionCampana();
+          mostrarToast(nueva);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "mensajes" },
+        (payload) => {
+          const m: any = payload.new;
+          if (m.destinatario_username !== user.username) return;
+
+          setChatNotifications((prev) =>
+            prev.map((n) =>
+              n.rawId === m.id ? { ...n, leida: !!m.leido } : n
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    const handleChatOpen = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const withUser = detail?.withUser;
+      if (!withUser) return;
+
+      setChatNotifications((prev) =>
+        prev.map((n) =>
+          n.tipo === "chat" && n.chatUser === withUser ? { ...n, leida: true } : n
+        )
+      );
+    };
+
+    document.addEventListener("chat:open", handleChatOpen);
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(systemChannel);
+      supabase.removeChannel(chatChannel);
+      document.removeEventListener("chat:open", handleChatOpen);
     };
   }, [user?.username]);
 
-  const sinLeer = notificaciones.filter((n) => !n.leida).length;
+  const bellItems = useMemo(() => {
+    const fromSystem: BellItem[] = systemNotifications.map((n) => ({
+      id: `sys_${n.id}`,
+      titulo: n.titulo,
+      mensaje: n.mensaje,
+      created_at: n.created_at,
+      leida: n.leida,
+      tipo: "sistema",
+    }));
 
-  // Logout sin borrar el “once per day” del video gate
+    const merged = [...chatNotifications, ...fromSystem];
+
+    merged.sort((a, b) =>
+      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0
+    );
+
+    return merged;
+  }, [systemNotifications, chatNotifications]);
+
+  const sinLeer = bellItems.filter((n) => !n.leida).length;
+
+  const handleNotificationClick = async (item: BellItem) => {
+    setToastVisible(false);
+    setNotisAbiertas(false);
+
+    if (item.tipo === "chat" && item.chatUser) {
+      navigate(`/chat?user=${encodeURIComponent(item.chatUser)}`);
+      return;
+    }
+  };
+
   const handleLogout = () => {
     try {
       const keep: Record<string, string> = {};
@@ -213,7 +356,6 @@ const Navigation: React.FC = () => {
       }
 
       localStorage.clear();
-
       Object.entries(keep).forEach(([k, v]) => localStorage.setItem(k, v));
     } catch {
       localStorage.clear();
@@ -222,7 +364,6 @@ const Navigation: React.FC = () => {
     window.location.href = "/";
   };
 
-  // Nombre de página actual
   const getCurrentPageName = () => {
     switch (location.pathname) {
       case "/":
@@ -234,13 +375,10 @@ const Navigation: React.FC = () => {
 
       case "/bonificaciones":
         return "Bonificaciones";
-
       case "/revisar-bonificaciones":
         return "Revisar Bonificaciones";
-
       case "/posible-rechazos":
         return "Posible Rechazos";
-
       case "/notas-credito":
         return "Notas de Crédito";
       case "/gps-logger":
@@ -283,7 +421,6 @@ const Navigation: React.FC = () => {
         return "B2B - Carrito";
       case "/b2b/pedidos":
         return "B2B - Pedidos";
-
       default:
         return "VaFood SRL - AR";
     }
@@ -298,363 +435,78 @@ const Navigation: React.FC = () => {
 
   if (user?.role === "test") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas de crédito",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y clientes del día",
-      },
-      {
-        name: "Baja / Cambio Ruta",
-        path: "/baja-cliente",
-        icon: FileText,
-        description: "Solicitar baja o cambio de ruta",
-      },
-      {
-        name: "Videos",
-        path: "/video-log",
-        icon: FileText,
-        description: "Ver videos disponibles",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
+      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
+      { name: "Videos", path: "/video-log", icon: FileText, description: "Ver videos disponibles" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   } else if (user?.role === "vendedor") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas de crédito",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y clientes del día",
-      },
-      {
-        name: "Baja / Cambio Ruta",
-        path: "/baja-cliente",
-        icon: FileText,
-        description: "Solicitar baja o cambio de ruta",
-      },
-      {
-        name: "Videos",
-        path: "/video-log",
-        icon: FileText,
-        description: "Ver videos disponibles",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas de crédito" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y clientes del día" },
+      { name: "Baja / Cambio Ruta", path: "/baja-cliente", icon: FileText, description: "Solicitar baja o cambio de ruta" },
+      { name: "Videos", path: "/video-log", icon: FileText, description: "Ver videos disponibles" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   } else if (user?.role === "supervisor") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Ver pedidos de compra",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Revisar Bonificaciones",
-        path: "/revisar-bonificaciones",
-        icon: FileText,
-        description: "Aprobar bonificaciones cargadas",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar y ver coordenadas GPS",
-      },
-      {
-        name: "Revisar Bajas",
-        path: "/revisar-bajas",
-        icon: FileText,
-        description: "Aprobar solicitudes de baja",
-      },
-      {
-        name: "Documentos PDF",
-        path: "/pdfs",
-        icon: File,
-        description: "Documentación interna",
-      },
-      {
-        name: "Mapa de Visitas",
-        path: "/mapa",
-        icon: Compass,
-        description: "Rutas y visitas",
-      },
-      {
-        name: "Dashboard Power BI",
-        path: "/powerbi",
-        icon: BarChart3,
-        description: "Indicadores",
-      },
-      {
-        name: "Supervisor",
-        path: "/supervisor",
-        icon: Compass,
-        description: "Panel del supervisor",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Aprobar bonificaciones cargadas" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar y ver coordenadas GPS" },
+      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
+      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
+      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
+      { name: "Supervisor", path: "/supervisor", icon: Compass, description: "Panel del supervisor" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   } else if (user?.role === "logistica") {
     menuItems = [
-      {
-        name: "Posible Rechazos",
-        path: "/posible-rechazos",
-        icon: Plus,
-        description: "Registrar cliente y monto aproximado",
-      },
-      {
-        name: "Nuevo Rechazo",
-        path: "/rechazos/nuevo",
-        icon: Plus,
-        description: "Registrar nuevo rechazo",
-      },
-      {
-        name: "Coordenadas",
-        path: "/coordenadas",
-        icon: MapPin,
-        description: "Consultar coordenadas",
-      },
-      {
-        name: "Información",
-        path: "/informacion",
-        icon: Info,
-        description: "Resumen y datos",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Posible Rechazos", path: "/posible-rechazos", icon: Plus, description: "Registrar cliente y monto aproximado" },
+      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar nuevo rechazo" },
+      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
+      { name: "Información", path: "/informacion", icon: Info, description: "Resumen y datos" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   } else if (user?.role === "administracion-cordoba") {
     menuItems = [
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Ver pedidos de compra",
-      },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Ver pedidos de compra" },
     ];
   } else if (user?.role === "admin") {
     menuItems = [
-      {
-        name: "Buscar Cliente",
-        path: "/",
-        icon: Search,
-        description: "Consultar información de clientes",
-      },
-      {
-        name: "Bonificaciones",
-        path: "/bonificaciones",
-        icon: Save,
-        description: "Registrar bonificaciones",
-      },
-      {
-        name: "Revisar Bonificaciones",
-        path: "/revisar-bonificaciones",
-        icon: FileText,
-        description: "Ver bonificaciones cargadas",
-      },
-      {
-        name: "Posible Rechazos",
-        path: "/posible-rechazos",
-        icon: Plus,
-        description: "Registrar cliente y monto aproximado",
-      },
-      {
-        name: "Nuevo Rechazo",
-        path: "/rechazos/nuevo",
-        icon: Plus,
-        description: "Registrar rechazos",
-      },
-      {
-        name: "Coordenadas",
-        path: "/coordenadas",
-        icon: MapPin,
-        description: "Consultar coordenadas",
-      },
-      {
-        name: "Notas de Crédito",
-        path: "/notas-credito",
-        icon: FileText,
-        description: "Registrar notas",
-      },
-      {
-        name: "GPS Logger",
-        path: "/gps-logger",
-        icon: MapPin,
-        description: "Registrar coordenadas",
-      },
-      {
-        name: "Revisar Bajas",
-        path: "/revisar-bajas",
-        icon: FileText,
-        description: "Aprobar solicitudes de baja",
-      },
-      {
-        name: "Pedido de Compra",
-        path: "/pedido-compra",
-        icon: ShoppingCart,
-        description: "Cargar un pedido de compra",
-      },
-      {
-        name: "Revisar Compras",
-        path: "/revisar-compras",
-        icon: FileText,
-        description: "Aprobar y auditar pedidos de compra",
-      },
-      {
-        name: "Documentos PDF",
-        path: "/pdfs",
-        icon: File,
-        description: "Documentación interna",
-      },
-      {
-        name: "Mapa de Visitas",
-        path: "/mapa",
-        icon: Compass,
-        description: "Rutas y visitas",
-      },
-      {
-        name: "Dashboard Power BI",
-        path: "/powerbi",
-        icon: BarChart3,
-        description: "Indicadores",
-      },
-      {
-        name: "Panel Admin",
-        path: "/admin",
-        icon: Wrench,
-        description: "Herramientas admin",
-      },
-      {
-        name: "Chat",
-        path: "/chat",
-        icon: MessageSquare,
-        description: "Comunicación interna",
-      },
-      {
-        name: "Configuración",
-        path: "/settings",
-        icon: SettingsIcon,
-        description: "Configuración del usuario",
-      },
+      { name: "Buscar Cliente", path: "/", icon: Search, description: "Consultar información de clientes" },
+      { name: "Bonificaciones", path: "/bonificaciones", icon: Save, description: "Registrar bonificaciones" },
+      { name: "Revisar Bonificaciones", path: "/revisar-bonificaciones", icon: FileText, description: "Ver bonificaciones cargadas" },
+      { name: "Posible Rechazos", path: "/posible-rechazos", icon: Plus, description: "Registrar cliente y monto aproximado" },
+      { name: "Nuevo Rechazo", path: "/rechazos/nuevo", icon: Plus, description: "Registrar rechazos" },
+      { name: "Coordenadas", path: "/coordenadas", icon: MapPin, description: "Consultar coordenadas" },
+      { name: "Notas de Crédito", path: "/notas-credito", icon: FileText, description: "Registrar notas" },
+      { name: "GPS Logger", path: "/gps-logger", icon: MapPin, description: "Registrar coordenadas" },
+      { name: "Revisar Bajas", path: "/revisar-bajas", icon: FileText, description: "Aprobar solicitudes de baja" },
+      { name: "Pedido de Compra", path: "/pedido-compra", icon: ShoppingCart, description: "Cargar un pedido de compra" },
+      { name: "Revisar Compras", path: "/revisar-compras", icon: FileText, description: "Aprobar y auditar pedidos de compra" },
+      { name: "Documentos PDF", path: "/pdfs", icon: File, description: "Documentación interna" },
+      { name: "Mapa de Visitas", path: "/mapa", icon: Compass, description: "Rutas y visitas" },
+      { name: "Dashboard Power BI", path: "/powerbi", icon: BarChart3, description: "Indicadores" },
+      { name: "Panel Admin", path: "/admin", icon: Wrench, description: "Herramientas admin" },
+      { name: "Chat", path: "/chat", icon: MessageSquare, description: "Comunicación interna" },
+      { name: "Configuración", path: "/settings", icon: SettingsIcon, description: "Configuración del usuario" },
     ];
   }
 
@@ -681,13 +533,16 @@ const Navigation: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4 relative">
-            {/* TOAST NOTIFICACIÓN NUEVA */}
             {toastVisible && toastNotif && (
-              <div className="absolute right-14 top-14 z-[70] w-80 max-w-[90vw] animate-[fadeIn_0.25s_ease-out]">
+              <button
+                type="button"
+                onClick={() => handleNotificationClick(toastNotif)}
+                className="absolute right-14 top-14 z-[70] w-80 max-w-[90vw] notification-toast text-left"
+              >
                 <div className="rounded-xl border border-red-200 bg-white shadow-xl overflow-hidden">
                   <div className="bg-red-50 px-4 py-2 border-b border-red-100">
                     <p className="text-sm font-semibold text-red-700">
-                      Nueva notificación
+                      {toastNotif.tipo === "chat" ? "Nuevo mensaje" : "Nueva notificación"}
                     </p>
                   </div>
                   <div className="p-4">
@@ -702,28 +557,23 @@ const Navigation: React.FC = () => {
                     </p>
                   </div>
                 </div>
-              </div>
+              </button>
             )}
 
-            {/* NOTIFICACIONES */}
             <div className="relative" ref={notiRef}>
               <button
                 className={`relative p-2 rounded-full transition-all duration-300 ${
                   sinLeer > 0
                     ? "text-red-600 bg-red-50"
                     : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-                } ${
-                  bellHighlight
-                    ? "scale-110 shadow-[0_0_0_6px_rgba(220,38,38,0.10)] animate-pulse"
-                    : ""
-                }`}
+                } ${bellHighlight ? "scale-110 animate-bellGlow" : ""}`}
                 onClick={async () => {
                   const nuevoEstado = !notisAbiertas;
                   setNotisAbiertas(nuevoEstado);
 
                   if (nuevoEstado) {
                     setToastVisible(false);
-                    await marcarLeidas();
+                    await marcarLeidasSistema();
                   }
                 }}
                 title="Notificaciones"
@@ -731,7 +581,7 @@ const Navigation: React.FC = () => {
                 <Bell
                   size={20}
                   className={`transition-transform duration-300 ${
-                    bellHighlight ? "rotate-12" : ""
+                    bellHighlight ? "animate-bellShake" : ""
                   }`}
                 />
 
@@ -752,44 +602,45 @@ const Navigation: React.FC = () => {
                       Notificaciones
                     </h4>
                     <span className="text-xs text-gray-500">
-                      {sinLeer === 0
-                        ? "Sin pendientes"
-                        : `${sinLeer} sin leer`}
+                      {sinLeer === 0 ? "Sin pendientes" : `${sinLeer} sin leer`}
                     </span>
                   </div>
 
-                  {notificaciones.length === 0 ? (
+                  {bellItems.length === 0 ? (
                     <p className="text-sm text-gray-500 px-1 py-2">
                       Sin notificaciones
                     </p>
                   ) : (
                     <ul className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                      {notificaciones.map((n) => (
-                        <li
-                          key={n.id}
-                          className={`text-sm p-3 rounded-lg border ${
-                            n.leida
-                              ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-                              : "bg-red-50 border-red-200"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-gray-900 dark:text-gray-100">
-                                {n.titulo}
-                              </p>
-                              <p className="text-gray-700 dark:text-gray-300 mt-1 leading-relaxed break-words">
-                                {n.mensaje}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-2">
-                                {formatearFecha(n.created_at)}
-                              </p>
-                            </div>
+                      {bellItems.map((n) => (
+                        <li key={n.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleNotificationClick(n)}
+                            className={`w-full text-left text-sm p-3 rounded-lg border transition ${
+                              n.leida
+                                ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+                                : "bg-red-50 border-red-200"
+                            } ${n.tipo === "chat" ? "hover:bg-red-100" : ""}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                  {n.titulo}
+                                </p>
+                                <p className="text-gray-700 dark:text-gray-300 mt-1 leading-relaxed break-words">
+                                  {n.mensaje}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  {formatearFecha(n.created_at)}
+                                </p>
+                              </div>
 
-                            {!n.leida && (
-                              <span className="mt-1 inline-block w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
-                            )}
-                          </div>
+                              {!n.leida && (
+                                <span className="mt-1 inline-block w-2.5 h-2.5 rounded-full bg-red-500 shrink-0"></span>
+                              )}
+                            </div>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -798,7 +649,6 @@ const Navigation: React.FC = () => {
               )}
             </div>
 
-            {/* USUARIO */}
             <div className="relative" ref={userMenuRef}>
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
