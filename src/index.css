@@ -292,3 +292,88 @@ select:focus-visible {
     animation: none !important;
   }
 }
+
+/* ---------------- CHAT MOBILE / VIEWPORT / TECLADO ---------------- */
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* viewport más confiable en mobile */
+.chat-safe-viewport {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  .chat-safe-viewport {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
+/* evita rebotes feos al scrollear chat en mobile */
+.chat-scroll-area {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+/* barra inferior del chat más estable */
+.chat-composer {
+  padding-bottom: max(env(safe-area-inset-bottom), 8px);
+}
+
+/* header del chat fijo y prolijo */
+.chat-header {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* burbujas estilo mensajería */
+.chat-bubble {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* imágenes dentro del chat */
+.chat-bubble img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* input de chat mobile */
+.chat-input {
+  min-height: 44px;
+}
+
+/* ayuda a que el teclado no tape visualmente el input en algunos Android */
+@supports (padding: max(0px)) {
+  .chat-keyboard-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 8px);
+  }
+}
+
+/* En mobile dejamos las transiciones más suaves para que el teclado no genere “saltos” raros */
+@media (max-width: 768px) {
+  .chat-scroll-area,
+  .chat-composer,
+  .chat-header {
+    transition: none !important;
+  }
+
+  .chat-safe-viewport {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
