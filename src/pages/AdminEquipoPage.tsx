@@ -21,7 +21,7 @@ type UsuarioApp = {
 };
 
 type VisitaPlanificada = {
-  id: string;
+  id?: string;
   cliente: string | number;
   vendedor_username: string | number;
   dia_visita: string;
@@ -57,6 +57,8 @@ type FilaEquipo = {
   primeraMarca: string | null;
   ultimaMarca: string | null;
 };
+
+const PAGE_SIZE = 1000;
 
 const AdminEquipoPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -120,55 +122,84 @@ const AdminEquipoPage: React.FC = () => {
     }
   };
 
+  const fetchAllRows = useCallback(
+    async <T,>(
+      tableName: string,
+      queryBuilder?: (query: any) => any
+    ): Promise<T[]> => {
+      let allRows: T[] = [];
+      let from = 0;
+      let keepGoing = true;
+
+      while (keepGoing) {
+        let query = supabase.from(tableName).select("*").range(from, from + PAGE_SIZE - 1);
+
+        if (queryBuilder) {
+          query = queryBuilder(query);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+          console.error(`Error cargando ${tableName}:`, error);
+          break;
+        }
+
+        const rows = (data || []) as T[];
+        allRows = [...allRows, ...rows];
+
+        if (rows.length < PAGE_SIZE) {
+          keepGoing = false;
+        } else {
+          from += PAGE_SIZE;
+        }
+      }
+
+      return allRows;
+    },
+    []
+  );
+
   const cargarTodo = useCallback(async () => {
     setLoading(true);
 
     try {
-      const [usuariosRes, visitasRes, coordenadasRes] = await Promise.all([
-        supabase
-          .from("usuarios_app")
-          .select("*")
-          .in("role", ["supervisor", "vendedor"])
-          .order("role", { ascending: true })
-          .order("username", { ascending: true }),
+      const [usuariosData, visitasData, coordenadasData] = await Promise.all([
+        fetchAllRows<UsuarioApp>("usuarios_app", (query) =>
+          query
+            .in("role", ["supervisor", "vendedor"])
+            .order("role", { ascending: true })
+            .order("username", { ascending: true })
+        ),
 
-        supabase.from("visitas_planificadas").select("*"),
+        fetchAllRows<VisitaPlanificada>("visitas_planificadas", (query) =>
+          query.order("vendedor_username", { ascending: true })
+        ),
 
-        supabase
-          .from("coordenadas")
-          .select("*")
-          .gte("created_at", `${fechaHoy} 00:00:00`)
-          .lte("created_at", `${fechaHoy} 23:59:59`)
-          .order("created_at", { ascending: true }),
+        fetchAllRows<Coordenada>("coordenadas", (query) =>
+          query
+            .gte("created_at", `${fechaHoy} 00:00:00`)
+            .lte("created_at", `${fechaHoy} 23:59:59`)
+            .order("created_at", { ascending: true })
+        ),
       ]);
 
-      if (usuariosRes.error) {
-        console.error("Error cargando usuarios_app:", usuariosRes.error);
-      }
-      if (visitasRes.error) {
-        console.error(
-          "Error cargando visitas_planificadas:",
-          visitasRes.error
-        );
-      }
-      if (coordenadasRes.error) {
-        console.error("Error cargando coordenadas:", coordenadasRes.error);
-      }
-
-      setUsuarios((usuariosRes.data || []) as UsuarioApp[]);
-      setVisitas((visitasRes.data || []) as VisitaPlanificada[]);
-      setCoordenadas((coordenadasRes.data || []) as Coordenada[]);
+      setUsuarios(usuariosData || []);
+      setVisitas(visitasData || []);
+      setCoordenadas(coordenadasData || []);
       setUltimaActualizacion(new Date());
+    } catch (error) {
+      console.error("Error general cargando admin equipo:", error);
     } finally {
       setLoading(false);
     }
-  }, [fechaHoy]);
+  }, [fetchAllRows, fechaHoy]);
 
   useEffect(() => {
     cargarTodo();
 
     const channelUsuarios = supabase
-      .channel("admin-equipo-usuarios-v2")
+      .channel("admin-equipo-usuarios-v3")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "usuarios_app" },
@@ -177,7 +208,7 @@ const AdminEquipoPage: React.FC = () => {
       .subscribe();
 
     const channelVisitas = supabase
-      .channel("admin-equipo-visitas-v2")
+      .channel("admin-equipo-visitas-v3")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "visitas_planificadas" },
@@ -186,7 +217,7 @@ const AdminEquipoPage: React.FC = () => {
       .subscribe();
 
     const channelCoords = supabase
-      .channel("admin-equipo-coords-v2")
+      .channel("admin-equipo-coords-v3")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "coordenadas" },
@@ -227,12 +258,22 @@ const AdminEquipoPage: React.FC = () => {
 
         const pdvPlanificados = visitasDelDia.length;
 
-        const pdvVisitados = visitasDelDia.filter((v) => {
-          return Boolean(v.buscado_hoy) || Boolean(v.gps_hoy);
-        }).length;
+        const clientesVisitadosUnicos = new Set(
+          visitasDelDia
+            .filter((v) => Boolean(v.buscado_hoy) || Boolean(v.gps_hoy))
+            .map((v) => String(v.cliente ?? "").trim())
+            .filter(Boolean)
+        );
+
+        const pdvVisitados = clientesVisitadosUnicos.size;
 
         const coordsUsuario = coordsHoy
-          .filter((c) => String(c.created_by || "").trim() === userId)
+          .filter((c) => {
+            const createdBy = String(c.created_by || "").trim();
+            const vendedorUsername = String(c.vendedor_username || "").trim();
+
+            return createdBy === userId || vendedorUsername === username;
+          })
           .sort((a, b) =>
             a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
           );
@@ -276,7 +317,7 @@ const AdminEquipoPage: React.FC = () => {
         }
         return a.nombre.localeCompare(b.nombre, "es");
       });
-  }, [usuarios, visitas, coordenadas, diaActualCodigo, fechaHoy]);
+  }, [usuarios, visitas, coordenadas, diaActualCodigo]);
 
   const filasFiltradas = useMemo(() => {
     const q = normalizar(busqueda);
@@ -445,7 +486,10 @@ const AdminEquipoPage: React.FC = () => {
                 <thead className="bg-gray-50 dark:bg-gray-800/60">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
-                      Usuario
+                      Nombre
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
+                      Username
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
                       Rol
@@ -489,12 +533,15 @@ const AdminEquipoPage: React.FC = () => {
                         className="border-t border-gray-100 dark:border-gray-800 hover:bg-red-50/40 dark:hover:bg-gray-800/40 transition"
                       >
                         <td className="px-4 py-4">
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">
-                              {fila.nombre}
-                            </p>
-                            <p className="text-xs text-gray-500">@{fila.username}</p>
-                          </div>
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            {fila.nombre}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <p className="font-medium text-gray-700 dark:text-gray-300">
+                            {fila.username}
+                          </p>
                         </td>
 
                         <td className="px-4 py-4">
