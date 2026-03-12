@@ -71,18 +71,16 @@ export async function registerPushForUser(username: string): Promise<void> {
   console.log("Push registrado correctamente para", username);
 }
 
-/**
- * Prueba manual para disparar una Edge Function de Supabase.
- * La dejamos lista para usar cuando crees la function "send-push".
- */
 export async function triggerTestPush(username: string) {
   const { data, error } = await supabase.functions.invoke("send-push", {
     body: {
       username,
       title: "Prueba VaFood",
-      body: "Push de prueba desde Edge Function",
+      body: "Push de prueba desde Supabase Edge Function",
       url: "/chat",
       tag: "test-push",
+      icon: "/image.png",
+      badge: "/image.png",
     },
   });
 
