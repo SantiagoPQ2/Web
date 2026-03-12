@@ -11,12 +11,37 @@ import {
 import { supabase } from "../config/supabase";
 
 type UsuarioApp = {
-  id?: string;
-  username?: string;
-  role?: string;
-  nombre?: string;
-  full_name?: string;
-  apellido?: string;
+  id: string;
+  username: string;
+  role: string;
+  nombre?: string | null;
+  apellido?: string | null;
+  full_name?: string | null;
+  [key: string]: any;
+};
+
+type VisitaPlanificada = {
+  id: string;
+  cliente: string | number;
+  vendedor_username: string | number;
+  dia_visita: string;
+  buscado_hoy?: boolean | null;
+  gps_hoy?: boolean | null;
+  lat?: number | null;
+  lon?: number | null;
+  celular?: string | null;
+  [key: string]: any;
+};
+
+type Coordenada = {
+  id: string;
+  nombre?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  created_at: string;
+  created_by: string;
+  vendedor_username?: string | null;
+  gps_planificada?: boolean | null;
   [key: string]: any;
 };
 
@@ -28,24 +53,27 @@ type FilaEquipo = {
   pdvPlanificados: number;
   pdvVisitados: number;
   horasTrabajadas: number;
-  puntosMarcados: number;
-  primeraMarca?: string | null;
-  ultimaMarca?: string | null;
+  puntosGps: number;
+  primeraMarca: string | null;
+  ultimaMarca: string | null;
 };
-
-const ROLES_VALIDOS = ["supervisor", "vendedor"];
 
 const AdminEquipoPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<UsuarioApp[]>([]);
-  const [visitas, setVisitas] = useState<any[]>([]);
-  const [coordenadas, setCoordenadas] = useState<any[]>([]);
+  const [visitas, setVisitas] = useState<VisitaPlanificada[]>([]);
+  const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(
     null
   );
 
-  const hoyStr = useMemo(() => {
+  const diaActualCodigo = useMemo(() => {
+    const dias = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
+    return dias[new Date().getDay()];
+  }, []);
+
+  const fechaHoy = useMemo(() => {
     const now = new Date();
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -53,153 +81,43 @@ const AdminEquipoPage: React.FC = () => {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return "-";
+  const normalizar = (valor: any) => String(valor ?? "").trim().toLowerCase();
+
+  const formatearFechaHora = (valor?: string | null) => {
+    if (!valor) return "-";
     try {
-      return new Date(value).toLocaleString("es-AR");
+      return new Date(valor).toLocaleString("es-AR");
     } catch {
-      return value;
+      return valor;
     }
   };
 
-  const formatHours = (hours: number) => {
-    if (!hours || hours <= 0) return "0 hs";
-    const totalMinutes = Math.round(hours * 60);
-    const hs = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
+  const formatearHoras = (horas: number) => {
+    if (!horas || horas <= 0) return "0 hs";
+    const minutosTotales = Math.round(horas * 60);
+    const hs = Math.floor(minutosTotales / 60);
+    const mins = minutosTotales % 60;
     return `${hs}h ${mins}m`;
   };
 
-  const normalizar = (v: any) => String(v ?? "").trim().toLowerCase();
+  const obtenerNombreUsuario = (u: UsuarioApp) => {
+    const nombreCompleto =
+      String(u.full_name || "").trim() ||
+      [String(u.nombre || "").trim(), String(u.apellido || "").trim()]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
 
-  const getUsernameFromRow = (row: any): string => {
-    const posibles = [
-      row?.username,
-      row?.usuario_username,
-      row?.vendedor_username,
-      row?.supervisor_username,
-      row?.user_username,
-      row?.nombre_usuario,
-      row?.usuario,
-      row?.vendedor,
-      row?.supervisor,
-      row?.created_by_username,
-      row?.remitente_username,
-      row?.destinatario_username,
-    ];
-
-    for (const valor of posibles) {
-      if (valor !== undefined && valor !== null && String(valor).trim() !== "") {
-        return String(valor).trim();
-      }
-    }
-
-    return "";
+    return nombreCompleto || String(u.username || "").trim();
   };
 
-  const getDateFromRow = (row: any): string | null => {
-    const posibles = [
-      row?.fecha,
-      row?.fecha_visita,
-      row?.fecha_planificada,
-      row?.dia,
-      row?.visit_date,
-      row?.created_at,
-      row?.timestamp,
-      row?.hora,
-      row?.fecha_hora,
-      row?.check_in,
-    ];
-
-    for (const valor of posibles) {
-      if (!valor) continue;
-      try {
-        const iso = new Date(valor).toISOString().slice(0, 10);
-        if (iso) return iso;
-      } catch {
-        const txt = String(valor).slice(0, 10);
-        if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt;
-      }
+  const esCoordenadaDeHoy = (c: Coordenada) => {
+    if (!c.created_at) return false;
+    try {
+      return new Date(c.created_at).toISOString().slice(0, 10) === fechaHoy;
+    } catch {
+      return String(c.created_at).slice(0, 10) === fechaHoy;
     }
-
-    return null;
-  };
-
-  const isVisitada = (row: any): boolean => {
-    const booleanos = [
-      row?.visitado,
-      row?.visited,
-      row?.realizada,
-      row?.completada,
-      row?.completo,
-      row?.hecha,
-      row?.check_in_realizado,
-      row?.fue_visitado,
-    ];
-
-    for (const valor of booleanos) {
-      if (valor === true) return true;
-      if (typeof valor === "string") {
-        const v = normalizar(valor);
-        if (
-          ["si", "sí", "true", "ok", "visitado", "visitada", "realizada", "completada", "hecha"].includes(v)
-        ) {
-          return true;
-        }
-      }
-      if (valor === 1) return true;
-    }
-
-    const estados = [
-      row?.estado,
-      row?.status,
-      row?.resultado,
-      row?.situacion,
-    ];
-
-    for (const valor of estados) {
-      const v = normalizar(valor);
-      if (
-        [
-          "visitado",
-          "visitada",
-          "realizada",
-          "realizado",
-          "completada",
-          "completado",
-          "hecha",
-          "hecho",
-          "cerrada",
-          "cerrado",
-          "ok",
-        ].includes(v)
-      ) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  const getTimestampCoordenada = (row: any): string | null => {
-    const posibles = [
-      row?.created_at,
-      row?.timestamp,
-      row?.fecha_hora,
-      row?.hora,
-      row?.fecha,
-      row?.check_in,
-    ];
-
-    for (const valor of posibles) {
-      if (!valor) continue;
-      try {
-        const date = new Date(valor);
-        if (!isNaN(date.getTime())) return date.toISOString();
-      } catch {}
-    }
-
-    return null;
   };
 
   const cargarTodo = useCallback(async () => {
@@ -207,63 +125,72 @@ const AdminEquipoPage: React.FC = () => {
 
     try {
       const [usuariosRes, visitasRes, coordenadasRes] = await Promise.all([
-        supabase.from("usuarios_app").select("*").in("role", ROLES_VALIDOS),
+        supabase
+          .from("usuarios_app")
+          .select("*")
+          .in("role", ["supervisor", "vendedor"])
+          .order("role", { ascending: true })
+          .order("username", { ascending: true }),
+
         supabase.from("visitas_planificadas").select("*"),
-        supabase.from("coordenadas").select("*"),
+
+        supabase
+          .from("coordenadas")
+          .select("*")
+          .gte("created_at", `${fechaHoy} 00:00:00`)
+          .lte("created_at", `${fechaHoy} 23:59:59`)
+          .order("created_at", { ascending: true }),
       ]);
 
       if (usuariosRes.error) {
         console.error("Error cargando usuarios_app:", usuariosRes.error);
       }
       if (visitasRes.error) {
-        console.error("Error cargando visitas_planificadas:", visitasRes.error);
+        console.error(
+          "Error cargando visitas_planificadas:",
+          visitasRes.error
+        );
       }
       if (coordenadasRes.error) {
         console.error("Error cargando coordenadas:", coordenadasRes.error);
       }
 
       setUsuarios((usuariosRes.data || []) as UsuarioApp[]);
-      setVisitas((visitasRes.data || []) as any[]);
-      setCoordenadas((coordenadasRes.data || []) as any[]);
+      setVisitas((visitasRes.data || []) as VisitaPlanificada[]);
+      setCoordenadas((coordenadasRes.data || []) as Coordenada[]);
       setUltimaActualizacion(new Date());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fechaHoy]);
 
   useEffect(() => {
     cargarTodo();
 
     const channelUsuarios = supabase
-      .channel("admin-equipo-usuarios")
+      .channel("admin-equipo-usuarios-v2")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "usuarios_app" },
-        () => {
-          cargarTodo();
-        }
+        () => cargarTodo()
       )
       .subscribe();
 
     const channelVisitas = supabase
-      .channel("admin-equipo-visitas")
+      .channel("admin-equipo-visitas-v2")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "visitas_planificadas" },
-        () => {
-          cargarTodo();
-        }
+        () => cargarTodo()
       )
       .subscribe();
 
     const channelCoords = supabase
-      .channel("admin-equipo-coordenadas")
+      .channel("admin-equipo-coords-v2")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "coordenadas" },
-        () => {
-          cargarTodo();
-        }
+        () => cargarTodo()
       )
       .subscribe();
 
@@ -279,86 +206,77 @@ const AdminEquipoPage: React.FC = () => {
     };
   }, [cargarTodo]);
 
-  const filas: FilaEquipo[] = useMemo(() => {
-    const usuariosValidos = usuarios
-      .filter((u) => ROLES_VALIDOS.includes(String(u.role || "").toLowerCase()))
+  const filas = useMemo(() => {
+    const coordsHoy = coordenadas.filter(esCoordenadaDeHoy);
+
+    return usuarios
+      .filter((u) => {
+        const role = normalizar(u.role);
+        return role === "supervisor" || role === "vendedor";
+      })
       .map((u) => {
         const username = String(u.username || "").trim();
-        const nombreArmado =
-          String(u.nombre || "").trim() ||
-          String(u.full_name || "").trim() ||
-          [
-            String(u.nombre || "").trim(),
-            String(u.apellido || "").trim(),
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .trim() ||
-          username;
+        const userId = String(u.id || "").trim();
+        const role = normalizar(u.role) as "supervisor" | "vendedor";
 
-        const visitasHoyUsuario = visitas.filter((v) => {
-          const userRow = normalizar(getUsernameFromRow(v));
-          const fechaRow = getDateFromRow(v);
-          return userRow === normalizar(username) && fechaRow === hoyStr;
+        const visitasDelDia = visitas.filter((v) => {
+          const vendedor = String(v.vendedor_username ?? "").trim();
+          const dia = normalizar(v.dia_visita);
+          return vendedor === username && dia === normalizar(diaActualCodigo);
         });
 
-        const pdvPlanificados = visitasHoyUsuario.length;
-        const pdvVisitados = visitasHoyUsuario.filter(isVisitada).length;
+        const pdvPlanificados = visitasDelDia.length;
 
-        const coordsHoyUsuario = coordenadas
-          .filter((c) => {
-            const userRow = normalizar(getUsernameFromRow(c));
-            const fechaRow = getDateFromRow(c);
-            return userRow === normalizar(username) && fechaRow === hoyStr;
-          })
-          .map((c) => ({
-            ...c,
-            __ts: getTimestampCoordenada(c),
-          }))
-          .filter((c) => !!c.__ts)
+        const pdvVisitados = visitasDelDia.filter((v) => {
+          return Boolean(v.buscado_hoy) || Boolean(v.gps_hoy);
+        }).length;
+
+        const coordsUsuario = coordsHoy
+          .filter((c) => String(c.created_by || "").trim() === userId)
           .sort((a, b) =>
-            String(a.__ts) < String(b.__ts) ? -1 : String(a.__ts) > String(b.__ts) ? 1 : 0
+            a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
           );
 
-        let horasTrabajadas = 0;
+        const puntosGps = coordsUsuario.length;
+
         let primeraMarca: string | null = null;
         let ultimaMarca: string | null = null;
+        let horasTrabajadas = 0;
 
-        if (coordsHoyUsuario.length >= 2) {
-          primeraMarca = coordsHoyUsuario[0].__ts;
-          ultimaMarca = coordsHoyUsuario[coordsHoyUsuario.length - 1].__ts;
+        if (coordsUsuario.length > 0) {
+          primeraMarca = coordsUsuario[0].created_at;
+          ultimaMarca = coordsUsuario[coordsUsuario.length - 1].created_at;
 
-          const inicio = new Date(primeraMarca).getTime();
-          const fin = new Date(ultimaMarca).getTime();
+          if (coordsUsuario.length >= 2) {
+            const inicio = new Date(primeraMarca).getTime();
+            const fin = new Date(ultimaMarca).getTime();
 
-          if (!isNaN(inicio) && !isNaN(fin) && fin >= inicio) {
-            horasTrabajadas = (fin - inicio) / 1000 / 60 / 60;
+            if (!isNaN(inicio) && !isNaN(fin) && fin >= inicio) {
+              horasTrabajadas = (fin - inicio) / 1000 / 60 / 60;
+            }
           }
-        } else if (coordsHoyUsuario.length === 1) {
-          primeraMarca = coordsHoyUsuario[0].__ts;
-          ultimaMarca = coordsHoyUsuario[0].__ts;
-          horasTrabajadas = 0;
         }
 
         return {
-          id: String(u.id || username),
+          id: userId || username,
           username,
-          nombre: nombreArmado,
-          role: String(u.role).toLowerCase() as "supervisor" | "vendedor",
+          nombre: obtenerNombreUsuario(u),
+          role,
           pdvPlanificados,
           pdvVisitados,
           horasTrabajadas,
-          puntosMarcados: coordsHoyUsuario.length,
+          puntosGps,
           primeraMarca,
           ultimaMarca,
-        };
+        } as FilaEquipo;
+      })
+      .sort((a, b) => {
+        if (a.role !== b.role) {
+          return a.role === "supervisor" ? -1 : 1;
+        }
+        return a.nombre.localeCompare(b.nombre, "es");
       });
-
-    return usuariosValidos.sort((a, b) => {
-      if (a.role !== b.role) return a.role === "supervisor" ? -1 : 1;
-      return a.nombre.localeCompare(b.nombre, "es");
-    });
-  }, [usuarios, visitas, coordenadas, hoyStr]);
+  }, [usuarios, visitas, coordenadas, diaActualCodigo, fechaHoy]);
 
   const filasFiltradas = useMemo(() => {
     const q = normalizar(busqueda);
@@ -375,9 +293,18 @@ const AdminEquipoPage: React.FC = () => {
   const resumen = useMemo(() => {
     return {
       personas: filasFiltradas.length,
-      pdvPlanificados: filasFiltradas.reduce((acc, f) => acc + f.pdvPlanificados, 0),
-      pdvVisitados: filasFiltradas.reduce((acc, f) => acc + f.pdvVisitados, 0),
-      horas: filasFiltradas.reduce((acc, f) => acc + f.horasTrabajadas, 0),
+      pdvPlanificados: filasFiltradas.reduce(
+        (acc, f) => acc + f.pdvPlanificados,
+        0
+      ),
+      pdvVisitados: filasFiltradas.reduce(
+        (acc, f) => acc + f.pdvVisitados,
+        0
+      ),
+      horasTrabajadas: filasFiltradas.reduce(
+        (acc, f) => acc + f.horasTrabajadas,
+        0
+      ),
     };
   }, [filasFiltradas]);
 
@@ -396,7 +323,8 @@ const AdminEquipoPage: React.FC = () => {
                     Equipo en Calle
                   </h1>
                   <p className="text-sm text-gray-500">
-                    Supervisores y vendedores con PDV, visitas y horas trabajadas de hoy
+                    Supervisores y vendedores con PDV planificados, visitados y
+                    horas del día
                   </p>
                 </div>
               </div>
@@ -427,7 +355,9 @@ const AdminEquipoPage: React.FC = () => {
           </div>
 
           <div className="mt-4 text-xs text-gray-500">
-            Fecha: <span className="font-medium">{hoyStr}</span>
+            Día actual: <span className="font-medium">{diaActualCodigo}</span>
+            {" · "}
+            Fecha: <span className="font-medium">{fechaHoy}</span>
             {" · "}
             Última actualización:{" "}
             <span className="font-medium">
@@ -486,7 +416,7 @@ const AdminEquipoPage: React.FC = () => {
               <div>
                 <p className="text-sm text-gray-500">Horas trabajadas</p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {formatHours(resumen.horas)}
+                  {formatearHoras(resumen.horasTrabajadas)}
                 </p>
               </div>
               <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">
@@ -601,19 +531,19 @@ const AdminEquipoPage: React.FC = () => {
                         </td>
 
                         <td className="px-4 py-4 text-center font-semibold text-gray-900 dark:text-white">
-                          {formatHours(fila.horasTrabajadas)}
+                          {formatearHoras(fila.horasTrabajadas)}
                         </td>
 
                         <td className="px-4 py-4 text-center font-semibold text-gray-900 dark:text-white">
-                          {fila.puntosMarcados}
+                          {fila.puntosGps}
                         </td>
 
                         <td className="px-4 py-4 text-xs text-gray-600 dark:text-gray-300">
-                          {formatDateTime(fila.primeraMarca)}
+                          {formatearFechaHora(fila.primeraMarca)}
                         </td>
 
                         <td className="px-4 py-4 text-xs text-gray-600 dark:text-gray-300">
-                          {formatDateTime(fila.ultimaMarca)}
+                          {formatearFechaHora(fila.ultimaMarca)}
                         </td>
                       </tr>
                     );
