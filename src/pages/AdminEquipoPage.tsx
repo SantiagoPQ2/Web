@@ -20,6 +20,9 @@ type UsuarioApp = {
   full_name?: string | null;
   name?: string | null;
   ffvv?: string | null;
+  FFVV?: string | null;
+  equipo?: string | null;
+  team?: string | null;
   [key: string]: any;
 };
 
@@ -50,9 +53,8 @@ type Coordenada = {
 
 type FilaEquipo = {
   id: string;
-  username: string; // username real
-  usernameMostrar: string; // name de usuarios_app
-  nombre: string;
+  username: string; // id / username real
+  nombreMostrar: string; // name de usuarios_app
   ffvv: string;
   role: "supervisor" | "vendedor";
   pdvPlanificados: number;
@@ -110,18 +112,39 @@ const AdminEquipoPage: React.FC = () => {
   };
 
   const obtenerNombreUsuario = (u: UsuarioApp) => {
-    const nombreCompleto =
+    return (
+      String(u.name || "").trim() ||
       String(u.full_name || "").trim() ||
       [String(u.nombre || "").trim(), String(u.apellido || "").trim()]
         .filter(Boolean)
         .join(" ")
-        .trim();
-
-    return nombreCompleto || String(u.username || "").trim();
+        .trim() ||
+      String(u.username || "").trim()
+    );
   };
 
-  const obtenerUsernameMostrar = (u: UsuarioApp) => {
-    return String(u.name || "").trim() || String(u.username || "").trim();
+  const obtenerFFVV = (u: UsuarioApp) => {
+    const posibles = [
+      u.ffvv,
+      u.FFVV,
+      u.equipo,
+      u.team,
+      u["ffvv"],
+      u["FFVV"],
+      u["equipo"],
+      u["team"],
+      u["grupo_ffvv"],
+      u["GRUPO_FFVV"],
+      u["supervisor"],
+      u["Supervisor"],
+    ];
+
+    for (const valor of posibles) {
+      const limpio = String(valor ?? "").trim();
+      if (limpio) return limpio;
+    }
+
+    return "";
   };
 
   const esCoordenadaDeHoy = (c: Coordenada) => {
@@ -225,7 +248,7 @@ const AdminEquipoPage: React.FC = () => {
         const username = String(u.username || "").trim();
         const userId = String(u.id || "").trim();
         const role = normalizar(u.role) as "supervisor" | "vendedor";
-        const ffvv = String(u.ffvv || "").trim();
+        const ffvv = obtenerFFVV(u);
 
         const visitasDelDia = visitas.filter((v) => {
           const vendedor = String(v.vendedor_username ?? "").trim();
@@ -248,7 +271,6 @@ const AdminEquipoPage: React.FC = () => {
           .filter((c) => {
             const createdBy = String(c.created_by || "").trim();
             const vendedorUsername = String(c.vendedor_username || "").trim();
-
             return createdBy === userId || vendedorUsername === username;
           })
           .sort((a, b) =>
@@ -279,7 +301,6 @@ const AdminEquipoPage: React.FC = () => {
 
         coordsUsuario.forEach((c) => {
           const nombreCliente = String(c.nombre || "").trim();
-
           if (!nombreCliente) return;
           if (!Boolean(c.gps_planificada)) return;
 
@@ -297,7 +318,7 @@ const AdminEquipoPage: React.FC = () => {
             a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
           );
 
-          if (ordenados.length === 0) return;
+          if (ordenados.length < 2) return;
 
           const inicio = new Date(ordenados[0].created_at).getTime();
           const fin = new Date(ordenados[ordenados.length - 1].created_at).getTime();
@@ -314,8 +335,7 @@ const AdminEquipoPage: React.FC = () => {
         return {
           id: userId || username,
           username,
-          usernameMostrar: obtenerUsernameMostrar(u),
-          nombre: obtenerNombreUsuario(u),
+          nombreMostrar: obtenerNombreUsuario(u),
           ffvv,
           role,
           pdvPlanificados,
@@ -331,7 +351,7 @@ const AdminEquipoPage: React.FC = () => {
         if (a.role !== b.role) {
           return a.role === "supervisor" ? -1 : 1;
         }
-        return a.nombre.localeCompare(b.nombre, "es");
+        return a.username.localeCompare(b.username, "es");
       });
   }, [usuarios, visitas, coordenadas, diaActualCodigo, fechaHoy]);
 
@@ -339,7 +359,8 @@ const AdminEquipoPage: React.FC = () => {
     return Array.from(
       new Set(
         usuarios
-          .map((u) => String(u.ffvv || "").trim())
+          .map((u) => obtenerFFVV(u))
+          .map((v) => String(v || "").trim())
           .filter(Boolean)
       )
     ).sort((a, b) => a.localeCompare(b, "es"));
@@ -351,9 +372,8 @@ const AdminEquipoPage: React.FC = () => {
     return filas.filter((f) => {
       const coincideBusqueda =
         !q ||
-        normalizar(f.nombre).includes(q) ||
         normalizar(f.username).includes(q) ||
-        normalizar(f.usernameMostrar).includes(q) ||
+        normalizar(f.nombreMostrar).includes(q) ||
         normalizar(f.role).includes(q) ||
         normalizar(f.ffvv).includes(q);
 
@@ -417,7 +437,7 @@ const AdminEquipoPage: React.FC = () => {
                 <input
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Buscar por nombre, username, FFVV o rol"
+                  placeholder="Buscar por ID, nombre, FFVV o rol"
                   className="w-full sm:w-80 pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
@@ -562,10 +582,10 @@ const AdminEquipoPage: React.FC = () => {
                 <thead className="bg-gray-50 dark:bg-gray-800/60">
                   <tr>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
-                      Nombre
+                      ID
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
-                      Username
+                      Nombre
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
                       FFVV
@@ -615,19 +635,14 @@ const AdminEquipoPage: React.FC = () => {
                         className="border-t border-gray-100 dark:border-gray-800 hover:bg-red-50/40 dark:hover:bg-gray-800/40 transition"
                       >
                         <td className="px-4 py-4">
-                          <div>
-                            <p className="font-semibold text-gray-900 dark:text-white">
-                              {fila.nombre}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              @{fila.username}
-                            </p>
-                          </div>
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            {fila.username}
+                          </p>
                         </td>
 
                         <td className="px-4 py-4">
                           <p className="font-medium text-gray-700 dark:text-gray-300">
-                            {fila.usernameMostrar}
+                            {fila.nombreMostrar}
                           </p>
                         </td>
 
