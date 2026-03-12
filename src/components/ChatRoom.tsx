@@ -592,9 +592,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             <h2 className="font-semibold text-gray-800 text-sm truncate">
               {destino}
             </h2>
-            <p className="text-[11px] text-gray-500 truncate">
-              Chat interno VaFood
-            </p>
           </div>
         </div>
       </div>
@@ -629,13 +626,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                   >
                     {m.imagen_url && (
                       <img
-                      src={m.imagen_url}
-                      alt="adjunto"
-                      className="rounded-xl mb-2 w-auto max-w-[180px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[300px] max-h-[320px] object-cover cursor-pointer"
-                      onClick={() => window.open(m.imagen_url!, "_blank")}
-                      onLoad={() => scrollToBottom(true)}
-                    />
-                        )}
+                        src={m.imagen_url}
+                        alt="adjunto"
+                        className="rounded-xl mb-2 w-auto max-w-[180px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[300px] max-h-[320px] object-cover cursor-pointer"
+                        onClick={() => window.open(m.imagen_url!, "_blank")}
+                        onLoad={() => scrollToBottom(true)}
+                      />
+                    )}
 
                     {m.audio_url && <AudioBubble src={m.audio_url} soyYo={soyYo} />}
 
