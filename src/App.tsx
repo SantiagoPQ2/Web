@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -48,16 +48,13 @@ import PedidosB2B from "./pages/b2b/Pedidos";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
 
-// ✅ gate video + quiz
 import DailyTrainingGate from "./components/DailyTrainingGate";
+import { registerPushForUser } from "./utils/pushNotifications";
 
-// ✅ VIDEO
 const INTRO_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%206.mp4";
 
 const INTRO_VIDEO_ID = "capsula_1_v1";
-
-// ✅ QUIZ (en /public/Quiz.xlsx)
 const QUIZ_XLSX_PATH = "/Quiz.xlsx";
 
 function ProtectedApp() {
@@ -66,6 +63,14 @@ function ProtectedApp() {
   const location = useLocation();
 
   const [openChat, setOpenChat] = useState(false);
+
+  useEffect(() => {
+    if (!user?.username) return;
+
+    registerPushForUser(user.username).catch((err) => {
+      console.error("No se pudo registrar push:", err);
+    });
+  }, [user?.username]);
 
   if (!user) return <Login />;
 
@@ -219,7 +224,6 @@ function ProtectedApp() {
     </div>
   );
 
-  // ✅ TEST y VENDEDOR: Video + Quiz obligatorio (no pasan hasta 90%)
   if (role === "test" || role === "vendedor") {
     return (
       <DailyTrainingGate
