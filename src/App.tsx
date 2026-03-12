@@ -24,6 +24,7 @@ import Informacion from "./pages/Informacion";
 import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
+import AdminEquipoPage from "./pages/AdminEquipoPage";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
@@ -162,6 +163,7 @@ function ProtectedApp() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/admin-equipo" element={<AdminEquipoPage />} />
         <Route path="/planilla-carga" element={<PlanillaCarga />} />
         <Route path="/mapa" element={<Mapa />} />
         <Route path="/powerbi" element={<PowerBIPage />} />
