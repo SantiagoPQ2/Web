@@ -17,6 +17,7 @@ import {
   BarChart3,
   File,
   ShoppingCart,
+  Users,
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
@@ -416,6 +417,8 @@ const Navigation: React.FC = () => {
         return "Configuración";
       case "/admin":
         return "Panel Admin";
+      case "/admin-equipo":
+        return "Equipo en Calle";
       case "/planilla-carga":
         return "Planilla de Carga";
       case "/mapa":
@@ -774,6 +777,12 @@ const Navigation: React.FC = () => {
         path: "/revisar-compras",
         icon: FileText,
         description: "Aprobar y auditar pedidos de compra",
+      },
+      {
+        name: "Equipo en Calle",
+        path: "/admin-equipo",
+        icon: Users,
+        description: "Ver PDV, visitas y horas del equipo",
       },
       {
         name: "Documentos PDF",
