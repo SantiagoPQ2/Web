@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   Activity,
+  Filter,
 } from "lucide-react";
 import { supabase } from "../config/supabase";
 
@@ -17,6 +18,8 @@ type UsuarioApp = {
   nombre?: string | null;
   apellido?: string | null;
   full_name?: string | null;
+  name?: string | null;
+  ffvv?: string | null;
   [key: string]: any;
 };
 
@@ -47,11 +50,14 @@ type Coordenada = {
 
 type FilaEquipo = {
   id: string;
-  username: string;
+  username: string; // username real
+  usernameMostrar: string; // name de usuarios_app
   nombre: string;
+  ffvv: string;
   role: "supervisor" | "vendedor";
   pdvPlanificados: number;
   pdvVisitados: number;
+  pdvMenos5Min: number;
   horasTrabajadas: number;
   puntosGps: number;
   primeraMarca: string | null;
@@ -66,6 +72,7 @@ const AdminEquipoPage: React.FC = () => {
   const [visitas, setVisitas] = useState<VisitaPlanificada[]>([]);
   const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [busqueda, setBusqueda] = useState("");
+  const [ffvvSeleccionado, setFfvvSeleccionado] = useState("");
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(
     null
   );
@@ -113,6 +120,10 @@ const AdminEquipoPage: React.FC = () => {
     return nombreCompleto || String(u.username || "").trim();
   };
 
+  const obtenerUsernameMostrar = (u: UsuarioApp) => {
+    return String(u.name || "").trim() || String(u.username || "").trim();
+  };
+
   const esCoordenadaDeHoy = (c: Coordenada) => {
     if (!c.created_at) return false;
     try {
@@ -132,7 +143,10 @@ const AdminEquipoPage: React.FC = () => {
       let keepGoing = true;
 
       while (keepGoing) {
-        let query = supabase.from(tableName).select("*").range(from, from + PAGE_SIZE - 1);
+        let query = supabase
+          .from(tableName)
+          .select("*")
+          .range(from, from + PAGE_SIZE - 1);
 
         if (queryBuilder) {
           query = queryBuilder(query);
@@ -197,44 +211,6 @@ const AdminEquipoPage: React.FC = () => {
 
   useEffect(() => {
     cargarTodo();
-
-    const channelUsuarios = supabase
-      .channel("admin-equipo-usuarios-v3")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "usuarios_app" },
-        () => cargarTodo()
-      )
-      .subscribe();
-
-    const channelVisitas = supabase
-      .channel("admin-equipo-visitas-v3")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "visitas_planificadas" },
-        () => cargarTodo()
-      )
-      .subscribe();
-
-    const channelCoords = supabase
-      .channel("admin-equipo-coords-v3")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "coordenadas" },
-        () => cargarTodo()
-      )
-      .subscribe();
-
-    const interval = window.setInterval(() => {
-      cargarTodo();
-    }, 60000);
-
-    return () => {
-      window.clearInterval(interval);
-      supabase.removeChannel(channelUsuarios);
-      supabase.removeChannel(channelVisitas);
-      supabase.removeChannel(channelCoords);
-    };
   }, [cargarTodo]);
 
   const filas = useMemo(() => {
@@ -249,6 +225,7 @@ const AdminEquipoPage: React.FC = () => {
         const username = String(u.username || "").trim();
         const userId = String(u.id || "").trim();
         const role = normalizar(u.role) as "supervisor" | "vendedor";
+        const ffvv = String(u.ffvv || "").trim();
 
         const visitasDelDia = visitas.filter((v) => {
           const vendedor = String(v.vendedor_username ?? "").trim();
@@ -298,13 +275,52 @@ const AdminEquipoPage: React.FC = () => {
           }
         }
 
+        const gruposPorCliente = new Map<string, Coordenada[]>();
+
+        coordsUsuario.forEach((c) => {
+          const nombreCliente = String(c.nombre || "").trim();
+
+          if (!nombreCliente) return;
+          if (!Boolean(c.gps_planificada)) return;
+
+          if (!gruposPorCliente.has(nombreCliente)) {
+            gruposPorCliente.set(nombreCliente, []);
+          }
+
+          gruposPorCliente.get(nombreCliente)!.push(c);
+        });
+
+        let pdvMenos5Min = 0;
+
+        gruposPorCliente.forEach((puntosCliente) => {
+          const ordenados = [...puntosCliente].sort((a, b) =>
+            a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
+          );
+
+          if (ordenados.length === 0) return;
+
+          const inicio = new Date(ordenados[0].created_at).getTime();
+          const fin = new Date(ordenados[ordenados.length - 1].created_at).getTime();
+
+          if (isNaN(inicio) || isNaN(fin) || fin < inicio) return;
+
+          const minutos = (fin - inicio) / 1000 / 60;
+
+          if (minutos < 5) {
+            pdvMenos5Min += 1;
+          }
+        });
+
         return {
           id: userId || username,
           username,
+          usernameMostrar: obtenerUsernameMostrar(u),
           nombre: obtenerNombreUsuario(u),
+          ffvv,
           role,
           pdvPlanificados,
           pdvVisitados,
+          pdvMenos5Min,
           horasTrabajadas,
           puntosGps,
           primeraMarca,
@@ -317,19 +333,36 @@ const AdminEquipoPage: React.FC = () => {
         }
         return a.nombre.localeCompare(b.nombre, "es");
       });
-  }, [usuarios, visitas, coordenadas, diaActualCodigo]);
+  }, [usuarios, visitas, coordenadas, diaActualCodigo, fechaHoy]);
+
+  const opcionesFfvv = useMemo(() => {
+    return Array.from(
+      new Set(
+        usuarios
+          .map((u) => String(u.ffvv || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, "es"));
+  }, [usuarios]);
 
   const filasFiltradas = useMemo(() => {
     const q = normalizar(busqueda);
-    if (!q) return filas;
 
-    return filas.filter(
-      (f) =>
+    return filas.filter((f) => {
+      const coincideBusqueda =
+        !q ||
         normalizar(f.nombre).includes(q) ||
         normalizar(f.username).includes(q) ||
-        normalizar(f.role).includes(q)
-    );
-  }, [filas, busqueda]);
+        normalizar(f.usernameMostrar).includes(q) ||
+        normalizar(f.role).includes(q) ||
+        normalizar(f.ffvv).includes(q);
+
+      const coincideFfvv =
+        !ffvvSeleccionado || String(f.ffvv || "").trim() === ffvvSeleccionado;
+
+      return coincideBusqueda && coincideFfvv;
+    });
+  }, [filas, busqueda, ffvvSeleccionado]);
 
   const resumen = useMemo(() => {
     return {
@@ -340,6 +373,10 @@ const AdminEquipoPage: React.FC = () => {
       ),
       pdvVisitados: filasFiltradas.reduce(
         (acc, f) => acc + f.pdvVisitados,
+        0
+      ),
+      pdvMenos5Min: filasFiltradas.reduce(
+        (acc, f) => acc + f.pdvMenos5Min,
         0
       ),
       horasTrabajadas: filasFiltradas.reduce(
@@ -380,9 +417,28 @@ const AdminEquipoPage: React.FC = () => {
                 <input
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Buscar por nombre, username o rol"
+                  placeholder="Buscar por nombre, username, FFVV o rol"
                   className="w-full sm:w-80 pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500"
                 />
+              </div>
+
+              <div className="relative">
+                <Filter
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                />
+                <select
+                  value={ffvvSeleccionado}
+                  onChange={(e) => setFfvvSeleccionado(e.target.value)}
+                  className="w-full sm:w-56 pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm outline-none focus:ring-2 focus:ring-red-500 text-gray-700 dark:text-gray-200"
+                >
+                  <option value="">Todos los FFVV</option>
+                  {opcionesFfvv.map((ffvv) => (
+                    <option key={ffvv} value={ffvv}>
+                      {ffvv}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <button
@@ -406,10 +462,16 @@ const AdminEquipoPage: React.FC = () => {
                 ? ultimaActualizacion.toLocaleTimeString("es-AR")
                 : "-"}
             </span>
+            {ffvvSeleccionado ? (
+              <>
+                {" · "}
+                FFVV: <span className="font-medium">{ffvvSeleccionado}</span>
+              </>
+            ) : null}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
@@ -455,6 +517,20 @@ const AdminEquipoPage: React.FC = () => {
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm text-gray-500">PDV &lt; 5 min</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {resumen.pdvMenos5Min}
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                <Activity size={22} />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm text-gray-500">Horas trabajadas</p>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
                   {formatearHoras(resumen.horasTrabajadas)}
@@ -492,6 +568,9 @@ const AdminEquipoPage: React.FC = () => {
                       Username
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
+                      FFVV
+                    </th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
                       Rol
                     </th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
@@ -499,6 +578,9 @@ const AdminEquipoPage: React.FC = () => {
                     </th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
                       PDV visitados
+                    </th>
+                    <th className="text-center px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
+                      PDV &lt; 5 min
                     </th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-700 dark:text-gray-200">
                       Horas trabajadas
@@ -533,14 +615,25 @@ const AdminEquipoPage: React.FC = () => {
                         className="border-t border-gray-100 dark:border-gray-800 hover:bg-red-50/40 dark:hover:bg-gray-800/40 transition"
                       >
                         <td className="px-4 py-4">
-                          <p className="font-semibold text-gray-900 dark:text-white">
-                            {fila.nombre}
-                          </p>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-white">
+                              {fila.nombre}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              @{fila.username}
+                            </p>
+                          </div>
                         </td>
 
                         <td className="px-4 py-4">
                           <p className="font-medium text-gray-700 dark:text-gray-300">
-                            {fila.username}
+                            {fila.usernameMostrar}
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            {fila.ffvv || "-"}
                           </p>
                         </td>
 
@@ -575,6 +668,10 @@ const AdminEquipoPage: React.FC = () => {
                               {progreso}%
                             </span>
                           </div>
+                        </td>
+
+                        <td className="px-4 py-4 text-center font-semibold text-gray-900 dark:text-white">
+                          {fila.pdvMenos5Min}
                         </td>
 
                         <td className="px-4 py-4 text-center font-semibold text-gray-900 dark:text-white">
