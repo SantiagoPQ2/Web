@@ -215,13 +215,6 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="border-b border-gray-200 px-4 py-3">
-        <h2 className="text-base font-semibold text-gray-800">Chats</h2>
-        <p className="text-xs text-gray-500 mt-1">
-          Conversaciones internas en tiempo real
-        </p>
-      </div>
-
       <div className="px-3 py-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2">
           <Search size={16} className="text-gray-400 shrink-0" />
