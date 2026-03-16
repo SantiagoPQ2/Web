@@ -44,6 +44,19 @@ type BellItem = {
   rawId?: number;
 };
 
+const CHAT_USER_META_REGEX = /\[\[CHAT_USER:([^\]]+)\]\]\s*$/i;
+
+const extractChatUserFromMessage = (mensaje?: string) => {
+  if (!mensaje) return null;
+  const match = mensaje.match(CHAT_USER_META_REGEX);
+  return match?.[1]?.trim() || null;
+};
+
+const cleanNotificationMessage = (mensaje?: string) => {
+  if (!mensaje) return "";
+  return mensaje.replace(CHAT_USER_META_REGEX, "").trim();
+};
+
 const Navigation: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -102,7 +115,7 @@ const Navigation: React.FC = () => {
 
   const esNotificacionGenericaDeChat = (titulo?: string, mensaje?: string) => {
     const t = (titulo || "").trim().toLowerCase();
-    const m = (mensaje || "").trim().toLowerCase();
+    const m = cleanNotificationMessage(mensaje || "").trim().toLowerCase();
 
     return (
       t === "nuevo mensaje" ||
@@ -229,10 +242,11 @@ const Navigation: React.FC = () => {
             const bellItem: BellItem = {
               id: `sys_${nueva.id}`,
               titulo: nueva.titulo,
-              mensaje: nueva.mensaje,
+              mensaje: cleanNotificationMessage(nueva.mensaje),
               created_at: nueva.created_at,
               leida: nueva.leida,
               tipo: "sistema",
+              chatUser: extractChatUserFromMessage(nueva.mensaje) || undefined,
             };
 
             dispararAnimacionCampana();
@@ -335,10 +349,11 @@ const Navigation: React.FC = () => {
       .map((n) => ({
         id: `sys_${n.id}`,
         titulo: n.titulo,
-        mensaje: n.mensaje,
+        mensaje: cleanNotificationMessage(n.mensaje),
         created_at: n.created_at,
         leida: n.leida,
         tipo: "sistema" as const,
+        chatUser: extractChatUserFromMessage(n.mensaje) || undefined,
       }));
 
     const merged = [...chatNotifications, ...fromSystem];
@@ -355,6 +370,11 @@ const Navigation: React.FC = () => {
   const handleNotificationClick = async (item: BellItem) => {
     setToastVisible(false);
     setNotisAbiertas(false);
+
+    if (item.chatUser) {
+      navigate(`/chat?user=${encodeURIComponent(item.chatUser)}`);
+      return;
+    }
 
     if (item.tipo === "chat" && item.chatUser) {
       navigate(`/chat?user=${encodeURIComponent(item.chatUser)}`);
@@ -936,7 +956,7 @@ const Navigation: React.FC = () => {
                               n.leida
                                 ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
                                 : "bg-red-50 border-red-200"
-                            } ${n.tipo === "chat" ? "hover:bg-red-100" : ""}`}
+                            } ${n.chatUser ? "hover:bg-red-100" : ""}`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
