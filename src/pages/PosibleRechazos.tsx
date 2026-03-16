@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { AlertCircle, CheckCircle, Save, Hash, DollarSign } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Save,
+  Hash,
+  DollarSign,
+} from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -95,7 +101,9 @@ const PosibleRechazos: React.FC = () => {
 
       const fullName =
         row?.full_name?.trim() ||
-        [row?.nombre?.trim(), row?.apellido?.trim()].filter(Boolean).join(" ") ||
+        [row?.nombre?.trim(), row?.apellido?.trim()]
+          .filter(Boolean)
+          .join(" ") ||
         row?.name?.trim();
 
       if (fullName) return fullName;
@@ -107,10 +115,7 @@ const PosibleRechazos: React.FC = () => {
     }
   };
 
-  const crearNotificacionesYMensajes = async (
-    numeroCliente: string,
-    monto: number
-  ) => {
+  const crearMensajesChat = async (numeroCliente: string, monto: number) => {
     try {
       const clienteBuscado = numeroCliente.trim();
 
@@ -164,23 +169,6 @@ const PosibleRechazos: React.FC = () => {
 
       const mensajeVisible = `El ${remitenteVisible} informa que el cliente ${clienteBuscado} tiene un posible rechazo de $${textoMonto}`;
 
-      const mensajeConMeta = `${mensajeVisible} [[CHAT_USER:${remitenteUsername}]]`;
-
-      const notificacionesPayload = destinatarios.map((usuarioUsername) => ({
-        usuario_username: usuarioUsername,
-        titulo: "Posible rechazo cargado",
-        mensaje: mensajeConMeta,
-        leida: false,
-      }));
-
-      const { error: notiError } = await supabase
-        .from("notificaciones")
-        .insert(notificacionesPayload);
-
-      if (notiError) {
-        console.error("Error insertando notificaciones:", notiError);
-      }
-
       const mensajesPayload = destinatarios.map((destinatario) => ({
         remitente_username: remitenteUsername,
         destinatario_username: destinatario,
@@ -196,7 +184,7 @@ const PosibleRechazos: React.FC = () => {
         console.error("Error insertando mensajes de chat:", chatError);
       }
     } catch (error) {
-      console.error("Error creando notificaciones y mensajes:", error);
+      console.error("Error creando mensajes de chat:", error);
     }
   };
 
@@ -228,7 +216,7 @@ const PosibleRechazos: React.FC = () => {
         throw error;
       }
 
-      await crearNotificacionesYMensajes(numeroCliente, monto);
+      await crearMensajesChat(numeroCliente, monto);
 
       setMessage({
         type: "success",
@@ -259,7 +247,9 @@ const PosibleRechazos: React.FC = () => {
             <Save className="h-6 w-6 text-red-700" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Posible Rechazos</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Posible Rechazos
+            </h1>
             <p className="text-gray-600">
               Cargar número de cliente y monto aproximado
             </p>
