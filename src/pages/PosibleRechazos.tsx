@@ -13,6 +13,13 @@ interface FormErrors {
   monto_aproximado?: string;
 }
 
+type F96Row = {
+  cliente: string | number;
+  id: string | null;
+  ffvv?: string | null;
+  supervisor?: string | null;
+};
+
 const PosibleRechazos: React.FC = () => {
   const { user } = useAuth();
 
@@ -60,6 +67,72 @@ const PosibleRechazos: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const crearNotificaciones = async (
+    numeroCliente: string,
+    monto: number
+  ) => {
+    try {
+      const clienteBuscado = numeroCliente.trim();
+
+      const { data: f96Data, error: f96Error } = await supabase
+        .from("f96")
+        .select("cliente, id, ffvv, supervisor")
+        .eq("cliente", clienteBuscado)
+        .limit(1)
+        .maybeSingle();
+
+      if (f96Error) {
+        console.error("Error leyendo tabla f96:", f96Error);
+        return;
+      }
+
+      const fila = f96Data as F96Row | null;
+
+      if (!fila) {
+        console.warn(
+          `No se encontró el cliente ${clienteBuscado} en la tabla f96`
+        );
+        return;
+      }
+
+      const vendedorId = fila.id?.toString().trim() || "";
+      const supervisor = fila.supervisor?.toString().trim() || "";
+
+      const destinatarios = Array.from(
+        new Set([vendedorId, supervisor].filter(Boolean))
+      );
+
+      if (destinatarios.length === 0) {
+        console.warn(
+          `El cliente ${clienteBuscado} existe en f96 pero no tiene id/supervisor válidos`
+        );
+        return;
+      }
+
+      const textoMonto = monto.toLocaleString("es-AR", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+
+      const notificacionesPayload = destinatarios.map((usuarioUsername) => ({
+        usuario_username: usuarioUsername,
+        titulo: "Posible rechazo cargado",
+        mensaje: `Cliente ${clienteBuscado} - monto aproximado $${textoMonto}`,
+        leida: false,
+      }));
+
+      const { error: notiError } = await supabase
+        .from("notificaciones")
+        .insert(notificacionesPayload);
+
+      if (notiError) {
+        console.error("Error insertando notificaciones:", notiError);
+      }
+    } catch (error) {
+      console.error("Error creando notificaciones:", error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -69,19 +142,26 @@ const PosibleRechazos: React.FC = () => {
     setMessage(null);
 
     try {
+      const numeroCliente = formData.numero_cliente.trim();
+      const monto = Number(formData.monto_aproximado);
+
       const payload = {
-        numero_cliente: formData.numero_cliente.trim(),
-        monto_aproximado: Number(formData.monto_aproximado),
+        numero_cliente: numeroCliente,
+        monto_aproximado: monto,
         creado_por_id: user?.id || null,
         creado_por_username: user?.username || null,
         creado_por_role: user?.role || null,
       };
 
-      const { error } = await supabase.from("posibles_rechazos").insert([payload]);
+      const { error } = await supabase
+        .from("posibles_rechazos")
+        .insert([payload]);
 
       if (error) {
         throw error;
       }
+
+      await crearNotificaciones(numeroCliente, monto);
 
       setMessage({
         type: "success",
@@ -159,7 +239,9 @@ const PosibleRechazos: React.FC = () => {
               placeholder="Ej: 12345"
               disabled={loading}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.numero_cliente ? "border-red-300 bg-red-50" : "border-gray-300"
+                errors.numero_cliente
+                  ? "border-red-300 bg-red-50"
+                  : "border-gray-300"
               }`}
             />
             {errors.numero_cliente && (
@@ -184,11 +266,15 @@ const PosibleRechazos: React.FC = () => {
               min="0"
               step="0.01"
               value={formData.monto_aproximado}
-              onChange={(e) => handleChange("monto_aproximado", e.target.value)}
+              onChange={(e) =>
+                handleChange("monto_aproximado", e.target.value)
+              }
               placeholder="Ej: 150000"
               disabled={loading}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
-                errors.monto_aproximado ? "border-red-300 bg-red-50" : "border-gray-300"
+                errors.monto_aproximado
+                  ? "border-red-300 bg-red-50"
+                  : "border-gray-300"
               }`}
             />
             {errors.monto_aproximado && (
