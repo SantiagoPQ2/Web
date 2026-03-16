@@ -20,6 +20,15 @@ type F96Row = {
   supervisor?: string | null;
 };
 
+type UsuarioAppRow = {
+  id?: string;
+  username?: string | null;
+  nombre?: string | null;
+  apellido?: string | null;
+  full_name?: string | null;
+  name?: string | null;
+};
+
 const PosibleRechazos: React.FC = () => {
   const { user } = useAuth();
 
@@ -67,7 +76,38 @@ const PosibleRechazos: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const crearNotificaciones = async (
+  const obtenerNombreVisibleRemitente = async () => {
+    const username = user?.username?.trim();
+    if (!username) return "Alguien";
+
+    try {
+      const { data, error } = await supabase
+        .from("usuarios_app")
+        .select("username, nombre, apellido, full_name, name")
+        .eq("username", username)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error leyendo usuarios_app:", error);
+      }
+
+      const row = data as UsuarioAppRow | null;
+
+      const fullName =
+        row?.full_name?.trim() ||
+        [row?.nombre?.trim(), row?.apellido?.trim()].filter(Boolean).join(" ") ||
+        row?.name?.trim();
+
+      if (fullName) return fullName;
+
+      return username;
+    } catch (error) {
+      console.error("Error obteniendo nombre visible del remitente:", error);
+      return username;
+    }
+  };
+
+  const crearNotificacionesYMensajes = async (
     numeroCliente: string,
     monto: number
   ) => {
@@ -109,15 +149,27 @@ const PosibleRechazos: React.FC = () => {
         return;
       }
 
+      const remitenteUsername = user?.username?.trim() || "";
+      const remitenteVisible = await obtenerNombreVisibleRemitente();
+
+      if (!remitenteUsername) {
+        console.warn("No hay username del usuario que carga el posible rechazo");
+        return;
+      }
+
       const textoMonto = monto.toLocaleString("es-AR", {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
       });
 
+      const mensajeVisible = `El ${remitenteVisible} informa que el cliente ${clienteBuscado} tiene un posible rechazo de $${textoMonto}`;
+
+      const mensajeConMeta = `${mensajeVisible} [[CHAT_USER:${remitenteUsername}]]`;
+
       const notificacionesPayload = destinatarios.map((usuarioUsername) => ({
         usuario_username: usuarioUsername,
         titulo: "Posible rechazo cargado",
-        mensaje: `Cliente ${clienteBuscado} - monto aproximado $${textoMonto}`,
+        mensaje: mensajeConMeta,
         leida: false,
       }));
 
@@ -128,8 +180,23 @@ const PosibleRechazos: React.FC = () => {
       if (notiError) {
         console.error("Error insertando notificaciones:", notiError);
       }
+
+      const mensajesPayload = destinatarios.map((destinatario) => ({
+        remitente_username: remitenteUsername,
+        destinatario_username: destinatario,
+        contenido: mensajeVisible,
+        leido: false,
+      }));
+
+      const { error: chatError } = await supabase
+        .from("mensajes")
+        .insert(mensajesPayload);
+
+      if (chatError) {
+        console.error("Error insertando mensajes de chat:", chatError);
+      }
     } catch (error) {
-      console.error("Error creando notificaciones:", error);
+      console.error("Error creando notificaciones y mensajes:", error);
     }
   };
 
@@ -161,7 +228,7 @@ const PosibleRechazos: React.FC = () => {
         throw error;
       }
 
-      await crearNotificaciones(numeroCliente, monto);
+      await crearNotificacionesYMensajes(numeroCliente, monto);
 
       setMessage({
         type: "success",
