@@ -14,9 +14,9 @@ type Row = {
   porcentaje_bonificacion: number;
   monto_adicional: number;
   motivo: string;
-  fecha_entrega: string; // ✅ NUEVO (date en DB)
+  fecha_entrega: string;
   estado: Estado;
-  created_by?: string; // uuid (usuarios_app.id)
+  created_by?: string;
   aprobado_by?: string | null;
   aprobado_at?: string | null;
 };
@@ -33,6 +33,7 @@ const EXPORT_BATCH_SIZE = 1000;
 function toIsoStart(desde: string) {
   return new Date(desde + "T00:00:00").toISOString();
 }
+
 function toIsoEnd(hasta: string) {
   return new Date(hasta + "T23:59:59").toISOString();
 }
@@ -47,7 +48,6 @@ function formatDateTime(d: string) {
 
 function formatDateOnly(d: string) {
   try {
-    // d viene como "YYYY-MM-DD" (date)
     const dt = new Date(d + "T00:00:00");
     return dt.toLocaleDateString();
   } catch {
@@ -70,6 +70,7 @@ const RevisarBonificaciones: React.FC = () => {
 
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actionId, setActionId] = useState<number | null>(null);
 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -160,7 +161,7 @@ const RevisarBonificaciones: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, page]);
 
-  const aprobar = async (id: number) => {
+  const cambiarEstado = async (row: Row) => {
     if (!canApprove) return;
 
     if (!user?.id) {
@@ -168,25 +169,54 @@ const RevisarBonificaciones: React.FC = () => {
       return;
     }
 
-    setLoading(true);
+    const nuevoEstado: Estado =
+      row.estado === "aprobada" ? "pendiente" : "aprobada";
+
+    setActionId(row.id);
+
     try {
+      const payload =
+        nuevoEstado === "aprobada"
+          ? {
+              estado: "aprobada" as Estado,
+              aprobado_by: user.id,
+              aprobado_at: new Date().toISOString(),
+            }
+          : {
+              estado: "pendiente" as Estado,
+              aprobado_by: null,
+              aprobado_at: null,
+            };
+
       const { error } = await supabase
         .from("bonificaciones")
-        .update({
-          estado: "aprobada",
-          aprobado_by: user.id,
-          aprobado_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .eq("estado", "pendiente");
+        .update(payload)
+        .eq("id", row.id);
 
       if (error) throw error;
 
-      await fetchData();
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === row.id
+            ? {
+                ...r,
+                estado: nuevoEstado,
+                aprobado_by:
+                  nuevoEstado === "aprobada" ? user.id : null,
+                aprobado_at:
+                  nuevoEstado === "aprobada"
+                    ? new Date().toISOString()
+                    : null,
+              }
+            : r
+        )
+      );
+
+      await ensureUsersLoaded([user.id]);
     } catch (e: any) {
-      alert(e?.message ?? "Error al aprobar");
+      alert(e?.message ?? "Error al cambiar estado");
     } finally {
-      setLoading(false);
+      setActionId(null);
     }
   };
 
@@ -373,15 +403,21 @@ const RevisarBonificaciones: React.FC = () => {
                   <td className="p-3">
                     {canApprove ? (
                       <button
-                        disabled={loading || r.estado !== "pendiente"}
-                        onClick={() => aprobar(r.id)}
+                        disabled={loading || actionId === r.id || r.estado === "rechazada"}
+                        onClick={() => cambiarEstado(r)}
                         className={`px-3 py-1 rounded text-white ${
-                          r.estado !== "pendiente"
-                            ? "bg-gray-400"
+                          r.estado === "rechazada"
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : r.estado === "aprobada"
+                            ? "bg-yellow-600 hover:bg-yellow-700"
                             : "bg-green-600 hover:bg-green-700"
-                        }`}
+                        } ${actionId === r.id ? "opacity-60 cursor-not-allowed" : ""}`}
                       >
-                        Aprobar
+                        {actionId === r.id
+                          ? "Guardando..."
+                          : r.estado === "aprobada"
+                          ? "Volver a pendiente"
+                          : "Aprobar"}
                       </button>
                     ) : (
                       <span className="text-gray-500">-</span>
