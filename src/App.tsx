@@ -50,12 +50,19 @@ import ChatBot from "./components/ChatBot";
 
 import DailyTrainingGate from "./components/DailyTrainingGate";
 import { registerPushForUser } from "./utils/pushNotifications";
+import { supabase } from "./config/supabase";
 
-const INTRO_VIDEO_URL =
-  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%206.mp4";
+const DEFAULT_VIDEO_URL =
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%208.mp4";
 
-const INTRO_VIDEO_ID = "capsula_1_v1";
-const QUIZ_XLSX_PATH = "/Quiz.xlsx";
+const EUSCKOR_VIDEO_URL =
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%204.mp4";
+
+const DEFAULT_VIDEO_ID = "capsula_1_v1";
+const EUSCKOR_VIDEO_ID = "capsula_eusckor_1_v1";
+
+const DEFAULT_QUIZ_XLSX_PATH = "/Quiz.xlsx";
+const EUSCKOR_QUIZ_XLSX_PATH = "/Quiz2.xlsx";
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -64,6 +71,9 @@ function ProtectedApp() {
 
   const [openChat, setOpenChat] = useState(false);
 
+  const [ffvv, setFfvv] = useState<string | null>(null);
+  const [loadingTrainingConfig, setLoadingTrainingConfig] = useState(true);
+
   useEffect(() => {
     if (!user?.username) return;
 
@@ -71,6 +81,63 @@ function ProtectedApp() {
       console.error("No se pudo registrar push:", err);
     });
   }, [user?.username]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTrainingConfig() {
+      if (!user) {
+        if (isMounted) {
+          setFfvv(null);
+          setLoadingTrainingConfig(false);
+        }
+        return;
+      }
+
+      if (user.role !== "vendedor") {
+        if (isMounted) {
+          setFfvv(null);
+          setLoadingTrainingConfig(false);
+        }
+        return;
+      }
+
+      try {
+        setLoadingTrainingConfig(true);
+
+        const { data, error } = await supabase
+          .from("usuarios_app")
+          .select("FFVV, ffvv")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error cargando FFVV del usuario:", error);
+          if (isMounted) setFfvv(null);
+          return;
+        }
+
+        const ffvvValue = data?.FFVV ?? data?.ffvv ?? null;
+
+        if (isMounted) {
+          setFfvv(ffvvValue);
+        }
+      } catch (err) {
+        console.error("Error inesperado cargando FFVV:", err);
+        if (isMounted) setFfvv(null);
+      } finally {
+        if (isMounted) {
+          setLoadingTrainingConfig(false);
+        }
+      }
+    }
+
+    loadTrainingConfig();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   if (!user) return <Login />;
 
@@ -224,13 +291,46 @@ function ProtectedApp() {
     </div>
   );
 
-  if (role === "test" || role === "vendedor") {
+  if (role === "vendedor" && loadingTrainingConfig) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
+        Cargando capacitación...
+      </div>
+    );
+  }
+
+  if (role === "test") {
     return (
       <DailyTrainingGate
-        rolesToEnforce={["test", "vendedor"]}
-        videoId={INTRO_VIDEO_ID}
-        videoSrc={INTRO_VIDEO_URL}
-        quizXlsxPath={QUIZ_XLSX_PATH}
+        rolesToEnforce={["test"]}
+        videoId={DEFAULT_VIDEO_ID}
+        videoSrc={DEFAULT_VIDEO_URL}
+        quizXlsxPath={DEFAULT_QUIZ_XLSX_PATH}
+        passingScorePct={90}
+      >
+        {appLayout}
+      </DailyTrainingGate>
+    );
+  }
+
+  if (role === "vendedor") {
+    const isEusckor =
+      String(ffvv ?? "")
+        .trim()
+        .toLowerCase() === "eusckor";
+
+    const vendorVideoId = isEusckor ? EUSCKOR_VIDEO_ID : DEFAULT_VIDEO_ID;
+    const vendorVideoSrc = isEusckor ? EUSCKOR_VIDEO_URL : DEFAULT_VIDEO_URL;
+    const vendorQuizPath = isEusckor
+      ? EUSCKOR_QUIZ_XLSX_PATH
+      : DEFAULT_QUIZ_XLSX_PATH;
+
+    return (
+      <DailyTrainingGate
+        rolesToEnforce={["vendedor"]}
+        videoId={vendorVideoId}
+        videoSrc={vendorVideoSrc}
+        quizXlsxPath={vendorQuizPath}
         passingScorePct={90}
       >
         {appLayout}
