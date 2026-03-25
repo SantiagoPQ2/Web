@@ -53,8 +53,8 @@ type Coordenada = {
 
 type FilaEquipo = {
   id: string;
-  username: string; // id / username real
-  nombreMostrar: string; // name de usuarios_app
+  username: string;
+  nombreMostrar: string;
   ffvv: string;
   role: "supervisor" | "vendedor";
   pdvPlanificados: number;
@@ -92,7 +92,12 @@ const AdminEquipoPage: React.FC = () => {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  const normalizar = (valor: any) => String(valor ?? "").trim().toLowerCase();
+  const normalizar = (valor: any) =>
+    String(valor ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
   const formatearFechaHora = (valor?: string | null) => {
     if (!valor) return "-";
@@ -353,7 +358,7 @@ const AdminEquipoPage: React.FC = () => {
         }
         return a.username.localeCompare(b.username, "es");
       });
-  }, [usuarios, visitas, coordenadas, diaActualCodigo, fechaHoy]);
+  }, [usuarios, visitas, coordenadas, diaActualCodigo]);
 
   const opcionesFfvv = useMemo(() => {
     return Array.from(
