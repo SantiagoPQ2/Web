@@ -53,10 +53,10 @@ import { registerPushForUser } from "./utils/pushNotifications";
 import { supabase } from "./config/supabase";
 
 const DEFAULT_VIDEO_URL =
-  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%208.mp4";
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20de%20Mark%20UP.mp4";
 
 const EUSCKOR_VIDEO_URL =
-  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%204.mp4";
+  "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%20de%20Mark%20UP.mp4";
 
 const DEFAULT_VIDEO_ID = "capsula_1_v1";
 const EUSCKOR_VIDEO_ID = "capsula_eusckor_1_v1";
