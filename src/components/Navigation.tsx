@@ -99,7 +99,6 @@ const Navigation: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notiRef = useRef<HTMLDivElement>(null);
   const bellTimeoutRef = useRef<number | null>(null);
-  const toastTimeoutRef = useRef<number | null>(null);
   const snapshotTimeoutsRef = useRef<Record<string, number>>({});
 
   const SNAPSHOT_ALERT_DELAY_MS = 5 * 60 * 1000;
@@ -125,7 +124,6 @@ const Navigation: React.FC = () => {
   useEffect(() => {
     return () => {
       if (bellTimeoutRef.current) window.clearTimeout(bellTimeoutRef.current);
-      if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
 
       Object.values(snapshotTimeoutsRef.current).forEach((timeoutId) => {
         window.clearTimeout(timeoutId);
@@ -180,14 +178,11 @@ const Navigation: React.FC = () => {
   const mostrarToast = (notif: BellItem) => {
     setToastNotif(notif);
     setToastVisible(true);
+  };
 
-    if (toastTimeoutRef.current) {
-      window.clearTimeout(toastTimeoutRef.current);
-    }
-
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToastVisible(false);
-    }, 6000);
+  const cerrarToast = () => {
+    setToastVisible(false);
+    setToastNotif(null);
   };
 
   const getSnapshotSeenKey = (username: string, snapshotId: number) =>
@@ -198,7 +193,9 @@ const Navigation: React.FC = () => {
 
   const yaFueMostradoSnapshot = (username: string, snapshotId: number) => {
     try {
-      return localStorage.getItem(getSnapshotSeenKey(username, snapshotId)) === "1";
+      return (
+        localStorage.getItem(getSnapshotSeenKey(username, snapshotId)) === "1"
+      );
     } catch {
       return false;
     }
@@ -240,9 +237,26 @@ const Navigation: React.FC = () => {
     mostrarToast(bellItem);
   };
 
-  const evaluarSnapshotParaPopup = (snap: AdminEquipoSnapshot) => {
-    if (!user?.username || !user?.role) return;
+  const obtenerUltimoSnapshotReal = async (username: string) => {
+    const { data, error } = await supabase
+      .from("admin_equipo_snapshots")
+      .select("*")
+      .eq("username", username)
+      .eq("role", "vendedor")
+      .order("snapshot_taken_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
+    if (error) {
+      console.error("Error validando último snapshot real:", error);
+      return null;
+    }
+
+    return (data as AdminEquipoSnapshot | null) ?? null;
+  };
+
+  const evaluarSnapshotParaPopup = async (snap: AdminEquipoSnapshot) => {
+    if (!user?.username || !user?.role) return;
     if (user.role !== "vendedor") return;
 
     // PRUEBA INICIAL SOLO PARA 7700
@@ -250,6 +264,10 @@ const Navigation: React.FC = () => {
 
     if ((snap.role || "").toLowerCase() !== "vendedor") return;
     if (snap.username !== user.username) return;
+
+    const ultimoReal = await obtenerUltimoSnapshotReal(user.username);
+    if (!ultimoReal) return;
+    if (ultimoReal.id !== snap.id) return;
 
     const fechaBase = snap.snapshot_taken_at || snap.created_at;
     if (!fechaBase) return;
@@ -275,7 +293,10 @@ const Navigation: React.FC = () => {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(async () => {
+      const ultimoAntesDeMostrar = await obtenerUltimoSnapshotReal(user.username!);
+      if (!ultimoAntesDeMostrar) return;
+      if (ultimoAntesDeMostrar.id !== snap.id) return;
       if (yaFueMostradoSnapshot(user.username!, snap.id)) return;
 
       marcarSnapshotComoMostrado(user.username!, snap.id);
@@ -295,23 +316,10 @@ const Navigation: React.FC = () => {
     // PRUEBA INICIAL SOLO PARA 7700
     if (user.username !== "7700") return;
 
-    const { data, error } = await supabase
-      .from("admin_equipo_snapshots")
-      .select("*")
-      .eq("username", user.username)
-      .eq("role", "vendedor")
-      .order("snapshot_taken_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const ultimo = await obtenerUltimoSnapshotReal(user.username);
+    if (!ultimo) return;
 
-    if (error) {
-      console.error("Error cargando último snapshot del vendedor:", error);
-      return;
-    }
-
-    if (!data) return;
-
-    evaluarSnapshotParaPopup(data as AdminEquipoSnapshot);
+    await evaluarSnapshotParaPopup(ultimo);
   };
 
   const cargarNotificacionesSistema = async () => {
@@ -356,7 +364,7 @@ const Navigation: React.FC = () => {
         ? "Te envió un audio"
         : m.imagen_url
         ? "Te envió una foto"
-        : (m.contenido?.trim() || "Te envió un mensaje"),
+        : m.contenido?.trim() || "Te envió un mensaje",
       created_at: m.created_at,
       leida: !!m.leido,
       tipo: "chat",
@@ -453,7 +461,7 @@ const Navigation: React.FC = () => {
               ? "Te envió un audio"
               : m.imagen_url
               ? "Te envió una foto"
-              : (m.contenido?.trim() || "Te envió un mensaje"),
+              : m.contenido?.trim() || "Te envió un mensaje",
             created_at: m.created_at,
             leida: !!m.leido,
             tipo: "chat",
@@ -527,13 +535,13 @@ const Navigation: React.FC = () => {
           schema: "public",
           table: "admin_equipo_snapshots",
         },
-        (payload) => {
+        async (payload) => {
           const nuevo = payload.new as AdminEquipoSnapshot;
           if (!nuevo) return;
           if (nuevo.username !== user.username) return;
           if ((nuevo.role || "").toLowerCase() !== "vendedor") return;
 
-          evaluarSnapshotParaPopup(nuevo);
+          await evaluarSnapshotParaPopup(nuevo);
         }
       )
       .on(
@@ -543,13 +551,13 @@ const Navigation: React.FC = () => {
           schema: "public",
           table: "admin_equipo_snapshots",
         },
-        (payload) => {
+        async (payload) => {
           const actualizado = payload.new as AdminEquipoSnapshot;
           if (!actualizado) return;
           if (actualizado.username !== user.username) return;
           if ((actualizado.role || "").toLowerCase() !== "vendedor") return;
 
-          evaluarSnapshotParaPopup(actualizado);
+          await evaluarSnapshotParaPopup(actualizado);
         }
       )
       .subscribe();
@@ -591,6 +599,8 @@ const Navigation: React.FC = () => {
   const sinLeer = bellItems.filter((n) => !n.leida).length;
 
   const handleNotificationClick = async (item: BellItem) => {
+    if (item.id.startsWith("snapshot_")) return;
+
     setToastVisible(false);
     setNotisAbiertas(false);
 
@@ -1091,13 +1101,7 @@ const Navigation: React.FC = () => {
 
           <div className="flex items-center gap-4 relative">
             {toastVisible && toastNotif && (
-              <button
-                type="button"
-                onClick={() => handleNotificationClick(toastNotif)}
-                className={`absolute right-14 top-14 z-[70] w-[22rem] max-w-[92vw] text-left transition-all ${
-                  esToastSnapshot ? "animate-bounce" : "notification-toast"
-                }`}
-              >
+              <div className="fixed top-[72px] left-1/2 -translate-x-1/2 z-[80] w-[92vw] max-w-[420px] sm:left-auto sm:right-4 sm:translate-x-0">
                 <div
                   className={
                     esToastSnapshot
@@ -1112,19 +1116,34 @@ const Navigation: React.FC = () => {
                         : "bg-red-50 px-4 py-2 border-b border-red-100"
                     }
                   >
-                    <p
-                      className={
-                        esToastSnapshot
-                          ? "text-sm font-extrabold text-white tracking-wide"
-                          : "text-sm font-semibold text-red-700"
-                      }
-                    >
-                      {esToastSnapshot
-                        ? "ALERTA DE GESTIÓN"
-                        : toastNotif.tipo === "chat"
-                        ? "Nuevo mensaje"
-                        : "Nueva notificación"}
-                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <p
+                        className={
+                          esToastSnapshot
+                            ? "text-sm font-extrabold text-white tracking-wide"
+                            : "text-sm font-semibold text-red-700"
+                        }
+                      >
+                        {esToastSnapshot
+                          ? "ALERTA DE GESTIÓN"
+                          : toastNotif.tipo === "chat"
+                          ? "Nuevo mensaje"
+                          : "Nueva notificación"}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={cerrarToast}
+                        className={
+                          esToastSnapshot
+                            ? "shrink-0 rounded-md p-1 text-white/90 hover:bg-white/20"
+                            : "shrink-0 rounded-md p-1 text-red-700 hover:bg-red-100"
+                        }
+                        aria-label="Cerrar notificación"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className={esToastSnapshot ? "p-5" : "p-4"}>
@@ -1137,6 +1156,7 @@ const Navigation: React.FC = () => {
                     >
                       {toastNotif.titulo}
                     </p>
+
                     <p
                       className={
                         esToastSnapshot
@@ -1146,12 +1166,13 @@ const Navigation: React.FC = () => {
                     >
                       {toastNotif.mensaje}
                     </p>
+
                     <p className="text-xs text-gray-500 mt-3">
                       {formatearFecha(toastNotif.created_at)}
                     </p>
                   </div>
                 </div>
-              </button>
+              </div>
             )}
 
             <div className="relative" ref={notiRef}>
