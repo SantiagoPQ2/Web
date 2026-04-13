@@ -1,4 +1,3 @@
-// src/pages/Bonificaciones.tsx
 import React, { useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -64,9 +63,9 @@ function addDays(dateKey: string, days: number) {
 }
 
 const Bonificaciones: React.FC = () => {
-  const { user } = useAuth(); // user viene de tu tabla usuarios_app
+  const { user } = useAuth();
 
-  const minFechaEntrega = addDays(getTodayKey(), 1); // posterior a hoy
+  const minFechaEntrega = addDays(getTodayKey(), 1);
 
   const [formData, setFormData] = useState<FormData>({
     cliente: "",
@@ -90,7 +89,15 @@ const Bonificaciones: React.FC = () => {
   const validate = (): boolean => {
     const e: FormErrors = {};
 
-    if (!formData.cliente.trim()) e.cliente = "Cliente es obligatorio";
+    if (!formData.cliente.trim()) {
+      e.cliente = "Cliente es obligatorio";
+    } else {
+      const n = Number(formData.cliente);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) {
+        e.cliente = "Cliente debe ser un número entero mayor a 0";
+      }
+    }
+
     if (!formData.articulo.trim()) e.articulo = "Artículo es obligatorio";
 
     if (!formData.bultos.trim()) e.bultos = "Bultos es obligatorio";
@@ -128,7 +135,9 @@ const Bonificaciones: React.FC = () => {
 
   const setField = (k: keyof FormData, v: string) => {
     setFormData((p) => ({ ...p, [k]: v }));
-    if (errors[k as keyof FormErrors]) setErrors((p) => ({ ...p, [k]: undefined }));
+    if (errors[k as keyof FormErrors]) {
+      setErrors((p) => ({ ...p, [k]: undefined }));
+    }
     if (message) setMessage(null);
   };
 
@@ -137,7 +146,6 @@ const Bonificaciones: React.FC = () => {
     if (!canUsePage) return;
     if (!validate()) return;
 
-    // created_by debe venir de usuarios_app.id (uuid)
     if (!user?.id) {
       setMessage({
         type: "error",
@@ -151,15 +159,14 @@ const Bonificaciones: React.FC = () => {
 
     try {
       const payload = {
-        cliente: formData.cliente.trim(),
+        cliente: Number(formData.cliente),
         articulo: formData.articulo.trim(),
         bultos: Number(formData.bultos),
         porcentaje_bonificacion: Number(formData.porcentajeBonificacion),
         monto_adicional: Number(formData.montoAdicional),
         motivo: formData.motivo,
-        fecha_entrega: formData.fechaEntrega, // ✅ NUEVO
+        fecha_entrega: formData.fechaEntrega,
         created_by: user.id,
-        // estado: 'pendiente' (default en DB)
       };
 
       const { error } = await supabase.from("bonificaciones").insert(payload);
@@ -230,24 +237,25 @@ const Bonificaciones: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Cliente */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <User className="h-4 w-4 mr-1" /> Cliente <span className="text-red-500 ml-1">*</span>
             </label>
             <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={formData.cliente}
-              onChange={(e) => setField("cliente", e.target.value)}
+              onChange={(e) => setField("cliente", e.target.value.replace(/\D/g, ""))}
               disabled={loading}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 ${
                 errors.cliente ? "border-red-300 bg-red-50" : "border-gray-300"
               }`}
-              placeholder="Ingrese el nombre del cliente"
+              placeholder="Ingrese el número de cliente"
             />
             {errors.cliente && <p className="mt-1 text-sm text-red-600">{errors.cliente}</p>}
           </div>
 
-          {/* Artículo */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <Package className="h-4 w-4 mr-1" /> Artículo <span className="text-red-500 ml-1">*</span>
@@ -264,7 +272,6 @@ const Bonificaciones: React.FC = () => {
             {errors.articulo && <p className="mt-1 text-sm text-red-600">{errors.articulo}</p>}
           </div>
 
-          {/* Bultos */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <Package className="h-4 w-4 mr-1" /> Bultos <span className="text-red-500 ml-1">*</span>
@@ -284,7 +291,6 @@ const Bonificaciones: React.FC = () => {
             {errors.bultos && <p className="mt-1 text-sm text-red-600">{errors.bultos}</p>}
           </div>
 
-          {/* % Bonificación */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <DollarSign className="h-4 w-4 mr-1" /> %Bonificación{" "}
@@ -307,7 +313,6 @@ const Bonificaciones: React.FC = () => {
             )}
           </div>
 
-          {/* Monto adicional */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <DollarSign className="h-4 w-4 mr-1" /> Monto Adicional de Dinero{" "}
@@ -330,7 +335,6 @@ const Bonificaciones: React.FC = () => {
             )}
           </div>
 
-          {/* Fecha de entrega */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <Calendar className="h-4 w-4 mr-1" /> Fecha de entrega{" "}
@@ -351,7 +355,6 @@ const Bonificaciones: React.FC = () => {
             )}
           </div>
 
-          {/* Motivo */}
           <div>
             <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
               <FileText className="h-4 w-4 mr-1" /> Motivo <span className="text-red-500 ml-1">*</span>
