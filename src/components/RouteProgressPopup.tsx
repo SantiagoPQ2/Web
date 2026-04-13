@@ -32,7 +32,7 @@ type SnapshotRow = {
 
 type Top5Row = {
   cliente: string | number | null;
-  vendedor_username: string | null;
+  vendedor_username: string | number | null;
   dia: string | null;
   razon_social?: string | null;
 };
@@ -42,6 +42,7 @@ type CoordenadaRow = {
   created_by: string | null;
   vendedor_username?: string | number | null;
   created_at: string | null;
+  gps_planificada?: boolean | null;
 };
 
 type PopupItem =
@@ -57,6 +58,7 @@ type PopupItem =
       type: "top5";
       hechos: number;
       total: number;
+      pendientes: string[];
     };
 
 type Checkpoint = {
@@ -72,6 +74,26 @@ const CHECKPOINTS: Checkpoint[] = [
 ];
 
 const FULL_DAY_HOURS = 7;
+
+function normalizarTexto(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+function normalizeCliente(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^0+/, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+}
+
+function safeNumber(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function getArgentinaNowParts() {
   const now = new Date();
@@ -90,8 +112,8 @@ function getArgentinaNowParts() {
     hour12: false,
   });
 
-  const dayText = dateFormatter.format(now); // YYYY-MM-DD
-  const timeText = timeFormatter.format(now); // HH:mm
+  const dayText = dateFormatter.format(now);
+  const timeText = timeFormatter.format(now);
 
   const [year, month, day] = dayText.split("-");
   const [hour, minute] = timeText.split(":").map(Number);
@@ -103,27 +125,20 @@ function getArgentinaNowParts() {
 }
 
 function getDiaCodigoArgentina() {
-  const buenosAiresNow = new Date(
+  const now = new Date(
     new Date().toLocaleString("en-US", {
       timeZone: "America/Argentina/Buenos_Aires",
     })
   );
 
   const map = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
-  return map[buenosAiresNow.getDay()];
+  return map[now.getDay()];
 }
 
-function normalizeCliente(value: unknown) {
-  return String(value ?? "")
-    .trim()
-    .replace(/^0+/, "")
-    .replace(/\s+/g, "")
-    .toUpperCase();
-}
-
-function safeNumber(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
+function getRangoUtcDiaArgentina(fechaYYYYMMDD: string) {
+  const inicioUtc = new Date(`${fechaYYYYMMDD}T00:00:00-03:00`).toISOString();
+  const finUtc = new Date(`${fechaYYYYMMDD}T23:59:59.999-03:00`).toISOString();
+  return { inicioUtc, finUtc };
 }
 
 function buildSeenKey(username: string, type: string, checkpointId: string) {
@@ -195,7 +210,7 @@ const RouteProgressPopup: React.FC = () => {
       if (user?.id) {
         query = query.eq("id", user.id);
       } else {
-        query = query.eq("username", user?.username);
+        query = query.eq("username", String(user?.username ?? "").trim());
       }
 
       const { data, error } = await query.maybeSingle();
@@ -209,7 +224,7 @@ const RouteProgressPopup: React.FC = () => {
       }
 
       const row = (data as UsuarioAppRow | null) ?? null;
-      setVerifiedVendor((row?.role || "").toLowerCase() === "vendedor");
+      setVerifiedVendor(normalizarTexto(row?.role) === "VENDEDOR");
     };
 
     verifyRole();
@@ -220,7 +235,7 @@ const RouteProgressPopup: React.FC = () => {
   }, [user?.id, user?.username]);
 
   useEffect(() => {
-    if (!user?.username) return;
+    if (!user?.username || !user?.id) return;
     if (verifiedVendor !== true) return;
 
     const run = async () => {
@@ -229,8 +244,8 @@ const RouteProgressPopup: React.FC = () => {
       const checkpoint = getActiveCheckpoint();
       if (!checkpoint) return;
 
-      const usernameStr = String(user.username);
-      const userId = user?.id ? String(user.id) : "";
+      const usernameStr = String(user.username).trim();
+      const userId = String(user.id).trim();
 
       const needRoute = !wasSeen(usernameStr, "route", checkpoint.id);
       const needTop5 = !wasSeen(usernameStr, "top5", checkpoint.id);
@@ -255,7 +270,8 @@ const RouteProgressPopup: React.FC = () => {
           if (snapshotError) {
             console.error("Error cargando snapshot:", snapshotError);
           } else {
-            const snap = ((snapshotRows || [])[0] as SnapshotRow | undefined) ?? undefined;
+            const snap =
+              ((snapshotRows || [])[0] as SnapshotRow | undefined) ?? undefined;
 
             if (snap) {
               const visitados = safeNumber(snap.pdv_visitados);
@@ -283,6 +299,8 @@ const RouteProgressPopup: React.FC = () => {
 
         if (needTop5) {
           const diaCodigo = getDiaCodigoArgentina();
+          const { dateKey } = getArgentinaNowParts();
+          const { inicioUtc, finUtc } = getRangoUtcDiaArgentina(dateKey);
 
           const { data: top5Rows, error: top5Error } = await supabase
             .from("top_5")
@@ -298,54 +316,52 @@ const RouteProgressPopup: React.FC = () => {
             const clientesTop5 = Array.from(
               new Set(
                 top5
+                  .filter(
+                    (row) => normalizarTexto(row.dia) === normalizarTexto(diaCodigo)
+                  )
                   .map((row) => normalizeCliente(row.cliente))
-                  .filter((v) => v.length > 0)
+                  .filter(Boolean)
               )
             );
 
             if (clientesTop5.length > 0) {
-              const { dateKey } = getArgentinaNowParts();
-              const startLocal = `${dateKey} 00:00:00`;
-              const endLocal = `${dateKey} 23:59:59`;
-
-              let coordsQuery = supabase
+              const { data: coordsRows, error: coordsError } = await supabase
                 .from("coordenadas")
-                .select("nombre, created_by, vendedor_username, created_at")
-                .gte("created_at", startLocal)
-                .lte("created_at", endLocal);
-
-              const orFilters: string[] = [];
-
-              if (userId) {
-                orFilters.push(`created_by.eq.${userId}`);
-              }
-
-              orFilters.push(`created_by.eq.${usernameStr}`);
-              orFilters.push(`vendedor_username.eq.${usernameStr}`);
-
-              coordsQuery = coordsQuery.or(orFilters.join(","));
-
-              const { data: coordsRows, error: coordsError } = await coordsQuery;
+                .select("nombre, created_by, vendedor_username, created_at, gps_planificada")
+                .gte("created_at", inicioUtc)
+                .lte("created_at", finUtc)
+                .or(
+                  [
+                    `created_by.eq.${userId}`,
+                    `vendedor_username.eq.${usernameStr}`,
+                  ].join(",")
+                );
 
               if (coordsError) {
                 console.error("Error cargando coordenadas para TOP 5:", coordsError);
               } else {
                 const coords = (coordsRows as CoordenadaRow[] | null) ?? [];
 
-                const visitadosTop5 = new Set(
+                const visitadosSet = new Set(
                   coords
                     .map((row) => normalizeCliente(row.nombre))
-                    .filter((nombre) => clientesTop5.includes(nombre))
+                    .filter(Boolean)
                 );
 
-                const hechos = visitadosTop5.size;
-                const total = clientesTop5.length;
+                const hechosList = clientesTop5.filter((cli) =>
+                  visitadosSet.has(cli)
+                );
+
+                const pendientesList = clientesTop5.filter(
+                  (cli) => !visitadosSet.has(cli)
+                );
 
                 newItems.push({
                   id: `top5-${checkpoint.id}`,
                   type: "top5",
-                  hechos,
-                  total,
+                  hechos: hechosList.length,
+                  total: clientesTop5.length,
+                  pendientes: pendientesList,
                 });
               }
             }
@@ -491,7 +507,7 @@ const RouteProgressPopup: React.FC = () => {
 
                   <div className="min-w-0">
                     <p className="text-[15px] leading-6 text-gray-900">
-                      Ya hiciste{" "}
+                      Ya buscaste{" "}
                       <span className="font-extrabold text-red-600">
                         {currentItem.hechos}
                       </span>{" "}
@@ -499,19 +515,22 @@ const RouteProgressPopup: React.FC = () => {
                       <span className="font-extrabold text-gray-900">
                         {currentItem.total}
                       </span>{" "}
-                      clientes de tu TOP 5.
+                      clientes de tu TOP 5 de hoy.
                     </p>
 
                     <p className="mt-2 text-sm leading-6 text-gray-600">
-                      No te olvides de visitar los faltantes para completar la
-                      prioridad del día.
+                      Te faltan{" "}
+                      <span className="font-extrabold text-red-600">
+                        {Math.max(0, currentItem.total - currentItem.hechos)}
+                      </span>{" "}
+                      para completar la prioridad del día.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">TOP 5 hechos</span>
+                    <span className="text-gray-500">TOP 5 buscados</span>
                     <span className="font-bold text-gray-900">
                       {currentItem.hechos}
                     </span>
@@ -531,6 +550,17 @@ const RouteProgressPopup: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                {currentItem.pendientes.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-red-700">
+                      Clientes pendientes
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-red-900 break-words">
+                      {currentItem.pendientes.join(", ")}
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>
