@@ -32,7 +32,7 @@ type SnapshotRow = {
 
 type Top5Row = {
   cliente: string | number | null;
-  vendedor_username: string | number | null;
+  vendedor_username: string | null;
   dia: string | null;
   razon_social?: string | null;
 };
@@ -48,19 +48,15 @@ type PopupItem =
   | {
       id: string;
       type: "route";
-      title: string;
       visitados: number;
       planificados: number;
       projectedPercent: number;
-      body: string;
     }
   | {
       id: string;
       type: "top5";
-      title: string;
       hechos: number;
       total: number;
-      body: string;
     };
 
 type Checkpoint = {
@@ -177,7 +173,10 @@ const RouteProgressPopup: React.FC = () => {
 
   const checkingRef = useRef(false);
 
-  const currentItem = useMemo(() => items[currentIndex] ?? null, [items, currentIndex]);
+  const currentItem = useMemo(
+    () => items[currentIndex] ?? null,
+    [items, currentIndex]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -188,7 +187,10 @@ const RouteProgressPopup: React.FC = () => {
         return;
       }
 
-      let query = supabase.from("usuarios_app").select("id, username, role").limit(1);
+      let query = supabase
+        .from("usuarios_app")
+        .select("id, username, role")
+        .limit(1);
 
       if (user?.id) {
         query = query.eq("id", user.id);
@@ -228,8 +230,7 @@ const RouteProgressPopup: React.FC = () => {
       if (!checkpoint) return;
 
       const usernameStr = String(user.username);
-      const usernameNum = Number(user.username);
-      const userId = user.id ? String(user.id) : null;
+      const userId = user?.id ? String(user.id) : "";
 
       const needRoute = !wasSeen(usernameStr, "route", checkpoint.id);
       const needTop5 = !wasSeen(usernameStr, "top5", checkpoint.id);
@@ -271,13 +272,9 @@ const RouteProgressPopup: React.FC = () => {
                 newItems.push({
                   id: `route-${checkpoint.id}`,
                   type: "route",
-                  title: "Avance de ruta",
                   visitados,
                   planificados,
                   projectedPercent: projectedBounded,
-                  body: `Visitaste "${visitados}" clientes de "${planificados}". Si seguís así terminás la ruta con el "${formatPercent(
-                    projectedBounded
-                  )}%".`,
                 });
               }
             }
@@ -287,18 +284,11 @@ const RouteProgressPopup: React.FC = () => {
         if (needTop5) {
           const diaCodigo = getDiaCodigoArgentina();
 
-          let top5Query = supabase
+          const { data: top5Rows, error: top5Error } = await supabase
             .from("top_5")
             .select("cliente, vendedor_username, dia, razon_social")
+            .eq("vendedor_username", usernameStr)
             .eq("dia", diaCodigo);
-
-          if (Number.isFinite(usernameNum)) {
-            top5Query = top5Query.eq("vendedor_username", usernameNum);
-          } else {
-            top5Query = top5Query.eq("vendedor_username", usernameStr);
-          }
-
-          const { data: top5Rows, error: top5Error } = await top5Query;
 
           if (top5Error) {
             console.error("Error cargando TOP 5:", top5Error);
@@ -315,31 +305,25 @@ const RouteProgressPopup: React.FC = () => {
 
             if (clientesTop5.length > 0) {
               const { dateKey } = getArgentinaNowParts();
-              const startIso = `${dateKey}T00:00:00-03:00`;
-              const endIso = `${dateKey}T23:59:59-03:00`;
+              const startLocal = `${dateKey} 00:00:00`;
+              const endLocal = `${dateKey} 23:59:59`;
 
               let coordsQuery = supabase
                 .from("coordenadas")
                 .select("nombre, created_by, vendedor_username, created_at")
-                .gte("created_at", startIso)
-                .lte("created_at", endIso);
+                .gte("created_at", startLocal)
+                .lte("created_at", endLocal);
 
-              const filters: string[] = [];
+              const orFilters: string[] = [];
 
               if (userId) {
-                filters.push(`created_by.eq.${userId}`);
+                orFilters.push(`created_by.eq.${userId}`);
               }
 
-              filters.push(`created_by.eq.${usernameStr}`);
-              filters.push(`vendedor_username.eq.${usernameStr}`);
+              orFilters.push(`created_by.eq.${usernameStr}`);
+              orFilters.push(`vendedor_username.eq.${usernameStr}`);
 
-              if (Number.isFinite(usernameNum)) {
-                filters.push(`vendedor_username.eq.${usernameNum}`);
-              }
-
-              if (filters.length > 0) {
-                coordsQuery = coordsQuery.or(filters.join(","));
-              }
+              coordsQuery = coordsQuery.or(orFilters.join(","));
 
               const { data: coordsRows, error: coordsError } = await coordsQuery;
 
@@ -360,10 +344,8 @@ const RouteProgressPopup: React.FC = () => {
                 newItems.push({
                   id: `top5-${checkpoint.id}`,
                   type: "top5",
-                  title: "Seguimiento TOP 5",
                   hechos,
                   total,
-                  body: `Ya hiciste "${hechos}" de "${total}" clientes de tu TOP 5, no olvides visitar los faltantes.`,
                 });
               }
             }
@@ -374,8 +356,16 @@ const RouteProgressPopup: React.FC = () => {
           setItems(newItems);
           setCurrentIndex(0);
 
-          if (needRoute) markSeen(usernameStr, "route", checkpoint.id);
-          if (needTop5) markSeen(usernameStr, "top5", checkpoint.id);
+          const routeWasAdded = newItems.some((item) => item.type === "route");
+          const top5WasAdded = newItems.some((item) => item.type === "top5");
+
+          if (routeWasAdded) {
+            markSeen(usernameStr, "route", checkpoint.id);
+          }
+
+          if (top5WasAdded) {
+            markSeen(usernameStr, "top5", checkpoint.id);
+          }
         }
       } finally {
         checkingRef.current = false;
@@ -412,10 +402,10 @@ const RouteProgressPopup: React.FC = () => {
 
       <div className="fixed inset-0 z-[91] flex items-center justify-center px-4">
         <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-red-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
-          <div className="bg-gradient-to-r from-red-600 via-red-500 to-rose-500 px-5 py-4 flex items-center justify-between">
+          <div className="flex items-center justify-between bg-gradient-to-r from-red-600 via-red-500 to-rose-500 px-5 py-4">
             <div className="flex items-center gap-2">
               <div className="h-2.5 w-2.5 rounded-full bg-white/90" />
-              <h3 className="text-white font-extrabold text-sm tracking-wide">
+              <h3 className="text-sm font-extrabold tracking-wide text-white">
                 ALERTA DE GESTIÓN
               </h3>
             </div>
@@ -439,7 +429,7 @@ const RouteProgressPopup: React.FC = () => {
                   </div>
 
                   <div className="min-w-0">
-                    <p className="text-[15px] font-semibold text-gray-900 leading-6">
+                    <p className="text-[15px] leading-6 text-gray-900">
                       Visitaste{" "}
                       <span className="font-extrabold text-red-600">
                         {currentItem.visitados}
@@ -465,7 +455,7 @@ const RouteProgressPopup: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 border border-gray-100">
+                <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">Visitados</span>
                     <span className="font-bold text-gray-900">
@@ -500,7 +490,7 @@ const RouteProgressPopup: React.FC = () => {
                   </div>
 
                   <div className="min-w-0">
-                    <p className="text-[15px] font-semibold text-gray-900 leading-6">
+                    <p className="text-[15px] leading-6 text-gray-900">
                       Ya hiciste{" "}
                       <span className="font-extrabold text-red-600">
                         {currentItem.hechos}
@@ -519,7 +509,7 @@ const RouteProgressPopup: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 border border-gray-100">
+                <div className="mt-5 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">TOP 5 hechos</span>
                     <span className="font-bold text-gray-900">
