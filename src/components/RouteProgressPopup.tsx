@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X, TrendingUp, Target } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -34,20 +34,34 @@ type Top5Row = {
   cliente: string | number | null;
   vendedor_username: string | number | null;
   dia: string | null;
+  razon_social?: string | null;
 };
 
 type CoordenadaRow = {
   nombre: string | number | null;
   created_by: string | null;
-  vendedor_username?: string | null;
+  vendedor_username?: string | number | null;
   created_at: string | null;
 };
 
-type PopupItem = {
-  id: string;
-  title: string;
-  body: string;
-};
+type PopupItem =
+  | {
+      id: string;
+      type: "route";
+      title: string;
+      visitados: number;
+      planificados: number;
+      projectedPercent: number;
+      body: string;
+    }
+  | {
+      id: string;
+      type: "top5";
+      title: string;
+      hechos: number;
+      total: number;
+      body: string;
+    };
 
 type Checkpoint = {
   id: "11:00" | "12:30" | "14:00";
@@ -148,6 +162,12 @@ function formatPercent(value: number) {
   return String(Math.round(value));
 }
 
+function getPercentColorClass(percent: number) {
+  if (percent >= 90) return "text-emerald-600";
+  if (percent >= 75) return "text-amber-500";
+  return "text-red-600";
+}
+
 const RouteProgressPopup: React.FC = () => {
   const { user } = useAuth();
 
@@ -209,6 +229,7 @@ const RouteProgressPopup: React.FC = () => {
 
       const usernameStr = String(user.username);
       const usernameNum = Number(user.username);
+      const userId = user.id ? String(user.id) : null;
 
       const needRoute = !wasSeen(usernameStr, "route", checkpoint.id);
       const needTop5 = !wasSeen(usernameStr, "top5", checkpoint.id);
@@ -249,7 +270,11 @@ const RouteProgressPopup: React.FC = () => {
 
                 newItems.push({
                   id: `route-${checkpoint.id}`,
-                  title: "Resumen de gestión",
+                  type: "route",
+                  title: "Avance de ruta",
+                  visitados,
+                  planificados,
+                  projectedPercent: projectedBounded,
                   body: `Visitaste "${visitados}" clientes de "${planificados}". Si seguís así terminás la ruta con el "${formatPercent(
                     projectedBounded
                   )}%".`,
@@ -264,7 +289,7 @@ const RouteProgressPopup: React.FC = () => {
 
           let top5Query = supabase
             .from("top_5")
-            .select("cliente, vendedor_username, dia")
+            .select("cliente, vendedor_username, dia, razon_social")
             .eq("dia", diaCodigo);
 
           if (Number.isFinite(usernameNum)) {
@@ -293,14 +318,30 @@ const RouteProgressPopup: React.FC = () => {
               const startIso = `${dateKey}T00:00:00-03:00`;
               const endIso = `${dateKey}T23:59:59-03:00`;
 
-              const { data: coordsRows, error: coordsError } = await supabase
+              let coordsQuery = supabase
                 .from("coordenadas")
                 .select("nombre, created_by, vendedor_username, created_at")
-                .or(
-                  `created_by.eq.${usernameStr},vendedor_username.eq.${usernameStr}`
-                )
                 .gte("created_at", startIso)
                 .lte("created_at", endIso);
+
+              const filters: string[] = [];
+
+              if (userId) {
+                filters.push(`created_by.eq.${userId}`);
+              }
+
+              filters.push(`created_by.eq.${usernameStr}`);
+              filters.push(`vendedor_username.eq.${usernameStr}`);
+
+              if (Number.isFinite(usernameNum)) {
+                filters.push(`vendedor_username.eq.${usernameNum}`);
+              }
+
+              if (filters.length > 0) {
+                coordsQuery = coordsQuery.or(filters.join(","));
+              }
+
+              const { data: coordsRows, error: coordsError } = await coordsQuery;
 
               if (coordsError) {
                 console.error("Error cargando coordenadas para TOP 5:", coordsError);
@@ -318,7 +359,10 @@ const RouteProgressPopup: React.FC = () => {
 
                 newItems.push({
                   id: `top5-${checkpoint.id}`,
+                  type: "top5",
                   title: "Seguimiento TOP 5",
+                  hechos,
+                  total,
                   body: `Ya hiciste "${hechos}" de "${total}" clientes de tu TOP 5, no olvides visitar los faltantes.`,
                 });
               }
@@ -345,7 +389,7 @@ const RouteProgressPopup: React.FC = () => {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [user?.username, verifiedVendor]);
+  }, [user?.id, user?.username, verifiedVendor]);
 
   const handleClose = () => {
     const next = currentIndex + 1;
@@ -367,30 +411,138 @@ const RouteProgressPopup: React.FC = () => {
       <div className="fixed inset-0 bg-black/40 z-[90]" />
 
       <div className="fixed inset-0 z-[91] flex items-center justify-center px-4">
-        <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-red-200 bg-white shadow-2xl">
-          <div className="bg-gradient-to-r from-red-600 to-rose-500 px-4 py-3 flex items-center justify-between">
-            <h3 className="text-white font-bold text-sm tracking-wide">
-              ALERTA DE GESTIÓN
-            </h3>
+        <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-red-200 bg-white shadow-[0_20px_60px_rgba(0,0,0,0.22)]">
+          <div className="bg-gradient-to-r from-red-600 via-red-500 to-rose-500 px-5 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-2.5 w-2.5 rounded-full bg-white/90" />
+              <h3 className="text-white font-extrabold text-sm tracking-wide">
+                ALERTA DE GESTIÓN
+              </h3>
+            </div>
 
             <button
               type="button"
               onClick={handleClose}
-              className="rounded-md p-1 text-white/90 hover:bg-white/20"
+              className="rounded-md p-1.5 text-white/90 hover:bg-white/20"
               aria-label="Cerrar popup"
             >
               <X size={18} />
             </button>
           </div>
 
-          <div className="p-5">
-            <h4 className="mb-2 text-base font-bold text-gray-900">
-              {currentItem.title}
-            </h4>
+          <div className="p-6">
+            {currentItem.type === "route" ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50">
+                    <TrendingUp size={20} className="text-red-600" />
+                  </div>
 
-            <p className="text-sm leading-relaxed text-gray-800 whitespace-pre-line">
-              {currentItem.body}
-            </p>
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-gray-900 leading-6">
+                      Visitaste{" "}
+                      <span className="font-extrabold text-red-600">
+                        {currentItem.visitados}
+                      </span>{" "}
+                      clientes de{" "}
+                      <span className="font-extrabold text-gray-900">
+                        {currentItem.planificados}
+                      </span>
+                      .
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-600">
+                      Si seguís así, terminás la ruta con un avance estimado del{" "}
+                      <span
+                        className={`font-extrabold ${getPercentColorClass(
+                          currentItem.projectedPercent
+                        )}`}
+                      >
+                        {formatPercent(currentItem.projectedPercent)}%
+                      </span>
+                      .
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 border border-gray-100">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Visitados</span>
+                    <span className="font-bold text-gray-900">
+                      {currentItem.visitados}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Planificados</span>
+                    <span className="font-bold text-gray-900">
+                      {currentItem.planificados}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Proyección</span>
+                    <span
+                      className={`font-extrabold ${getPercentColorClass(
+                        currentItem.projectedPercent
+                      )}`}
+                    >
+                      {formatPercent(currentItem.projectedPercent)}%
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50">
+                    <Target size={20} className="text-red-600" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-semibold text-gray-900 leading-6">
+                      Ya hiciste{" "}
+                      <span className="font-extrabold text-red-600">
+                        {currentItem.hechos}
+                      </span>{" "}
+                      de{" "}
+                      <span className="font-extrabold text-gray-900">
+                        {currentItem.total}
+                      </span>{" "}
+                      clientes de tu TOP 5.
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-600">
+                      No te olvides de visitar los faltantes para completar la
+                      prioridad del día.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 border border-gray-100">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500">TOP 5 hechos</span>
+                    <span className="font-bold text-gray-900">
+                      {currentItem.hechos}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Total TOP 5</span>
+                    <span className="font-bold text-gray-900">
+                      {currentItem.total}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between text-sm">
+                    <span className="text-gray-500">Pendientes</span>
+                    <span className="font-extrabold text-red-600">
+                      {Math.max(0, currentItem.total - currentItem.hechos)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
