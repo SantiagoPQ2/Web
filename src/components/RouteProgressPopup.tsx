@@ -1,44 +1,56 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 
-type StoredUser = {
-  id?: string;
-  username?: string;
-  role?: string;
-  name?: string;
-} | null;
+type UsuarioAppRow = {
+  id: string;
+  username: string | null;
+  role: string | null;
+};
 
 type SnapshotRow = {
+  id: number;
+  snapshot_date: string | null;
+  snapshot_taken_at: string | null;
+  dia_codigo: string | null;
   user_id: string | null;
   username: string | null;
+  nombre_mostrar: string | null;
+  ffvv: string | null;
+  role: string | null;
   pdv_planificados: number | null;
   pdv_visitados: number | null;
-  snapshot_date?: string | null;
-  snapshot_taken_at?: string | null;
-  created_at?: string | null;
+  pdv_menos_5_min: number | null;
+  horas_trabajadas: number | null;
+  puntos_gps: number | null;
+  primera_marca: string | null;
+  ultima_marca: string | null;
+  created_at: string | null;
+  fecha: string | null;
 };
 
 type Top5Row = {
   cliente: string | number | null;
-  vendedor_username: string | number | null;
+  vendedor_username: string | null;
   dia: string | null;
 };
 
 type CoordenadaRow = {
-  nombre: string | number | null;
+  nombre: string | null;
+  created_by: string | null;
+  vendedor_username?: string | null;
   created_at: string | null;
-  created_by?: string | null;
 };
 
-type PopupMessage = {
+type PopupItem = {
   id: string;
   title: string;
   body: string;
 };
 
 type Checkpoint = {
-  id: string;
+  id: "11:00" | "12:30" | "14:00";
   minutes: number;
   workedHours: number;
 };
@@ -49,32 +61,48 @@ const CHECKPOINTS: Checkpoint[] = [
   { id: "14:00", minutes: 14 * 60, workedHours: 6 },
 ];
 
-const WORKDAY_HOURS = 7;
+const FULL_DAY_HOURS = 7;
 
-function getStoredUser(): StoredUser {
-  try {
-    return JSON.parse(localStorage.getItem("user") || "null");
-  } catch {
-    return null;
-  }
-}
-
-function getTodayKey() {
+function getNowInArgentina() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const pick = (type: string) => parts.find((p) => p.type === type)?.value || "";
+
+  const year = pick("year");
+  const month = pick("month");
+  const day = pick("day");
+  const hour = Number(pick("hour"));
+  const minute = Number(pick("minute"));
+  const weekdayRaw = pick("weekday").toLowerCase();
+
+  return {
+    dateKey: `${year}-${month}-${day}`,
+    minutesNow: hour * 60 + minute,
+    weekdayRaw,
+  };
 }
 
-function getTodayDayCode() {
-  const days = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
-  return days[new Date().getDay()];
-}
+function getDiaCodigoArgentina() {
+  const { weekdayRaw } = getNowInArgentina();
 
-function getMinutesNow() {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
+  if (weekdayRaw.includes("sun")) return "DOM";
+  if (weekdayRaw.includes("mon")) return "LUN";
+  if (weekdayRaw.includes("tue")) return "MAR";
+  if (weekdayRaw.includes("wed")) return "MIE";
+  if (weekdayRaw.includes("thu")) return "JUE";
+  if (weekdayRaw.includes("fri")) return "VIE";
+  return "SAB";
 }
 
 function normalizeValue(value: unknown) {
@@ -84,205 +112,251 @@ function normalizeValue(value: unknown) {
     .replace(/\s+/g, "");
 }
 
-function buildSeenKey(type: string, checkpointId: string) {
-  return `route-popup:${type}:${getTodayKey()}:${checkpointId}`;
+function safeNumber(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
-function isSeen(type: string, checkpointId: string) {
-  return localStorage.getItem(buildSeenKey(type, checkpointId)) === "1";
+function buildSeenKey(username: string, type: string, checkpointId: string) {
+  const { dateKey } = getNowInArgentina();
+  return `route_popup_seen:${username}:${dateKey}:${type}:${checkpointId}`;
 }
 
-function markSeen(type: string, checkpointId: string) {
-  localStorage.setItem(buildSeenKey(type, checkpointId), "1");
+function wasSeen(username: string, type: string, checkpointId: string) {
+  try {
+    return localStorage.getItem(buildSeenKey(username, type, checkpointId)) === "1";
+  } catch {
+    return false;
+  }
 }
 
-function getActiveCheckpoint(): Checkpoint | null {
-  const currentMinutes = getMinutesNow();
+function markSeen(username: string, type: string, checkpointId: string) {
+  try {
+    localStorage.setItem(buildSeenKey(username, type, checkpointId), "1");
+  } catch {
+    // ignore
+  }
+}
 
-  const eligible = CHECKPOINTS.filter((cp) => cp.minutes <= currentMinutes);
+function getActiveCheckpoint() {
+  const { minutesNow } = getNowInArgentina();
+  const eligible = CHECKPOINTS.filter((cp) => cp.minutes <= minutesNow);
   if (eligible.length === 0) return null;
-
-  // Tomo el último checkpoint alcanzado del día.
   return eligible[eligible.length - 1];
 }
 
 function formatPercent(value: number) {
-  if (!Number.isFinite(value)) return "0";
   return String(Math.round(value));
 }
 
 const RouteProgressPopup: React.FC = () => {
-  const [messages, setMessages] = useState<PopupMessage[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
-  const user = useMemo(() => getStoredUser(), []);
+  const [items, setItems] = useState<PopupItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [verifiedVendor, setVerifiedVendor] = useState<boolean | null>(null);
+
+  const checkingRef = useRef(false);
+
+  const currentItem = useMemo(() => items[currentIndex] ?? null, [items, currentIndex]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const verifyRole = async () => {
+      if (!user?.username && !user?.id) {
+        if (!cancelled) setVerifiedVendor(false);
+        return;
+      }
+
+      const query = supabase
+        .from("usuarios_app")
+        .select("id, username, role")
+        .limit(1);
+
+      let finalQuery = query;
+
+      if (user?.id) {
+        finalQuery = finalQuery.eq("id", user.id);
+      } else {
+        finalQuery = finalQuery.eq("username", user?.username);
+      }
+
+      const { data, error } = await finalQuery.maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Error validando rol en usuarios_app:", error);
+        setVerifiedVendor(false);
+        return;
+      }
+
+      const row = (data as UsuarioAppRow | null) ?? null;
+      setVerifiedVendor((row?.role || "").toLowerCase() === "vendedor");
+    };
+
+    verifyRole();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.username]);
+
+  useEffect(() => {
+    if (!user?.username) return;
+    if (verifiedVendor !== true) return;
+
     const run = async () => {
-      if (!user?.username && !user?.id) return;
-      if (user?.role === "admin") return;
+      if (checkingRef.current) return;
 
       const checkpoint = getActiveCheckpoint();
       if (!checkpoint) return;
 
-      const pendingRoute = !isSeen("route", checkpoint.id);
-      const pendingTop5 = !isSeen("top5", checkpoint.id);
+      const needRoute = !wasSeen(user.username!, "route", checkpoint.id);
+      const needTop5 = !wasSeen(user.username!, "top5", checkpoint.id);
 
-      if (!pendingRoute && !pendingTop5) return;
+      if (!needRoute && !needTop5) return;
 
-      setLoading(true);
+      checkingRef.current = true;
 
       try {
-        const newMessages: PopupMessage[] = [];
+        const newItems: PopupItem[] = [];
 
-        // =========================
-        // 1) MENSAJE DE RUTA
-        // =========================
-        if (pendingRoute) {
-          let snapshotQuery = supabase
+        if (needRoute) {
+          const { data: snapshotRows, error: snapshotError } = await supabase
             .from("admin_equipo_snapshots")
-            .select(
-              "user_id, username, pdv_planificados, pdv_visitados, snapshot_date, snapshot_taken_at, created_at"
-            )
+            .select("*")
+            .eq("username", user.username)
             .order("snapshot_date", { ascending: false })
             .order("snapshot_taken_at", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(1);
 
-          if (user.id) {
-            snapshotQuery = snapshotQuery.eq("user_id", user.id);
-          } else if (user.username) {
-            snapshotQuery = snapshotQuery.eq("username", String(user.username));
-          }
-
-          const { data: snapshotData, error: snapshotError } = await snapshotQuery;
-
           if (snapshotError) {
-            console.error("❌ Error cargando snapshot:", snapshotError.message);
+            console.error("Error cargando snapshot:", snapshotError);
           } else {
-            const snapshot = (snapshotData?.[0] as SnapshotRow | undefined) ?? undefined;
-            const visitados = Number(snapshot?.pdv_visitados ?? 0);
-            const planificados = Number(snapshot?.pdv_planificados ?? 0);
+            const snap = ((snapshotRows || [])[0] as SnapshotRow | undefined) ?? undefined;
 
-            if (planificados > 0) {
-              const projectedPercent =
-                (visitados / planificados) * (WORKDAY_HOURS / checkpoint.workedHours) * 100;
+            if (snap) {
+              const visitados = safeNumber(snap.pdv_visitados);
+              const planificados = safeNumber(snap.pdv_planificados);
 
-              const boundedPercent = Math.max(0, Math.min(100, projectedPercent));
+              if (planificados > 0) {
+                const projected =
+                  (visitados / planificados) *
+                  (FULL_DAY_HOURS / checkpoint.workedHours) *
+                  100;
 
-              newMessages.push({
-                id: `route-${checkpoint.id}`,
-                title: "Avance de ruta",
-                body: `Visitaste "${visitados}" clientes de "${planificados}". Si seguís así terminás la ruta con el "${formatPercent(
-                  boundedPercent
-                )}%".`,
-              });
-            }
-          }
-        }
+                const projectedBounded = Math.max(0, Math.min(100, projected));
 
-        // =========================
-        // 2) MENSAJE TOP 5
-        // =========================
-        if (pendingTop5 && user.username) {
-          const todayCode = getTodayDayCode();
-
-          const { data: top5Data, error: top5Error } = await supabase
-            .from("top_5")
-            .select("cliente, vendedor_username, dia")
-            .eq("vendedor_username", String(user.username))
-            .eq("dia", todayCode);
-
-          if (top5Error) {
-            console.error("❌ Error cargando top_5:", top5Error.message);
-          } else {
-            const top5Rows = (top5Data as Top5Row[] | null) ?? [];
-            const top5Clientes = Array.from(
-              new Set(
-                top5Rows
-                  .map((r) => normalizeValue(r.cliente))
-                  .filter((v) => v.length > 0)
-              )
-            );
-
-            const totalTop5 = top5Clientes.length;
-
-            if (totalTop5 > 0) {
-              const startOfDay = new Date();
-              startOfDay.setHours(0, 0, 0, 0);
-
-              const endOfDay = new Date();
-              endOfDay.setHours(23, 59, 59, 999);
-
-              const { data: coordsData, error: coordsError } = await supabase
-                .from("coordenadas")
-                .select("nombre, created_at, created_by")
-                .eq("created_by", String(user.username))
-                .gte("created_at", startOfDay.toISOString())
-                .lte("created_at", endOfDay.toISOString());
-
-              if (coordsError) {
-                console.error("❌ Error cargando coordenadas:", coordsError.message);
-              } else {
-                const coordsRows = (coordsData as CoordenadaRow[] | null) ?? [];
-
-                const visitadosHoy = new Set(
-                  coordsRows
-                    .map((r) => normalizeValue(r.nombre))
-                    .filter((v) => top5Clientes.includes(v))
-                );
-
-                const hechos = visitadosHoy.size;
-
-                newMessages.push({
-                  id: `top5-${checkpoint.id}`,
-                  title: "Avance de TOP 5",
-                  body: `Ya hiciste "${hechos}" de "${totalTop5}" clientes de tu TOP 5, no olvides visitar los faltantes.`,
+                newItems.push({
+                  id: `route-${checkpoint.id}`,
+                  title: "Resumen de ruta",
+                  body: `Visitaste "${visitados}" clientes de "${planificados}". Si seguís así terminás la ruta con el "${formatPercent(
+                    projectedBounded
+                  )}%".`,
                 });
               }
             }
           }
         }
 
-        if (newMessages.length > 0) {
-          setMessages(newMessages);
+        if (needTop5) {
+          const diaCodigo = getDiaCodigoArgentina();
+
+          const { data: top5Rows, error: top5Error } = await supabase
+            .from("top_5")
+            .select("cliente, vendedor_username, dia")
+            .eq("vendedor_username", user.username)
+            .eq("dia", diaCodigo);
+
+          if (top5Error) {
+            console.error("Error cargando TOP 5:", top5Error);
+          } else {
+            const top5 = (top5Rows as Top5Row[] | null) ?? [];
+
+            const clientesTop5 = Array.from(
+              new Set(
+                top5
+                  .map((row) => normalizeValue(row.cliente))
+                  .filter((v) => v.length > 0)
+              )
+            );
+
+            if (clientesTop5.length > 0) {
+              const { dateKey } = getNowInArgentina();
+              const startIso = `${dateKey}T00:00:00-03:00`;
+              const endIso = `${dateKey}T23:59:59-03:00`;
+
+              const { data: coordsRows, error: coordsError } = await supabase
+                .from("coordenadas")
+                .select("nombre, created_by, vendedor_username, created_at")
+                .or(
+                  `created_by.eq.${user.username},vendedor_username.eq.${user.username}`
+                )
+                .gte("created_at", startIso)
+                .lte("created_at", endIso);
+
+              if (coordsError) {
+                console.error("Error cargando coordenadas para TOP 5:", coordsError);
+              } else {
+                const coords = (coordsRows as CoordenadaRow[] | null) ?? [];
+
+                const visitadosTop5 = new Set(
+                  coords
+                    .map((row) => normalizeValue(row.nombre))
+                    .filter((nombre) => clientesTop5.includes(nombre))
+                );
+
+                const hechos = visitadosTop5.size;
+                const total = clientesTop5.length;
+
+                newItems.push({
+                  id: `top5-${checkpoint.id}`,
+                  title: "Seguimiento TOP 5",
+                  body: `Ya hiciste "${hechos}" de "${total}" clientes de tu TOP 5, no olvides visitar los faltantes.`,
+                });
+              }
+            }
+          }
+        }
+
+        if (newItems.length > 0) {
+          setItems(newItems);
           setCurrentIndex(0);
 
-          if (pendingRoute) markSeen("route", checkpoint.id);
-          if (pendingTop5) markSeen("top5", checkpoint.id);
+          if (needRoute) markSeen(user.username!, "route", checkpoint.id);
+          if (needTop5) markSeen(user.username!, "top5", checkpoint.id);
         }
       } finally {
-        setLoading(false);
+        checkingRef.current = false;
       }
     };
 
     run();
 
-    const interval = window.setInterval(() => {
-      run();
-    }, 60 * 1000);
+    const intervalId = window.setInterval(run, 60 * 1000);
 
     return () => {
-      window.clearInterval(interval);
+      window.clearInterval(intervalId);
     };
-  }, [user?.id, user?.role, user?.username]);
-
-  const currentMessage = messages[currentIndex] ?? null;
+  }, [user?.username, verifiedVendor]);
 
   const handleClose = () => {
-    const nextIndex = currentIndex + 1;
+    const next = currentIndex + 1;
 
-    if (nextIndex < messages.length) {
-      setCurrentIndex(nextIndex);
+    if (next < items.length) {
+      setCurrentIndex(next);
       return;
     }
 
-    setMessages([]);
+    setItems([]);
     setCurrentIndex(0);
   };
 
-  if (loading && !currentMessage) return null;
-  if (!currentMessage) return null;
+  if (verifiedVendor !== true) return null;
+  if (!currentItem) return null;
 
   return (
     <>
@@ -301,11 +375,11 @@ const RouteProgressPopup: React.FC = () => {
 
           <div className="pr-10">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              {currentMessage.title}
+              {currentItem.title}
             </h3>
 
-            <p className="text-sm leading-6 text-gray-700">
-              {currentMessage.body}
+            <p className="text-sm leading-6 text-gray-700 whitespace-pre-line">
+              {currentItem.body}
             </p>
           </div>
         </div>
