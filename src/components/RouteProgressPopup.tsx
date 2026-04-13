@@ -32,12 +32,12 @@ type SnapshotRow = {
 
 type Top5Row = {
   cliente: string | number | null;
-  vendedor_username: string | null;
+  vendedor_username: string | number | null;
   dia: string | null;
 };
 
 type CoordenadaRow = {
-  nombre: string | null;
+  nombre: string | number | null;
   created_by: string | null;
   vendedor_username?: string | null;
   created_at: string | null;
@@ -63,53 +63,52 @@ const CHECKPOINTS: Checkpoint[] = [
 
 const FULL_DAY_HOURS = 7;
 
-function getNowInArgentina() {
+function getArgentinaNowParts() {
   const now = new Date();
 
-  const parts = new Intl.DateTimeFormat("en-CA", {
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Buenos_Aires",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    weekday: "short",
+  });
+
+  const timeFormatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Argentina/Buenos_Aires",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).formatToParts(now);
+  });
 
-  const pick = (type: string) => parts.find((p) => p.type === type)?.value || "";
+  const dayText = dateFormatter.format(now); // YYYY-MM-DD
+  const timeText = timeFormatter.format(now); // HH:mm
 
-  const year = pick("year");
-  const month = pick("month");
-  const day = pick("day");
-  const hour = Number(pick("hour"));
-  const minute = Number(pick("minute"));
-  const weekdayRaw = pick("weekday").toLowerCase();
+  const [year, month, day] = dayText.split("-");
+  const [hour, minute] = timeText.split(":").map(Number);
 
   return {
     dateKey: `${year}-${month}-${day}`,
     minutesNow: hour * 60 + minute,
-    weekdayRaw,
   };
 }
 
 function getDiaCodigoArgentina() {
-  const { weekdayRaw } = getNowInArgentina();
+  const buenosAiresNow = new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/Argentina/Buenos_Aires",
+    })
+  );
 
-  if (weekdayRaw.includes("sun")) return "DOM";
-  if (weekdayRaw.includes("mon")) return "LUN";
-  if (weekdayRaw.includes("tue")) return "MAR";
-  if (weekdayRaw.includes("wed")) return "MIE";
-  if (weekdayRaw.includes("thu")) return "JUE";
-  if (weekdayRaw.includes("fri")) return "VIE";
-  return "SAB";
+  const map = ["DOM", "LUN", "MAR", "MIE", "JUE", "VIE", "SAB"];
+  return map[buenosAiresNow.getDay()];
 }
 
-function normalizeValue(value: unknown) {
+function normalizeCliente(value: unknown) {
   return String(value ?? "")
     .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
+    .replace(/^0+/, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
 }
 
 function safeNumber(value: unknown) {
@@ -118,7 +117,7 @@ function safeNumber(value: unknown) {
 }
 
 function buildSeenKey(username: string, type: string, checkpointId: string) {
-  const { dateKey } = getNowInArgentina();
+  const { dateKey } = getArgentinaNowParts();
   return `route_popup_seen:${username}:${dateKey}:${type}:${checkpointId}`;
 }
 
@@ -138,8 +137,8 @@ function markSeen(username: string, type: string, checkpointId: string) {
   }
 }
 
-function getActiveCheckpoint() {
-  const { minutesNow } = getNowInArgentina();
+function getActiveCheckpoint(): Checkpoint | null {
+  const { minutesNow } = getArgentinaNowParts();
   const eligible = CHECKPOINTS.filter((cp) => cp.minutes <= minutesNow);
   if (eligible.length === 0) return null;
   return eligible[eligible.length - 1];
@@ -169,20 +168,15 @@ const RouteProgressPopup: React.FC = () => {
         return;
       }
 
-      const query = supabase
-        .from("usuarios_app")
-        .select("id, username, role")
-        .limit(1);
-
-      let finalQuery = query;
+      let query = supabase.from("usuarios_app").select("id, username, role").limit(1);
 
       if (user?.id) {
-        finalQuery = finalQuery.eq("id", user.id);
+        query = query.eq("id", user.id);
       } else {
-        finalQuery = finalQuery.eq("username", user?.username);
+        query = query.eq("username", user?.username);
       }
 
-      const { data, error } = await finalQuery.maybeSingle();
+      const { data, error } = await query.maybeSingle();
 
       if (cancelled) return;
 
@@ -213,8 +207,11 @@ const RouteProgressPopup: React.FC = () => {
       const checkpoint = getActiveCheckpoint();
       if (!checkpoint) return;
 
-      const needRoute = !wasSeen(user.username!, "route", checkpoint.id);
-      const needTop5 = !wasSeen(user.username!, "top5", checkpoint.id);
+      const usernameStr = String(user.username);
+      const usernameNum = Number(user.username);
+
+      const needRoute = !wasSeen(usernameStr, "route", checkpoint.id);
+      const needTop5 = !wasSeen(usernameStr, "top5", checkpoint.id);
 
       if (!needRoute && !needTop5) return;
 
@@ -227,7 +224,7 @@ const RouteProgressPopup: React.FC = () => {
           const { data: snapshotRows, error: snapshotError } = await supabase
             .from("admin_equipo_snapshots")
             .select("*")
-            .eq("username", user.username)
+            .eq("username", usernameStr)
             .order("snapshot_date", { ascending: false })
             .order("snapshot_taken_at", { ascending: false })
             .order("created_at", { ascending: false })
@@ -252,7 +249,7 @@ const RouteProgressPopup: React.FC = () => {
 
                 newItems.push({
                   id: `route-${checkpoint.id}`,
-                  title: "Resumen de ruta",
+                  title: "Resumen de gestión",
                   body: `Visitaste "${visitados}" clientes de "${planificados}". Si seguís así terminás la ruta con el "${formatPercent(
                     projectedBounded
                   )}%".`,
@@ -265,11 +262,18 @@ const RouteProgressPopup: React.FC = () => {
         if (needTop5) {
           const diaCodigo = getDiaCodigoArgentina();
 
-          const { data: top5Rows, error: top5Error } = await supabase
+          let top5Query = supabase
             .from("top_5")
             .select("cliente, vendedor_username, dia")
-            .eq("vendedor_username", user.username)
             .eq("dia", diaCodigo);
+
+          if (Number.isFinite(usernameNum)) {
+            top5Query = top5Query.eq("vendedor_username", usernameNum);
+          } else {
+            top5Query = top5Query.eq("vendedor_username", usernameStr);
+          }
+
+          const { data: top5Rows, error: top5Error } = await top5Query;
 
           if (top5Error) {
             console.error("Error cargando TOP 5:", top5Error);
@@ -279,13 +283,13 @@ const RouteProgressPopup: React.FC = () => {
             const clientesTop5 = Array.from(
               new Set(
                 top5
-                  .map((row) => normalizeValue(row.cliente))
+                  .map((row) => normalizeCliente(row.cliente))
                   .filter((v) => v.length > 0)
               )
             );
 
             if (clientesTop5.length > 0) {
-              const { dateKey } = getNowInArgentina();
+              const { dateKey } = getArgentinaNowParts();
               const startIso = `${dateKey}T00:00:00-03:00`;
               const endIso = `${dateKey}T23:59:59-03:00`;
 
@@ -293,7 +297,7 @@ const RouteProgressPopup: React.FC = () => {
                 .from("coordenadas")
                 .select("nombre, created_by, vendedor_username, created_at")
                 .or(
-                  `created_by.eq.${user.username},vendedor_username.eq.${user.username}`
+                  `created_by.eq.${usernameStr},vendedor_username.eq.${usernameStr}`
                 )
                 .gte("created_at", startIso)
                 .lte("created_at", endIso);
@@ -305,7 +309,7 @@ const RouteProgressPopup: React.FC = () => {
 
                 const visitadosTop5 = new Set(
                   coords
-                    .map((row) => normalizeValue(row.nombre))
+                    .map((row) => normalizeCliente(row.nombre))
                     .filter((nombre) => clientesTop5.includes(nombre))
                 );
 
@@ -326,8 +330,8 @@ const RouteProgressPopup: React.FC = () => {
           setItems(newItems);
           setCurrentIndex(0);
 
-          if (needRoute) markSeen(user.username!, "route", checkpoint.id);
-          if (needTop5) markSeen(user.username!, "top5", checkpoint.id);
+          if (needRoute) markSeen(usernameStr, "route", checkpoint.id);
+          if (needTop5) markSeen(usernameStr, "top5", checkpoint.id);
         }
       } finally {
         checkingRef.current = false;
@@ -360,25 +364,31 @@ const RouteProgressPopup: React.FC = () => {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/35 z-[90]" />
+      <div className="fixed inset-0 bg-black/40 z-[90]" />
 
       <div className="fixed inset-0 z-[91] flex items-center justify-center px-4">
-        <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200 p-5">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="absolute top-3 right-3 rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-            aria-label="Cerrar popup"
-          >
-            <X size={18} />
-          </button>
-
-          <div className="pr-10">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              {currentItem.title}
+        <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-red-200 bg-white shadow-2xl">
+          <div className="bg-gradient-to-r from-red-600 to-rose-500 px-4 py-3 flex items-center justify-between">
+            <h3 className="text-white font-bold text-sm tracking-wide">
+              ALERTA DE GESTIÓN
             </h3>
 
-            <p className="text-sm leading-6 text-gray-700 whitespace-pre-line">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-md p-1 text-white/90 hover:bg-white/20"
+              aria-label="Cerrar popup"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="p-5">
+            <h4 className="mb-2 text-base font-bold text-gray-900">
+              {currentItem.title}
+            </h4>
+
+            <p className="text-sm leading-relaxed text-gray-800 whitespace-pre-line">
               {currentItem.body}
             </p>
           </div>
