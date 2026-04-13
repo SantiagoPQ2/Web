@@ -23,6 +23,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabase";
+import RouteProgressPopup from "./RouteProgressPopup";
 
 type SystemNotification = {
   id: string;
@@ -42,27 +43,6 @@ type BellItem = {
   tipo: "sistema" | "chat";
   chatUser?: string;
   rawId?: number;
-};
-
-type AdminEquipoSnapshot = {
-  id: number;
-  snapshot_date: string;
-  snapshot_taken_at: string;
-  dia_codigo: string;
-  user_id: string;
-  username: string;
-  nombre_mostrar: string | null;
-  ffvv: string | null;
-  role: string;
-  pdv_planificados: number | null;
-  pdv_visitados: number | null;
-  pdv_menos_5_min: number | null;
-  horas_trabajadas: number | null;
-  puntos_gps: number | null;
-  primera_marca: string | null;
-  ultima_marca: string | null;
-  created_at: string;
-  fecha: string | null;
 };
 
 const CHAT_USER_META_REGEX = /\[\[CHAT_USER:([^\]]+)\]\]\s*$/i;
@@ -99,9 +79,6 @@ const Navigation: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notiRef = useRef<HTMLDivElement>(null);
   const bellTimeoutRef = useRef<number | null>(null);
-  const snapshotTimeoutsRef = useRef<Record<string, number>>({});
-
-  const SNAPSHOT_ALERT_DELAY_MS = 5 * 60 * 1000;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -124,11 +101,6 @@ const Navigation: React.FC = () => {
   useEffect(() => {
     return () => {
       if (bellTimeoutRef.current) window.clearTimeout(bellTimeoutRef.current);
-
-      Object.values(snapshotTimeoutsRef.current).forEach((timeoutId) => {
-        window.clearTimeout(timeoutId);
-      });
-      snapshotTimeoutsRef.current = {};
     };
   }, []);
 
@@ -137,19 +109,6 @@ const Navigation: React.FC = () => {
       return new Date(fecha).toLocaleString("es-AR");
     } catch {
       return fecha;
-    }
-  };
-
-  const formatearHoraArgentina = (fechaIso?: string | null) => {
-    if (!fechaIso) return "";
-    try {
-      return new Date(fechaIso).toLocaleTimeString("es-AR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "America/Argentina/Buenos_Aires",
-      });
-    } catch {
-      return "";
     }
   };
 
@@ -183,143 +142,6 @@ const Navigation: React.FC = () => {
   const cerrarToast = () => {
     setToastVisible(false);
     setToastNotif(null);
-  };
-
-  const getSnapshotSeenKey = (username: string, snapshotId: number) =>
-    `snapshot_popup_seen_${username}_${snapshotId}`;
-
-  const getSnapshotTimeoutKey = (username: string, snapshotId: number) =>
-    `snapshot_timeout_${username}_${snapshotId}`;
-
-  const yaFueMostradoSnapshot = (username: string, snapshotId: number) => {
-    try {
-      return (
-        localStorage.getItem(getSnapshotSeenKey(username, snapshotId)) === "1"
-      );
-    } catch {
-      return false;
-    }
-  };
-
-  const marcarSnapshotComoMostrado = (username: string, snapshotId: number) => {
-    try {
-      localStorage.setItem(getSnapshotSeenKey(username, snapshotId), "1");
-    } catch {
-      // ignore
-    }
-  };
-
-  const construirMensajeSnapshot = (snap: AdminEquipoSnapshot) => {
-    const planificados = snap.pdv_planificados ?? 0;
-    const visitados = snap.pdv_visitados ?? 0;
-    const menos5 = snap.pdv_menos_5_min ?? 0;
-    const hora = formatearHoraArgentina(snap.snapshot_taken_at);
-
-    return [
-      hora ? `Corte ${hora} hs` : "Nuevo corte de gestión",
-      `Planificados: ${planificados}`,
-      `Visitados: ${visitados}`,
-      `Menos de 5 min: ${menos5}`,
-    ].join("\n");
-  };
-
-  const mostrarToastSnapshot = (snap: AdminEquipoSnapshot) => {
-    const bellItem: BellItem = {
-      id: `snapshot_${snap.id}`,
-      titulo: "📍 Resumen de gestión",
-      mensaje: construirMensajeSnapshot(snap),
-      created_at: snap.snapshot_taken_at || snap.created_at,
-      leida: false,
-      tipo: "sistema",
-    };
-
-    dispararAnimacionCampana();
-    mostrarToast(bellItem);
-  };
-
-  const obtenerUltimoSnapshotReal = async (username: string) => {
-    const { data, error } = await supabase
-      .from("admin_equipo_snapshots")
-      .select("*")
-      .eq("username", username)
-      .eq("role", "vendedor")
-      .order("snapshot_taken_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error validando último snapshot real:", error);
-      return null;
-    }
-
-    return (data as AdminEquipoSnapshot | null) ?? null;
-  };
-
-  const evaluarSnapshotParaPopup = async (snap: AdminEquipoSnapshot) => {
-    if (!user?.username || !user?.role) return;
-    if (user.role !== "vendedor") return;
-
-    // PRUEBA INICIAL SOLO PARA 7700
-    if (user.username !== "7700") return;
-
-    if ((snap.role || "").toLowerCase() !== "vendedor") return;
-    if (snap.username !== user.username) return;
-
-    const ultimoReal = await obtenerUltimoSnapshotReal(user.username);
-    if (!ultimoReal) return;
-    if (ultimoReal.id !== snap.id) return;
-
-    const fechaBase = snap.snapshot_taken_at || snap.created_at;
-    if (!fechaBase) return;
-
-    const ts = new Date(fechaBase).getTime();
-    if (Number.isNaN(ts)) return;
-
-    if (yaFueMostradoSnapshot(user.username, snap.id)) return;
-
-    const timeoutKey = getSnapshotTimeoutKey(user.username, snap.id);
-
-    if (snapshotTimeoutsRef.current[timeoutKey]) {
-      window.clearTimeout(snapshotTimeoutsRef.current[timeoutKey]);
-      delete snapshotTimeoutsRef.current[timeoutKey];
-    }
-
-    const ahora = Date.now();
-    const faltanMs = ts + SNAPSHOT_ALERT_DELAY_MS - ahora;
-
-    if (faltanMs <= 0) {
-      marcarSnapshotComoMostrado(user.username, snap.id);
-      mostrarToastSnapshot(snap);
-      return;
-    }
-
-    const timeoutId = window.setTimeout(async () => {
-      const ultimoAntesDeMostrar = await obtenerUltimoSnapshotReal(user.username!);
-      if (!ultimoAntesDeMostrar) return;
-      if (ultimoAntesDeMostrar.id !== snap.id) return;
-      if (yaFueMostradoSnapshot(user.username!, snap.id)) return;
-
-      marcarSnapshotComoMostrado(user.username!, snap.id);
-      mostrarToastSnapshot(snap);
-
-      const currentKey = getSnapshotTimeoutKey(user.username!, snap.id);
-      delete snapshotTimeoutsRef.current[currentKey];
-    }, faltanMs);
-
-    snapshotTimeoutsRef.current[timeoutKey] = timeoutId;
-  };
-
-  const cargarUltimoSnapshotVendedor = async () => {
-    if (!user?.username || !user?.role) return;
-    if (user.role !== "vendedor") return;
-
-    // PRUEBA INICIAL SOLO PARA 7700
-    if (user.username !== "7700") return;
-
-    const ultimo = await obtenerUltimoSnapshotReal(user.username);
-    if (!ultimo) return;
-
-    await evaluarSnapshotParaPopup(ultimo);
   };
 
   const cargarNotificacionesSistema = async () => {
@@ -517,63 +339,6 @@ const Navigation: React.FC = () => {
     };
   }, [user?.username]);
 
-  useEffect(() => {
-    if (!user?.username || !user?.role) return;
-    if (user.role !== "vendedor") return;
-
-    // PRUEBA INICIAL SOLO PARA 7700
-    if (user.username !== "7700") return;
-
-    cargarUltimoSnapshotVendedor();
-
-    const snapshotChannel = supabase
-      .channel(`snapshot_popup_${user.username}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "admin_equipo_snapshots",
-        },
-        async (payload) => {
-          const nuevo = payload.new as AdminEquipoSnapshot;
-          if (!nuevo) return;
-          if (nuevo.username !== user.username) return;
-          if ((nuevo.role || "").toLowerCase() !== "vendedor") return;
-
-          await evaluarSnapshotParaPopup(nuevo);
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "admin_equipo_snapshots",
-        },
-        async (payload) => {
-          const actualizado = payload.new as AdminEquipoSnapshot;
-          if (!actualizado) return;
-          if (actualizado.username !== user.username) return;
-          if ((actualizado.role || "").toLowerCase() !== "vendedor") return;
-
-          await evaluarSnapshotParaPopup(actualizado);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(snapshotChannel);
-
-      Object.keys(snapshotTimeoutsRef.current).forEach((key) => {
-        if (key.includes(`_${user.username}_`)) {
-          window.clearTimeout(snapshotTimeoutsRef.current[key]);
-          delete snapshotTimeoutsRef.current[key];
-        }
-      });
-    };
-  }, [user?.username, user?.role]);
-
   const bellItems = useMemo(() => {
     const fromSystem: BellItem[] = systemNotifications
       .filter((n) => !esNotificacionGenericaDeChat(n.titulo, n.mensaje))
@@ -599,8 +364,6 @@ const Navigation: React.FC = () => {
   const sinLeer = bellItems.filter((n) => !n.leida).length;
 
   const handleNotificationClick = async (item: BellItem) => {
-    if (item.id.startsWith("snapshot_")) return;
-
     setToastVisible(false);
     setNotisAbiertas(false);
 
@@ -1077,10 +840,11 @@ const Navigation: React.FC = () => {
   }
 
   const hideSettingsEverywhere = user?.role === "administracion-cordoba";
-  const esToastSnapshot = toastNotif?.id?.startsWith("snapshot_");
 
   return (
     <>
+      <RouteProgressPopup />
+
       <header className="w-full bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-3">
@@ -1102,31 +866,11 @@ const Navigation: React.FC = () => {
           <div className="flex items-center gap-4 relative">
             {toastVisible && toastNotif && (
               <div className="fixed top-[72px] left-1/2 -translate-x-1/2 z-[80] w-[92vw] max-w-[420px] sm:left-auto sm:right-4 sm:translate-x-0">
-                <div
-                  className={
-                    esToastSnapshot
-                      ? "rounded-2xl border-2 border-red-300 bg-white shadow-2xl overflow-hidden"
-                      : "rounded-xl border border-red-200 bg-white shadow-xl overflow-hidden"
-                  }
-                >
-                  <div
-                    className={
-                      esToastSnapshot
-                        ? "bg-gradient-to-r from-red-600 to-rose-500 px-4 py-3 border-b border-red-200"
-                        : "bg-red-50 px-4 py-2 border-b border-red-100"
-                    }
-                  >
+                <div className="rounded-xl border border-red-200 bg-white shadow-xl overflow-hidden">
+                  <div className="bg-red-50 px-4 py-2 border-b border-red-100">
                     <div className="flex items-center justify-between gap-3">
-                      <p
-                        className={
-                          esToastSnapshot
-                            ? "text-sm font-extrabold text-white tracking-wide"
-                            : "text-sm font-semibold text-red-700"
-                        }
-                      >
-                        {esToastSnapshot
-                          ? "ALERTA DE GESTIÓN"
-                          : toastNotif.tipo === "chat"
+                      <p className="text-sm font-semibold text-red-700">
+                        {toastNotif.tipo === "chat"
                           ? "Nuevo mensaje"
                           : "Nueva notificación"}
                       </p>
@@ -1134,11 +878,7 @@ const Navigation: React.FC = () => {
                       <button
                         type="button"
                         onClick={cerrarToast}
-                        className={
-                          esToastSnapshot
-                            ? "shrink-0 rounded-md p-1 text-white/90 hover:bg-white/20"
-                            : "shrink-0 rounded-md p-1 text-red-700 hover:bg-red-100"
-                        }
+                        className="shrink-0 rounded-md p-1 text-red-700 hover:bg-red-100"
                         aria-label="Cerrar notificación"
                       >
                         <X size={18} />
@@ -1146,24 +886,12 @@ const Navigation: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className={esToastSnapshot ? "p-5" : "p-4"}>
-                    <p
-                      className={
-                        esToastSnapshot
-                          ? "text-base font-extrabold text-gray-900"
-                          : "text-sm font-semibold text-gray-900"
-                      }
-                    >
+                  <div className="p-4">
+                    <p className="text-sm font-semibold text-gray-900">
                       {toastNotif.titulo}
                     </p>
 
-                    <p
-                      className={
-                        esToastSnapshot
-                          ? "text-sm text-gray-800 mt-2 leading-relaxed whitespace-pre-line"
-                          : "text-sm text-gray-700 mt-1 leading-relaxed whitespace-pre-line"
-                      }
-                    >
+                    <p className="text-sm text-gray-700 mt-1 leading-relaxed whitespace-pre-line">
                       {toastNotif.mensaje}
                     </p>
 
