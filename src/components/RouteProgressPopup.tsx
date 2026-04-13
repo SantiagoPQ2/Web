@@ -158,7 +158,7 @@ function markSeen(username: string, type: string, checkpointId: string) {
   try {
     localStorage.setItem(buildSeenKey(username, type, checkpointId), "1");
   } catch {
-    // ignore
+    //
   }
 }
 
@@ -257,12 +257,19 @@ const RouteProgressPopup: React.FC = () => {
       try {
         const newItems: PopupItem[] = [];
 
+        // =========================
+        // 1) POPUP DE RUTA
+        // =========================
         if (needRoute) {
+          const diaCodigo = getDiaCodigoArgentina();
+          const { dateKey } = getArgentinaNowParts();
+
           const { data: snapshotRows, error: snapshotError } = await supabase
             .from("admin_equipo_snapshots")
             .select("*")
             .eq("username", usernameStr)
-            .order("snapshot_date", { ascending: false })
+            .eq("dia_codigo", diaCodigo)
+            .or(`snapshot_date.eq.${dateKey},fecha.eq.${dateKey}`)
             .order("snapshot_taken_at", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(1);
@@ -297,6 +304,9 @@ const RouteProgressPopup: React.FC = () => {
           }
         }
 
+        // =========================
+        // 2) POPUP DE TOP 5
+        // =========================
         if (needTop5) {
           const diaCodigo = getDiaCodigoArgentina();
           const { dateKey } = getArgentinaNowParts();
@@ -369,6 +379,12 @@ const RouteProgressPopup: React.FC = () => {
         }
 
         if (newItems.length > 0) {
+          newItems.sort((a, b) => {
+            if (a.type === "route" && b.type === "top5") return -1;
+            if (a.type === "top5" && b.type === "route") return 1;
+            return 0;
+          });
+
           setItems(newItems);
           setCurrentIndex(0);
 
