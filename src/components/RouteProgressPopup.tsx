@@ -45,21 +45,22 @@ type CoordenadaRow = {
   gps_planificada?: boolean | null;
 };
 
-type PopupItem =
-  | {
-      id: string;
-      type: "route";
-      visitados: number;
-      planificados: number;
-      projectedPercent: number;
-    }
-  | {
-      id: string;
-      type: "top5";
-      hechos: number;
-      total: number;
-      pendientes: string[];
-    };
+type RouteData = {
+  visitados: number;
+  planificados: number;
+  projectedPercent: number;
+};
+
+type Top5Data = {
+  hechos: number;
+  total: number;
+  pendientes: string[];
+};
+
+type PopupData = {
+  route: RouteData | null;
+  top5: Top5Data | null;
+};
 
 type Checkpoint = {
   id: "11:00" | "12:30" | "14:00";
@@ -141,22 +142,22 @@ function getRangoUtcDiaArgentina(fechaYYYYMMDD: string) {
   return { inicioUtc, finUtc };
 }
 
-function buildSeenKey(username: string, type: string, checkpointId: string) {
+function buildSeenKey(username: string, checkpointId: string) {
   const { dateKey } = getArgentinaNowParts();
-  return `route_popup_seen:${username}:${dateKey}:${type}:${checkpointId}`;
+  return `route_popup_seen:${username}:${dateKey}:combined:${checkpointId}`;
 }
 
-function wasSeen(username: string, type: string, checkpointId: string) {
+function wasSeen(username: string, checkpointId: string) {
   try {
-    return localStorage.getItem(buildSeenKey(username, type, checkpointId)) === "1";
+    return localStorage.getItem(buildSeenKey(username, checkpointId)) === "1";
   } catch {
     return false;
   }
 }
 
-function markSeen(username: string, type: string, checkpointId: string) {
+function markSeen(username: string, checkpointId: string) {
   try {
-    localStorage.setItem(buildSeenKey(username, type, checkpointId), "1");
+    localStorage.setItem(buildSeenKey(username, checkpointId), "1");
   } catch {
     //
   }
@@ -182,16 +183,14 @@ function getPercentColorClass(percent: number) {
 const RouteProgressPopup: React.FC = () => {
   const { user } = useAuth();
 
-  const [items, setItems] = useState<PopupItem[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [verifiedVendor, setVerifiedVendor] = useState<boolean | null>(null);
+  const [popupData, setPopupData] = useState<PopupData | null>(null);
 
   const checkingRef = useRef(false);
 
-  const currentItem = useMemo(
-    () => items[currentIndex] ?? null,
-    [items, currentIndex]
-  );
+  const hasContent = useMemo(() => {
+    return Boolean(popupData?.route || popupData?.top5);
+  }, [popupData]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,157 +246,129 @@ const RouteProgressPopup: React.FC = () => {
       const usernameStr = String(user.username).trim();
       const userId = String(user.id).trim();
 
-      const needRoute = !wasSeen(usernameStr, "route", checkpoint.id);
-      const needTop5 = !wasSeen(usernameStr, "top5", checkpoint.id);
-
-      if (!needRoute && !needTop5) return;
+      if (wasSeen(usernameStr, checkpoint.id)) return;
 
       checkingRef.current = true;
 
       try {
-        const newItems: PopupItem[] = [];
+        const diaCodigo = getDiaCodigoArgentina();
+        const { dateKey } = getArgentinaNowParts();
+        const { inicioUtc, finUtc } = getRangoUtcDiaArgentina(dateKey);
+
+        let routeData: RouteData | null = null;
+        let top5Data: Top5Data | null = null;
 
         // =========================
-        // 1) POPUP DE RUTA
+        // 1) BLOQUE RUTA
         // =========================
-        if (needRoute) {
-          const diaCodigo = getDiaCodigoArgentina();
-          const { dateKey } = getArgentinaNowParts();
+        const { data: snapshotRows, error: snapshotError } = await supabase
+          .from("admin_equipo_snapshots")
+          .select("*")
+          .eq("username", usernameStr)
+          .eq("dia_codigo", diaCodigo)
+          .or(`snapshot_date.eq.${dateKey},fecha.eq.${dateKey}`)
+          .order("snapshot_taken_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-          const { data: snapshotRows, error: snapshotError } = await supabase
-            .from("admin_equipo_snapshots")
-            .select("*")
-            .eq("username", usernameStr)
-            .eq("dia_codigo", diaCodigo)
-            .or(`snapshot_date.eq.${dateKey},fecha.eq.${dateKey}`)
-            .order("snapshot_taken_at", { ascending: false })
-            .order("created_at", { ascending: false })
-            .limit(1);
+        if (snapshotError) {
+          console.error("Error cargando snapshot:", snapshotError);
+        } else {
+          const snap =
+            ((snapshotRows || [])[0] as SnapshotRow | undefined) ?? undefined;
 
-          if (snapshotError) {
-            console.error("Error cargando snapshot:", snapshotError);
-          } else {
-            const snap =
-              ((snapshotRows || [])[0] as SnapshotRow | undefined) ?? undefined;
+          if (snap) {
+            const visitados = safeNumber(snap.pdv_visitados);
+            const planificados = safeNumber(snap.pdv_planificados);
 
-            if (snap) {
-              const visitados = safeNumber(snap.pdv_visitados);
-              const planificados = safeNumber(snap.pdv_planificados);
+            if (planificados > 0) {
+              const projected =
+                (visitados / planificados) *
+                (FULL_DAY_HOURS / checkpoint.workedHours) *
+                100;
 
-              if (planificados > 0) {
-                const projected =
-                  (visitados / planificados) *
-                  (FULL_DAY_HOURS / checkpoint.workedHours) *
-                  100;
-
-                const projectedBounded = Math.max(0, Math.min(100, projected));
-
-                newItems.push({
-                  id: `route-${checkpoint.id}`,
-                  type: "route",
-                  visitados,
-                  planificados,
-                  projectedPercent: projectedBounded,
-                });
-              }
+              routeData = {
+                visitados,
+                planificados,
+                projectedPercent: Math.max(0, Math.min(100, projected)),
+              };
             }
           }
         }
 
         // =========================
-        // 2) POPUP DE TOP 5
+        // 2) BLOQUE TOP 5
         // =========================
-        if (needTop5) {
-          const diaCodigo = getDiaCodigoArgentina();
-          const { dateKey } = getArgentinaNowParts();
-          const { inicioUtc, finUtc } = getRangoUtcDiaArgentina(dateKey);
+        const { data: top5Rows, error: top5Error } = await supabase
+          .from("top_5")
+          .select("cliente, vendedor_username, dia, razon_social")
+          .eq("vendedor_username", usernameStr)
+          .eq("dia", diaCodigo);
 
-          const { data: top5Rows, error: top5Error } = await supabase
-            .from("top_5")
-            .select("cliente, vendedor_username, dia, razon_social")
-            .eq("vendedor_username", usernameStr)
-            .eq("dia", diaCodigo);
+        if (top5Error) {
+          console.error("Error cargando TOP 5:", top5Error);
+        } else {
+          const top5 = (top5Rows as Top5Row[] | null) ?? [];
 
-          if (top5Error) {
-            console.error("Error cargando TOP 5:", top5Error);
-          } else {
-            const top5 = (top5Rows as Top5Row[] | null) ?? [];
+          const clientesTop5 = Array.from(
+            new Set(
+              top5
+                .filter(
+                  (row) => normalizarTexto(row.dia) === normalizarTexto(diaCodigo)
+                )
+                .map((row) => normalizeCliente(row.cliente))
+                .filter(Boolean)
+            )
+          );
 
-            const clientesTop5 = Array.from(
-              new Set(
-                top5
-                  .filter(
-                    (row) => normalizarTexto(row.dia) === normalizarTexto(diaCodigo)
-                  )
-                  .map((row) => normalizeCliente(row.cliente))
+          if (clientesTop5.length > 0) {
+            const { data: coordsRows, error: coordsError } = await supabase
+              .from("coordenadas")
+              .select("nombre, created_by, vendedor_username, created_at, gps_planificada")
+              .gte("created_at", inicioUtc)
+              .lte("created_at", finUtc)
+              .or(
+                [
+                  `created_by.eq.${userId}`,
+                  `vendedor_username.eq.${usernameStr}`,
+                ].join(",")
+              );
+
+            if (coordsError) {
+              console.error("Error cargando coordenadas para TOP 5:", coordsError);
+            } else {
+              const coords = (coordsRows as CoordenadaRow[] | null) ?? [];
+
+              const visitadosSet = new Set(
+                coords
+                  .map((row) => normalizeCliente(row.nombre))
                   .filter(Boolean)
-              )
-            );
+              );
 
-            if (clientesTop5.length > 0) {
-              const { data: coordsRows, error: coordsError } = await supabase
-                .from("coordenadas")
-                .select("nombre, created_by, vendedor_username, created_at, gps_planificada")
-                .gte("created_at", inicioUtc)
-                .lte("created_at", finUtc)
-                .or(
-                  [
-                    `created_by.eq.${userId}`,
-                    `vendedor_username.eq.${usernameStr}`,
-                  ].join(",")
-                );
+              const hechosList = clientesTop5.filter((cli) =>
+                visitadosSet.has(cli)
+              );
 
-              if (coordsError) {
-                console.error("Error cargando coordenadas para TOP 5:", coordsError);
-              } else {
-                const coords = (coordsRows as CoordenadaRow[] | null) ?? [];
+              const pendientesList = clientesTop5.filter(
+                (cli) => !visitadosSet.has(cli)
+              );
 
-                const visitadosSet = new Set(
-                  coords
-                    .map((row) => normalizeCliente(row.nombre))
-                    .filter(Boolean)
-                );
-
-                const hechosList = clientesTop5.filter((cli) =>
-                  visitadosSet.has(cli)
-                );
-
-                const pendientesList = clientesTop5.filter(
-                  (cli) => !visitadosSet.has(cli)
-                );
-
-                newItems.push({
-                  id: `top5-${checkpoint.id}`,
-                  type: "top5",
-                  hechos: hechosList.length,
-                  total: clientesTop5.length,
-                  pendientes: pendientesList,
-                });
-              }
+              top5Data = {
+                hechos: hechosList.length,
+                total: clientesTop5.length,
+                pendientes: pendientesList,
+              };
             }
           }
         }
 
-        if (newItems.length > 0) {
-          newItems.sort((a, b) => {
-            if (a.type === "route" && b.type === "top5") return -1;
-            if (a.type === "top5" && b.type === "route") return 1;
-            return 0;
+        if (routeData || top5Data) {
+          setPopupData({
+            route: routeData,
+            top5: top5Data,
           });
 
-          setItems(newItems);
-          setCurrentIndex(0);
-
-          const routeWasAdded = newItems.some((item) => item.type === "route");
-          const top5WasAdded = newItems.some((item) => item.type === "top5");
-
-          if (routeWasAdded) {
-            markSeen(usernameStr, "route", checkpoint.id);
-          }
-
-          if (top5WasAdded) {
-            markSeen(usernameStr, "top5", checkpoint.id);
-          }
+          markSeen(usernameStr, checkpoint.id);
         }
       } finally {
         checkingRef.current = false;
@@ -414,19 +385,11 @@ const RouteProgressPopup: React.FC = () => {
   }, [user?.id, user?.username, verifiedVendor]);
 
   const handleClose = () => {
-    const next = currentIndex + 1;
-
-    if (next < items.length) {
-      setCurrentIndex(next);
-      return;
-    }
-
-    setItems([]);
-    setCurrentIndex(0);
+    setPopupData(null);
   };
 
   if (verifiedVendor !== true) return null;
-  if (!currentItem) return null;
+  if (!hasContent || !popupData) return null;
 
   return (
     <>
@@ -452,9 +415,9 @@ const RouteProgressPopup: React.FC = () => {
             </button>
           </div>
 
-          <div className="p-6">
-            {currentItem.type === "route" ? (
-              <>
+          <div className="p-6 space-y-5">
+            {popupData.route && (
+              <div className="rounded-2xl border border-gray-100 bg-white">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50">
                     <TrendingUp size={20} className="text-red-600" />
@@ -464,11 +427,11 @@ const RouteProgressPopup: React.FC = () => {
                     <p className="text-[15px] leading-6 text-gray-900">
                       Visitaste{" "}
                       <span className="font-extrabold text-red-600">
-                        {currentItem.visitados}
+                        {popupData.route.visitados}
                       </span>{" "}
                       clientes de{" "}
                       <span className="font-extrabold text-gray-900">
-                        {currentItem.planificados}
+                        {popupData.route.planificados}
                       </span>
                       .
                     </p>
@@ -477,10 +440,10 @@ const RouteProgressPopup: React.FC = () => {
                       Si seguís así, terminás la ruta con un avance estimado del{" "}
                       <span
                         className={`font-extrabold ${getPercentColorClass(
-                          currentItem.projectedPercent
+                          popupData.route.projectedPercent
                         )}`}
                       >
-                        {formatPercent(currentItem.projectedPercent)}%
+                        {formatPercent(popupData.route.projectedPercent)}%
                       </span>
                       .
                     </p>
@@ -491,14 +454,14 @@ const RouteProgressPopup: React.FC = () => {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">Visitados</span>
                     <span className="font-bold text-gray-900">
-                      {currentItem.visitados}
+                      {popupData.route.visitados}
                     </span>
                   </div>
 
                   <div className="mt-2 flex items-center justify-between text-sm">
                     <span className="text-gray-500">Planificados</span>
                     <span className="font-bold text-gray-900">
-                      {currentItem.planificados}
+                      {popupData.route.planificados}
                     </span>
                   </div>
 
@@ -506,16 +469,18 @@ const RouteProgressPopup: React.FC = () => {
                     <span className="text-gray-500">Proyección</span>
                     <span
                       className={`font-extrabold ${getPercentColorClass(
-                        currentItem.projectedPercent
+                        popupData.route.projectedPercent
                       )}`}
                     >
-                      {formatPercent(currentItem.projectedPercent)}%
+                      {formatPercent(popupData.route.projectedPercent)}%
                     </span>
                   </div>
                 </div>
-              </>
-            ) : (
-              <>
+              </div>
+            )}
+
+            {popupData.top5 && (
+              <div className="rounded-2xl border border-gray-100 bg-white pt-1">
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-50">
                     <Target size={20} className="text-red-600" />
@@ -525,11 +490,11 @@ const RouteProgressPopup: React.FC = () => {
                     <p className="text-[15px] leading-6 text-gray-900">
                       Ya buscaste{" "}
                       <span className="font-extrabold text-red-600">
-                        {currentItem.hechos}
+                        {popupData.top5.hechos}
                       </span>{" "}
                       de{" "}
                       <span className="font-extrabold text-gray-900">
-                        {currentItem.total}
+                        {popupData.top5.total}
                       </span>{" "}
                       clientes de tu TOP 5 de hoy.
                     </p>
@@ -537,7 +502,7 @@ const RouteProgressPopup: React.FC = () => {
                     <p className="mt-2 text-sm leading-6 text-gray-600">
                       Te faltan{" "}
                       <span className="font-extrabold text-red-600">
-                        {Math.max(0, currentItem.total - currentItem.hechos)}
+                        {Math.max(0, popupData.top5.total - popupData.top5.hechos)}
                       </span>{" "}
                       para completar la prioridad del día.
                     </p>
@@ -548,36 +513,36 @@ const RouteProgressPopup: React.FC = () => {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-500">TOP 5 buscados</span>
                     <span className="font-bold text-gray-900">
-                      {currentItem.hechos}
+                      {popupData.top5.hechos}
                     </span>
                   </div>
 
                   <div className="mt-2 flex items-center justify-between text-sm">
                     <span className="text-gray-500">Total TOP 5</span>
                     <span className="font-bold text-gray-900">
-                      {currentItem.total}
+                      {popupData.top5.total}
                     </span>
                   </div>
 
                   <div className="mt-2 flex items-center justify-between text-sm">
                     <span className="text-gray-500">Pendientes</span>
                     <span className="font-extrabold text-red-600">
-                      {Math.max(0, currentItem.total - currentItem.hechos)}
+                      {Math.max(0, popupData.top5.total - popupData.top5.hechos)}
                     </span>
                   </div>
                 </div>
 
-                {currentItem.pendientes.length > 0 && (
+                {popupData.top5.pendientes.length > 0 && (
                   <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
                     <p className="text-xs font-bold uppercase tracking-wide text-red-700">
                       Clientes pendientes
                     </p>
                     <p className="mt-2 text-sm leading-6 text-red-900 break-words">
-                      {currentItem.pendientes.join(", ")}
+                      {popupData.top5.pendientes.join(", ")}
                     </p>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
