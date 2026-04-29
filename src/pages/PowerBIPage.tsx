@@ -17,7 +17,7 @@ const PowerBIPage: React.FC = () => {
   // ✅ Link público de Power BI (modo "Publicar en la web")
   //    + parámetros para ocultar barras y paneles
   const reportUrl =
-    "https://app.powerbi.com/reportEmbed?reportId=3ff79265-8477-4d5c-bdc4-50894b07a79e&autoAuth=true&ctid=78b9b159-c25f-4af4-a2bb-c8f20ab43386";
+    "https://app.powerbi.com/view?r=eyJrIjoiOWE3ZGNiOTAtNTQxZS00ZmMyLTgwNDAtYjMzNjYxNjRhMDA4IiwidCI6Ijc4YjliMTU5LWMyNWYtNGFmNC1hMmJiLWM4ZjIwYWI0MzM4NiIsImMiOjR9";
 
   return (
     <div className="p-4 md:p-6 space-y-4 w-full h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100">
