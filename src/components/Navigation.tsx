@@ -277,7 +277,7 @@ function useNotifications(username: string | undefined) {
     marcarLeidasSistema,
     handleNotificationClick,
   };
-}───────────────────────────
+}
 
 interface NotificationBellProps {
   bellItems: BellItem[];
