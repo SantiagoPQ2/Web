@@ -29,8 +29,6 @@ type F96Row = {
 type UsuarioAppRow = {
   id?: string;
   username?: string | null;
-  nombre?: string | null;
-  apellido?: string | null;
   full_name?: string | null;
   name?: string | null;
 };
@@ -87,22 +85,18 @@ const PosibleRechazos: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from("usuarios_app")
-        .select("username, nombre, apellido, full_name, name")
+        .select("username, full_name, name")
         .eq("username", username)
         .maybeSingle();
 
       if (error) {
         console.error("Error leyendo usuarios_app:", error);
+        return username;
       }
 
       const row = data as UsuarioAppRow | null;
 
-      const fullName =
-        row?.full_name?.trim() ||
-        [row?.nombre?.trim(), row?.apellido?.trim()]
-          .filter(Boolean)
-          .join(" ") ||
-        row?.name?.trim();
+      const fullName = row?.full_name?.trim() || row?.name?.trim();
 
       if (fullName) return fullName;
 
@@ -121,12 +115,10 @@ const PosibleRechazos: React.FC = () => {
   ) => {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (!supabaseUrl || !token) {
-        console.warn("Faltan datos para llamar a send-push");
+      if (!supabaseUrl || !anonKey) {
+        console.warn("Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY");
         return;
       }
 
@@ -134,7 +126,7 @@ const PosibleRechazos: React.FC = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${anonKey}`,
         },
         body: JSON.stringify({
           username: destinatarioUsername,
