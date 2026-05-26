@@ -13,6 +13,7 @@ import {
   File,
   ShoppingCart,
   Users,
+  DollarSign,
 } from "lucide-react";
 
 import type { ComponentType } from "react";
@@ -28,33 +29,16 @@ export type AppRole =
   | "administracion-cordoba";
 
 export interface RouteConfig {
-  /** Path de React Router */
   path: string;
-  /** Nombre legible para el título del header */
   label: string;
-  /** Icono de lucide-react (opcional: solo aparece si está en el menú lateral) */
   icon?: ComponentType<{ className?: string }>;
-  /** Descripción corta para el sidebar */
   description?: string;
-  /** Roles que pueden acceder a esta ruta */
   roles: AppRole[];
-  /** Si es true, aparece en el menú lateral del rol */
   inMenu: boolean;
-  /**
-   * Ruta de redirección por defecto cuando el rol entra a "/".
-   * Solo se usa en la entrada especial path: "/".
-   */
   defaultRedirect?: Partial<Record<AppRole, string>>;
 }
 
 // ─── Tabla central ────────────────────────────────────────────────────────────
-//
-// Para agregar una ruta nueva:
-//   1. Importá el componente página en App.tsx
-//   2. Agregá un objeto acá con path, label, roles, e inMenu
-//   3. Listo. El router y el sidebar se actualizan solos.
-//
-// ──────────────────────────────────────────────────────────────────────────────
 
 export const ROUTES: RouteConfig[] = [
   // ── Ruta raíz ──────────────────────────────────────────────────────────────
@@ -101,7 +85,7 @@ export const ROUTES: RouteConfig[] = [
     label: "Información",
     icon: Info,
     description: "Resumen y clientes del día",
-    roles: ["vendedor", "test", "admin"],  // ← sacado logistica
+    roles: ["vendedor", "test", "admin"],
     inMenu: true,
   },
   {
@@ -185,7 +169,7 @@ export const ROUTES: RouteConfig[] = [
     label: "Nuevo Rechazo",
     icon: Plus,
     description: "Registrar nuevo rechazo",
-    roles: ["admin"],  // ← sacado logistica
+    roles: ["admin"],
     inMenu: true,
   },
   {
@@ -196,8 +180,16 @@ export const ROUTES: RouteConfig[] = [
     roles: ["logistica", "admin"],
     inMenu: true,
   },
+  {
+    path: "/cuenta-corriente",
+    label: "Cuenta Corriente",
+    icon: DollarSign,
+    description: "Ver deuda en cuenta corriente",
+    roles: ["logistica", "admin"],
+    inMenu: true,
+  },
 
-  // ── Compras (supervisor + admin + administracion-cordoba) ───────────────────
+  // ── Compras ─────────────────────────────────────────────────────────────────
   {
     path: "/pedido-compra",
     label: "Pedido de Compra",
@@ -290,21 +282,15 @@ export const ROUTES: RouteConfig[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Rutas accesibles para un rol dado */
 export function getRoutesForRole(role: AppRole): RouteConfig[] {
   return ROUTES.filter((r) => r.roles.includes(role));
 }
 
-/** Items del menú lateral para un rol dado */
 export function getMenuItemsForRole(role: AppRole): RouteConfig[] {
   return ROUTES.filter((r) => r.roles.includes(role) && r.inMenu);
 }
 
-/** Label del header para un path dado */
-export function getLabelForPath(
-  path: string,
-  role?: AppRole
-): string {
+export function getLabelForPath(path: string, role?: AppRole): string {
   if (path === "/") {
     if (role === "administracion-cordoba") return "Pedido de Compra";
     if (role === "logistica") return "Posible Rechazos";
@@ -313,7 +299,6 @@ export function getLabelForPath(
   return ROUTES.find((r) => r.path === path)?.label ?? "VaFood SRL - AR";
 }
 
-/** Ruta de fallback (redirect) para un rol que entra a "/" */
 export function getDefaultPathForRole(role: AppRole): string {
   const root = ROUTES.find((r) => r.path === "/");
   return root?.defaultRedirect?.[role] ?? "/";
