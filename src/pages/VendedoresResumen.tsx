@@ -3,7 +3,6 @@ import { supabase } from "../config/supabase";
 import {
   TrendingUp,
   Clock,
-  MapPin,
   ShoppingBag,
   Users,
   ChevronDown,
@@ -14,6 +13,9 @@ import {
   Filter,
   Calendar,
   ArrowUpDown,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -31,27 +33,20 @@ interface ChessVenta {
   id: number;
   numero: string;
   fecha_comprobante: string;
-  descripcion_vendedor: string;
   cliente: string;
   razon_social: string;
-  descripcion_canal_mkt: string;
   codigo_articulo: string;
   descripcion_articulo: string;
   unidad_de_negocio: string;
   categoria: string;
   marca: string;
   bultos_total: number;
-  peso_total: number;
-  bonificacion_pct: number;
-  subtotal_bonificado: number;
   subtotal_final: number;
   id_vendedor: string;
 }
 
 interface Snapshot {
   id: number;
-  snapshot_date: string;
-  dia_codigo: string;
   username: string;
   nombre_mostrar: string;
   ffvv: string;
@@ -63,38 +58,51 @@ interface Snapshot {
   puntos_gps: number;
   primera_marca: string;
   ultima_marca: string;
+  created_at: string;
   fecha: string;
 }
 
-// ─── Stats por vendedor (computado) ──────────────────────────────────────────
+// ─── Stats globales por vendedor ──────────────────────────────────────────────
 
 interface VendedorStats {
   username: string;
   name: string;
   ffvv: string;
   supervisor: string;
-  // Ventas
   totalVentas: number;
   cantidadFacturas: number;
   cantidadClientes: number;
-  cantidadArticulos: number;
   bultosTotales: number;
   marcasDistintas: number;
-  unidadesNegocio: string[];
-  ventasPorCategoria: Record<string, number>;
-  // Actividad (último snapshot disponible)
+  // Último snapshot
   ultimaFecha: string | null;
   horasTrabajadas: number;
   pdvPlanificados: number;
   pdvVisitados: number;
-  pdvMenos5Min: number;
-  puntoGps: number;
-  primeraEntrada: string | null;
-  ultimaSalida: string | null;
-  // Promedios históricos (todos los snapshots)
   promHoras: number;
   promPdvVisitados: number;
   diasConActividad: number;
+}
+
+// ─── Resumen por fecha (para el detalle expandido) ───────────────────────────
+
+interface ResumenFecha {
+  fecha: string; // YYYY-MM-DD
+  // Ventas
+  totalVentas: number;
+  cantidadFacturas: number;
+  cantidadClientes: number;
+  bultos: number;
+  marcas: string[];
+  categorias: Record<string, number>;
+  // Actividad
+  horasTrabajadas: number | null;
+  pdvPlanificados: number | null;
+  pdvVisitados: number | null;
+  pdvMenos5Min: number | null;
+  puntoGps: number | null;
+  primeraEntrada: string | null;
+  ultimaSalida: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -135,16 +143,322 @@ const formatFecha = (s: string | null) => {
   }
 };
 
-const ffvvColor: Record<string, string> = {
-  vafood: "bg-red-100 text-red-700",
-  eusckor: "bg-blue-100 text-blue-700",
-  interior: "bg-amber-100 text-amber-700",
+const diaSemana = (s: string) => {
+  try {
+    const [y, m, d] = s.split("-").map(Number);
+    const dias = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+    return dias[new Date(y, m - 1, d).getDay()];
+  } catch {
+    return "";
+  }
 };
 
-const getFfvvStyle = (ffvv: string) =>
-  ffvvColor[ffvv?.toLowerCase()] ?? "bg-gray-100 text-gray-600";
+const getFfvvStyle = (ffvv: string) => {
+  const map: Record<string, string> = {
+    vafood: "bg-red-100 text-red-700",
+    eusckor: "bg-blue-100 text-blue-700",
+    interior: "bg-amber-100 text-amber-700",
+  };
+  return map[ffvv?.toLowerCase()] ?? "bg-gray-100 text-gray-600";
+};
 
 type SortKey = "name" | "totalVentas" | "horasTrabajadas" | "pdvVisitados" | "ffvv";
+
+// ─── Componente: detalle por fecha ────────────────────────────────────────────
+
+const DetalleFechas: React.FC<{
+  username: string;
+  ventas: ChessVenta[];
+  snapshots: Snapshot[];
+}> = ({ username, ventas, snapshots }) => {
+  const [paginaActual, setPaginaActual] = useState(0);
+  const POR_PAGINA = 5;
+
+  // Construir mapa de fechas unificado
+  const fechas = useMemo<ResumenFecha[]>(() => {
+    const map: Record<string, ResumenFecha> = {};
+
+    const asegurar = (fecha: string) => {
+      if (!map[fecha]) {
+        map[fecha] = {
+          fecha,
+          totalVentas: 0,
+          cantidadFacturas: 0,
+          cantidadClientes: 0,
+          bultos: 0,
+          marcas: [],
+          categorias: {},
+          horasTrabajadas: null,
+          pdvPlanificados: null,
+          pdvVisitados: null,
+          pdvMenos5Min: null,
+          puntoGps: null,
+          primeraEntrada: null,
+          ultimaSalida: null,
+        };
+      }
+    };
+
+    // Ventas: agrupar por fecha_comprobante
+    const facturasPorFecha: Record<string, Set<string>> = {};
+    const clientesPorFecha: Record<string, Set<string>> = {};
+    const marcasPorFecha: Record<string, Set<string>> = {};
+
+    for (const v of ventas) {
+      if (String(v.id_vendedor) !== username) continue;
+      const fecha = v.fecha_comprobante?.slice(0, 10);
+      if (!fecha) continue;
+      asegurar(fecha);
+
+      if (!facturasPorFecha[fecha]) facturasPorFecha[fecha] = new Set();
+      if (!clientesPorFecha[fecha]) clientesPorFecha[fecha] = new Set();
+      if (!marcasPorFecha[fecha]) marcasPorFecha[fecha] = new Set();
+
+      facturasPorFecha[fecha].add(v.numero);
+      clientesPorFecha[fecha].add(v.cliente);
+      marcasPorFecha[fecha].add(v.marca);
+
+      map[fecha].totalVentas += Number(v.subtotal_final) || 0;
+      map[fecha].bultos += Number(v.bultos_total) || 0;
+
+      if (v.categoria) {
+        map[fecha].categorias[v.categoria] =
+          (map[fecha].categorias[v.categoria] || 0) + (Number(v.subtotal_final) || 0);
+      }
+    }
+
+    for (const fecha of Object.keys(facturasPorFecha)) {
+      map[fecha].cantidadFacturas = facturasPorFecha[fecha].size;
+      map[fecha].cantidadClientes = clientesPorFecha[fecha].size;
+      map[fecha].marcas = Array.from(marcasPorFecha[fecha]);
+    }
+
+    // Snapshots: usar created_at para extraer la fecha
+    for (const snap of snapshots) {
+      if (String(snap.username) !== username) continue;
+      // Extraer fecha local Argentina del created_at
+      const fecha = new Date(snap.created_at)
+        .toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+      asegurar(fecha);
+
+      // Si hay múltiples snapshots el mismo día tomamos el más reciente
+      // (ya vienen ordenados desc por created_at desde la query principal)
+      if (map[fecha].horasTrabajadas === null) {
+        map[fecha].horasTrabajadas = Number(snap.horas_trabajadas) || 0;
+        map[fecha].pdvPlanificados = Number(snap.pdv_planificados) || 0;
+        map[fecha].pdvVisitados = Number(snap.pdv_visitados) || 0;
+        map[fecha].pdvMenos5Min = Number(snap.pdv_menos_5_min) || 0;
+        map[fecha].puntoGps = Number(snap.puntos_gps) || 0;
+        map[fecha].primeraEntrada = snap.primera_marca || null;
+        map[fecha].ultimaSalida = snap.ultima_marca || null;
+      }
+    }
+
+    return Object.values(map).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }, [username, ventas, snapshots]);
+
+  const totalPaginas = Math.ceil(fechas.length / POR_PAGINA);
+  const paginadas = fechas.slice(
+    paginaActual * POR_PAGINA,
+    (paginaActual + 1) * POR_PAGINA
+  );
+
+  if (fechas.length === 0) {
+    return (
+      <p className="text-sm text-gray-400 py-2">Sin registros de ventas ni actividad</p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {paginadas.map((dia) => {
+        const efPdv =
+          dia.pdvPlanificados !== null && dia.pdvPlanificados > 0
+            ? Math.round(((dia.pdvVisitados ?? 0) / dia.pdvPlanificados) * 100)
+            : null;
+
+        const topCats = Object.entries(dia.categorias)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 3);
+
+        const tieneVentas = dia.totalVentas > 0;
+        const tieneActividad = dia.horasTrabajadas !== null;
+
+        return (
+          <div
+            key={dia.fecha}
+            className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+          >
+            {/* Header de la fecha */}
+            <div className="flex items-center gap-3 px-3 py-2 bg-gray-100 dark:bg-gray-800">
+              <div className="text-center shrink-0 w-10">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase">
+                  {diaSemana(dia.fecha)}
+                </p>
+                <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                  {dia.fecha.slice(8)}/{dia.fecha.slice(5, 7)}
+                </p>
+              </div>
+
+              <div className="flex-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+                {tieneVentas ? (
+                  <>
+                    <span className="text-emerald-600 font-bold">
+                      {formatMoney(dia.totalVentas)}
+                    </span>
+                    <span className="text-gray-500">
+                      {dia.cantidadFacturas} fact · {dia.cantidadClientes} cl
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-gray-400 italic">Sin ventas</span>
+                )}
+
+                {tieneActividad && (
+                  <>
+                    <span className="text-blue-600 font-medium">
+                      {formatHoras(dia.horasTrabajadas!)}
+                    </span>
+                    {dia.pdvVisitados !== null && (
+                      <span
+                        className={`font-medium ${
+                          efPdv !== null && efPdv >= 80
+                            ? "text-emerald-600"
+                            : efPdv !== null && efPdv >= 50
+                            ? "text-amber-500"
+                            : "text-red-500"
+                        }`}
+                      >
+                        {dia.pdvVisitados}/{dia.pdvPlanificados} PDV
+                        {efPdv !== null && (
+                          <span className="text-gray-400 font-normal ml-0.5">
+                            ({efPdv}%)
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </>
+                )}
+
+                {!tieneActividad && !tieneVentas && (
+                  <span className="text-gray-400 italic">Sin datos</span>
+                )}
+              </div>
+            </div>
+
+            {/* Detalle del día */}
+            <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {/* Ventas */}
+              {tieneVentas && (
+                <div className="space-y-1">
+                  <p className="font-semibold text-gray-500 uppercase tracking-wide text-[10px] flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3" /> Ventas
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                    <span className="text-gray-400">Facturas</span>
+                    <span className="font-medium text-right">{dia.cantidadFacturas}</span>
+                    <span className="text-gray-400">Clientes</span>
+                    <span className="font-medium text-right">{dia.cantidadClientes}</span>
+                    <span className="text-gray-400">Bultos</span>
+                    <span className="font-medium text-right">{dia.bultos}</span>
+                    <span className="text-gray-400">Marcas</span>
+                    <span className="font-medium text-right">{dia.marcas.length}</span>
+                  </div>
+                  {topCats.length > 0 && (
+                    <div className="pt-1 space-y-0.5">
+                      <p className="text-[10px] text-gray-400">Top categorías</p>
+                      {topCats.map(([cat, monto]) => (
+                        <div key={cat} className="flex justify-between">
+                          <span className="text-gray-500 truncate max-w-[130px]">{cat}</span>
+                          <span className="font-medium text-gray-700 dark:text-gray-300 ml-2">
+                            {formatMoney(monto)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Actividad */}
+              {tieneActividad && (
+                <div className="space-y-1">
+                  <p className="font-semibold text-gray-500 uppercase tracking-wide text-[10px] flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Actividad
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                    <span className="text-gray-400">Entrada</span>
+                    <span className="font-medium text-right">
+                      {formatHora(dia.primeraEntrada)}
+                    </span>
+                    <span className="text-gray-400">Salida</span>
+                    <span className="font-medium text-right">
+                      {formatHora(dia.ultimaSalida)}
+                    </span>
+                    <span className="text-gray-400">Horas</span>
+                    <span className="font-medium text-right text-blue-600">
+                      {formatHoras(dia.horasTrabajadas!)}
+                    </span>
+                    <span className="text-gray-400">PDV plan.</span>
+                    <span className="font-medium text-right">{dia.pdvPlanificados}</span>
+                    <span className="text-gray-400">PDV visit.</span>
+                    <span
+                      className={`font-bold text-right ${
+                        efPdv !== null && efPdv >= 80
+                          ? "text-emerald-600"
+                          : efPdv !== null && efPdv >= 50
+                          ? "text-amber-500"
+                          : "text-red-500"
+                      }`}
+                    >
+                      {dia.pdvVisitados}
+                      {efPdv !== null && (
+                        <span className="text-gray-400 font-normal ml-1">({efPdv}%)</span>
+                      )}
+                    </span>
+                    {(dia.pdvMenos5Min ?? 0) > 0 && (
+                      <>
+                        <span className="text-gray-400">PDV &lt;5min</span>
+                        <span className="font-medium text-right text-amber-500">
+                          {dia.pdvMenos5Min}
+                        </span>
+                      </>
+                    )}
+                    <span className="text-gray-400">GPS pts</span>
+                    <span className="font-medium text-right">{dia.puntoGps}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Paginación */}
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-between pt-1 text-xs text-gray-500">
+          <button
+            onClick={() => setPaginaActual((p) => Math.max(0, p - 1))}
+            disabled={paginaActual === 0}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Anterior
+          </button>
+          <span>
+            Página {paginaActual + 1} de {totalPaginas} · {fechas.length} días
+          </span>
+          <button
+            onClick={() => setPaginaActual((p) => Math.min(totalPaginas - 1, p + 1))}
+            disabled={paginaActual === totalPaginas - 1}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+          >
+            Siguiente <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -155,17 +469,14 @@ const VendedoresResumen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filtros
   const [busqueda, setBusqueda] = useState("");
   const [filtroFFVV, setFiltroFFVV] = useState<string>("todos");
   const [filtroSupervisor, setFiltroSupervisor] = useState<string>("todos");
   const [sortKey, setSortKey] = useState<SortKey>("totalVentas");
   const [sortDesc, setSortDesc] = useState(true);
-
-  // Tarjeta expandida
   const [expandido, setExpandido] = useState<string | null>(null);
 
-  // ── Carga de datos ───────────────────────────────────────────────────────────
+  // ── Carga ────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const cargar = async () => {
@@ -184,18 +495,18 @@ const VendedoresResumen: React.FC = () => {
           supabase
             .from("chess_ventas")
             .select(
-              "id, numero, fecha_comprobante, descripcion_vendedor, cliente, razon_social, descripcion_canal_mkt, codigo_articulo, descripcion_articulo, unidad_de_negocio, categoria, marca, bultos_total, peso_total, bonificacion_pct, subtotal_bonificado, subtotal_final, id_vendedor"
+              "id, numero, fecha_comprobante, cliente, razon_social, codigo_articulo, descripcion_articulo, unidad_de_negocio, categoria, marca, bultos_total, subtotal_final, id_vendedor"
             ),
           supabase
             .from("admin_equipo_snapshots")
             .select("*")
             .eq("role", "vendedor")
-            .order("fecha", { ascending: false }),
+            .order("created_at", { ascending: false }),
         ]);
 
-        if (e1) throw new Error(`Error cargando usuarios: ${e1.message}`);
-        if (e2) throw new Error(`Error cargando ventas: ${e2.message}`);
-        if (e3) throw new Error(`Error cargando snapshots: ${e3.message}`);
+        if (e1) throw new Error(`Usuarios: ${e1.message}`);
+        if (e2) throw new Error(`Ventas: ${e2.message}`);
+        if (e3) throw new Error(`Snapshots: ${e3.message}`);
 
         setUsuarios((usuariosData as UsuarioApp[]) || []);
         setVentas((ventasData as ChessVenta[]) || []);
@@ -206,16 +517,14 @@ const VendedoresResumen: React.FC = () => {
         setLoading(false);
       }
     };
-
     cargar();
   }, []);
 
-  // ── Cómputo de stats por vendedor ────────────────────────────────────────────
+  // ── Stats globales por vendedor ──────────────────────────────────────────────
 
   const statsMap = useMemo<Record<string, VendedorStats>>(() => {
     const map: Record<string, VendedorStats> = {};
 
-    // Inicializar con usuarios
     for (const u of usuarios) {
       map[u.username] = {
         username: u.username,
@@ -225,65 +534,41 @@ const VendedoresResumen: React.FC = () => {
         totalVentas: 0,
         cantidadFacturas: 0,
         cantidadClientes: 0,
-        cantidadArticulos: 0,
         bultosTotales: 0,
         marcasDistintas: 0,
-        unidadesNegocio: [],
-        ventasPorCategoria: {},
         ultimaFecha: null,
         horasTrabajadas: 0,
         pdvPlanificados: 0,
         pdvVisitados: 0,
-        pdvMenos5Min: 0,
-        puntoGps: 0,
-        primeraEntrada: null,
-        ultimaSalida: null,
         promHoras: 0,
         promPdvVisitados: 0,
         diasConActividad: 0,
       };
     }
 
-    // Agregar ventas
-    const facturasPorVendedor: Record<string, Set<string>> = {};
-    const clientesPorVendedor: Record<string, Set<string>> = {};
-    const marcasPorVendedor: Record<string, Set<string>> = {};
-    const unidadesPorVendedor: Record<string, Set<string>> = {};
+    // Ventas globales
+    const facturas: Record<string, Set<string>> = {};
+    const clientes: Record<string, Set<string>> = {};
+    const marcas: Record<string, Set<string>> = {};
 
     for (const v of ventas) {
       const uid = String(v.id_vendedor);
       if (!map[uid]) continue;
-
-      const s = map[uid];
-      if (!facturasPorVendedor[uid]) facturasPorVendedor[uid] = new Set();
-      if (!clientesPorVendedor[uid]) clientesPorVendedor[uid] = new Set();
-      if (!marcasPorVendedor[uid]) marcasPorVendedor[uid] = new Set();
-      if (!unidadesPorVendedor[uid]) unidadesPorVendedor[uid] = new Set();
-
-      facturasPorVendedor[uid].add(v.numero);
-      clientesPorVendedor[uid].add(v.cliente);
-      marcasPorVendedor[uid].add(v.marca);
-      unidadesPorVendedor[uid].add(v.unidad_de_negocio);
-
-      s.totalVentas += Number(v.subtotal_final) || 0;
-      s.bultosTotales += Number(v.bultos_total) || 0;
-      s.cantidadArticulos += 1;
-
-      if (v.categoria) {
-        s.ventasPorCategoria[v.categoria] =
-          (s.ventasPorCategoria[v.categoria] || 0) + (Number(v.subtotal_final) || 0);
-      }
+      if (!facturas[uid]) { facturas[uid] = new Set(); clientes[uid] = new Set(); marcas[uid] = new Set(); }
+      facturas[uid].add(v.numero);
+      clientes[uid].add(v.cliente);
+      marcas[uid].add(v.marca);
+      map[uid].totalVentas += Number(v.subtotal_final) || 0;
+      map[uid].bultosTotales += Number(v.bultos_total) || 0;
     }
 
     for (const uid of Object.keys(map)) {
-      map[uid].cantidadFacturas = facturasPorVendedor[uid]?.size ?? 0;
-      map[uid].cantidadClientes = clientesPorVendedor[uid]?.size ?? 0;
-      map[uid].marcasDistintas = marcasPorVendedor[uid]?.size ?? 0;
-      map[uid].unidadesNegocio = Array.from(unidadesPorVendedor[uid] ?? []);
+      map[uid].cantidadFacturas = facturas[uid]?.size ?? 0;
+      map[uid].cantidadClientes = clientes[uid]?.size ?? 0;
+      map[uid].marcasDistintas = marcas[uid]?.size ?? 0;
     }
 
-    // Agregar snapshots
-    // El snapshot más reciente de cada vendedor para datos del día
+    // Snapshots globales
     const snapsXVendedor: Record<string, Snapshot[]> = {};
     for (const snap of snapshots) {
       const uid = String(snap.username);
@@ -293,119 +578,67 @@ const VendedoresResumen: React.FC = () => {
 
     for (const [uid, snaps] of Object.entries(snapsXVendedor)) {
       if (!map[uid]) continue;
-      const sorted = [...snaps].sort((a, b) =>
-        b.fecha.localeCompare(a.fecha)
-      );
+      const sorted = [...snaps].sort((a, b) => b.created_at.localeCompare(a.created_at));
       const ultimo = sorted[0];
       const s = map[uid];
-
       s.ultimaFecha = ultimo.fecha;
       s.horasTrabajadas = Number(ultimo.horas_trabajadas) || 0;
       s.pdvPlanificados = Number(ultimo.pdv_planificados) || 0;
       s.pdvVisitados = Number(ultimo.pdv_visitados) || 0;
-      s.pdvMenos5Min = Number(ultimo.pdv_menos_5_min) || 0;
-      s.puntoGps = Number(ultimo.puntos_gps) || 0;
-      s.primeraEntrada = ultimo.primera_marca || null;
-      s.ultimaSalida = ultimo.ultima_marca || null;
-
-      // Promedios históricos (días con actividad)
-      const activos = snaps.filter((snap) => Number(snap.horas_trabajadas) > 0);
+      const activos = snaps.filter((sn) => Number(sn.horas_trabajadas) > 0);
       s.diasConActividad = activos.length;
-      s.promHoras =
-        activos.length > 0
-          ? activos.reduce((acc, snap) => acc + Number(snap.horas_trabajadas), 0) /
-            activos.length
-          : 0;
-      s.promPdvVisitados =
-        activos.length > 0
-          ? activos.reduce((acc, snap) => acc + Number(snap.pdv_visitados), 0) /
-            activos.length
-          : 0;
+      s.promHoras = activos.length > 0
+        ? activos.reduce((acc, sn) => acc + Number(sn.horas_trabajadas), 0) / activos.length : 0;
+      s.promPdvVisitados = activos.length > 0
+        ? activos.reduce((acc, sn) => acc + Number(sn.pdv_visitados), 0) / activos.length : 0;
     }
 
     return map;
   }, [usuarios, ventas, snapshots]);
 
-  // ── Lista filtrada y ordenada ────────────────────────────────────────────────
+  // ── Filtros + orden ──────────────────────────────────────────────────────────
 
   const listaFiltrada = useMemo(() => {
     const todos = Object.values(statsMap);
-
     const filtrados = todos.filter((v) => {
-      const matchBusqueda =
-        busqueda === "" ||
-        v.name.toLowerCase().includes(busqueda.toLowerCase()) ||
-        v.username.toLowerCase().includes(busqueda.toLowerCase()) ||
-        v.supervisor.toLowerCase().includes(busqueda.toLowerCase());
-
-      const matchFFVV =
-        filtroFFVV === "todos" ||
-        v.ffvv.toLowerCase() === filtroFFVV.toLowerCase();
-
-      const matchSupervisor =
-        filtroSupervisor === "todos" || v.supervisor === filtroSupervisor;
-
-      return matchBusqueda && matchFFVV && matchSupervisor;
+      const mb = busqueda === "" || v.name.toLowerCase().includes(busqueda.toLowerCase()) || v.username.includes(busqueda);
+      const mf = filtroFFVV === "todos" || v.ffvv.toLowerCase() === filtroFFVV.toLowerCase();
+      const ms = filtroSupervisor === "todos" || v.supervisor === filtroSupervisor;
+      return mb && mf && ms;
     });
-
     filtrados.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "name") cmp = a.name.localeCompare(b.name);
-      else if (sortKey === "totalVentas") cmp = a.totalVentas - b.totalVentas;
-      else if (sortKey === "horasTrabajadas")
-        cmp = a.horasTrabajadas - b.horasTrabajadas;
-      else if (sortKey === "pdvVisitados")
-        cmp = a.pdvVisitados - b.pdvVisitados;
-      else if (sortKey === "ffvv") cmp = a.ffvv.localeCompare(b.ffvv);
-      return sortDesc ? -cmp : cmp;
+      let c = 0;
+      if (sortKey === "name") c = a.name.localeCompare(b.name);
+      else if (sortKey === "totalVentas") c = a.totalVentas - b.totalVentas;
+      else if (sortKey === "horasTrabajadas") c = a.horasTrabajadas - b.horasTrabajadas;
+      else if (sortKey === "pdvVisitados") c = a.pdvVisitados - b.pdvVisitados;
+      else if (sortKey === "ffvv") c = a.ffvv.localeCompare(b.ffvv);
+      return sortDesc ? -c : c;
     });
-
     return filtrados;
   }, [statsMap, busqueda, filtroFFVV, filtroSupervisor, sortKey, sortDesc]);
 
-  // ── Listas para filtros ──────────────────────────────────────────────────────
+  const ffvvOpciones = useMemo(() => Array.from(new Set(Object.values(statsMap).map((v) => v.ffvv).filter(Boolean))).sort(), [statsMap]);
+  const supervisorOpciones = useMemo(() => Array.from(new Set(Object.values(statsMap).map((v) => v.supervisor).filter(Boolean))).sort(), [statsMap]);
 
-  const ffvvOpciones = useMemo(() => {
-    const set = new Set(Object.values(statsMap).map((v) => v.ffvv).filter(Boolean));
-    return Array.from(set).sort();
-  }, [statsMap]);
-
-  const supervisorOpciones = useMemo(() => {
-    const set = new Set(
-      Object.values(statsMap).map((v) => v.supervisor).filter(Boolean)
-    );
-    return Array.from(set).sort();
-  }, [statsMap]);
-
-  // ── Totales globales ─────────────────────────────────────────────────────────
-
-  const totales = useMemo(() => {
-    const lista = listaFiltrada;
-    return {
-      vendedores: lista.length,
-      ventas: lista.reduce((a, v) => a + v.totalVentas, 0),
-      facturas: lista.reduce((a, v) => a + v.cantidadFacturas, 0),
-      clientes: lista.reduce((a, v) => a + v.cantidadClientes, 0),
-      bultos: lista.reduce((a, v) => a + v.bultosTotales, 0),
-      horasPromedio:
-        lista.filter((v) => v.horasTrabajadas > 0).length > 0
-          ? lista
-              .filter((v) => v.horasTrabajadas > 0)
-              .reduce((a, v) => a + v.horasTrabajadas, 0) /
-            lista.filter((v) => v.horasTrabajadas > 0).length
-          : 0,
-    };
-  }, [listaFiltrada]);
+  const totales = useMemo(() => ({
+    vendedores: listaFiltrada.length,
+    ventas: listaFiltrada.reduce((a, v) => a + v.totalVentas, 0),
+    facturas: listaFiltrada.reduce((a, v) => a + v.cantidadFacturas, 0),
+    clientes: listaFiltrada.reduce((a, v) => a + v.cantidadClientes, 0),
+    bultos: listaFiltrada.reduce((a, v) => a + v.bultosTotales, 0),
+    horasPromedio: (() => {
+      const con = listaFiltrada.filter((v) => v.horasTrabajadas > 0);
+      return con.length > 0 ? con.reduce((a, v) => a + v.horasTrabajadas, 0) / con.length : 0;
+    })(),
+  }), [listaFiltrada]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDesc(!sortDesc);
-    else {
-      setSortKey(key);
-      setSortDesc(true);
-    }
+    else { setSortKey(key); setSortDesc(true); }
   };
 
-  // ── Renderizado ──────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -430,40 +663,31 @@ const VendedoresResumen: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto px-4 py-5 space-y-5">
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-          Resumen de Vendedores
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Ventas y actividad del equipo en calle
-        </p>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Resumen de Vendedores</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Ventas y actividad del equipo · detalle por fecha al expandir</p>
       </div>
 
-      {/* ── KPIs globales ───────────────────────────────────────────────────── */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: "Vendedores", value: totales.vendedores, icon: Users, color: "text-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-900/30" },
-          { label: "Total Ventas", value: formatMoney(totales.ventas), icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
-          { label: "Facturas", value: totales.facturas, icon: ShoppingBag, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/30" },
-          { label: "Clientes", value: totales.clientes, icon: Store, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-900/30" },
-          { label: "Bultos", value: totales.bultos.toLocaleString("es-AR"), icon: Package, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/30" },
-          { label: "Prom. Horas", value: formatHoras(totales.horasPromedio), icon: Clock, color: "text-red-600", bg: "bg-red-50 dark:bg-red-900/30" },
+          { label: "Vendedores",    value: totales.vendedores,                          icon: Users,      color: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-900/30" },
+          { label: "Total Ventas",  value: formatMoney(totales.ventas),                 icon: TrendingUp, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
+          { label: "Facturas",      value: totales.facturas,                            icon: ShoppingBag,color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-900/30" },
+          { label: "Clientes",      value: totales.clientes,                            icon: Store,      color: "text-violet-600",  bg: "bg-violet-50 dark:bg-violet-900/30" },
+          { label: "Bultos",        value: totales.bultos.toLocaleString("es-AR"),      icon: Package,    color: "text-orange-600",  bg: "bg-orange-50 dark:bg-orange-900/30" },
+          { label: "Prom. Horas",   value: formatHoras(totales.horasPromedio),          icon: Clock,      color: "text-red-600",     bg: "bg-red-50 dark:bg-red-900/30" },
         ].map((kpi) => (
-          <div
-            key={kpi.label}
-            className={`${kpi.bg} rounded-xl p-3 flex flex-col gap-1 border border-transparent`}
-          >
+          <div key={kpi.label} className={`${kpi.bg} rounded-xl p-3 flex flex-col gap-1`}>
             <kpi.icon className={`${kpi.color} w-4 h-4`} />
-            <p className={`text-lg font-bold ${kpi.color} leading-tight`}>
-              {kpi.value}
-            </p>
+            <p className={`text-lg font-bold ${kpi.color} leading-tight`}>{kpi.value}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">{kpi.label}</p>
           </div>
         ))}
       </div>
 
-      {/* ── Filtros ─────────────────────────────────────────────────────────── */}
+      {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -475,62 +699,30 @@ const VendedoresResumen: React.FC = () => {
             className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 w-48"
           />
         </div>
-
-        <div className="flex items-center gap-1 text-sm">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <select
-            value={filtroFFVV}
-            onChange={(e) => setFiltroFFVV(e.target.value)}
-            className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none"
-          >
-            <option value="todos">Todas las FFVV</option>
-            {ffvvOpciones.map((f) => (
-              <option key={f} value={f}>{f}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex items-center gap-1 text-sm">
-          <select
-            value={filtroSupervisor}
-            onChange={(e) => setFiltroSupervisor(e.target.value)}
-            className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none"
-          >
-            <option value="todos">Todos los supervisores</option>
-            {supervisorOpciones.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+        <Filter className="w-4 h-4 text-gray-400" />
+        <select value={filtroFFVV} onChange={(e) => setFiltroFFVV(e.target.value)}
+          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none">
+          <option value="todos">Todas las FFVV</option>
+          {ffvvOpciones.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
+        <select value={filtroSupervisor} onChange={(e) => setFiltroSupervisor(e.target.value)}
+          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none">
+          <option value="todos">Todos los supervisores</option>
+          {supervisorOpciones.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
 
         <div className="ml-auto flex items-center gap-1 text-xs text-gray-500">
           <ArrowUpDown className="w-3.5 h-3.5" />
-          <span>Ordenar por:</span>
-          {(
-            [
-              ["totalVentas", "Ventas"],
-              ["horasTrabajadas", "Horas"],
-              ["pdvVisitados", "PDV"],
-              ["name", "Nombre"],
-            ] as [SortKey, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => toggleSort(key)}
-              className={`px-2 py-0.5 rounded-md border text-xs font-medium transition ${
-                sortKey === key
-                  ? "bg-red-600 text-white border-red-600"
-                  : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"
-              }`}
-            >
-              {label}
-              {sortKey === key && (sortDesc ? " ↓" : " ↑")}
+          {([ ["totalVentas","Ventas"], ["horasTrabajadas","Horas"], ["pdvVisitados","PDV"], ["name","Nombre"] ] as [SortKey,string][]).map(([key, label]) => (
+            <button key={key} onClick={() => toggleSort(key)}
+              className={`px-2 py-0.5 rounded-md border text-xs font-medium transition ${sortKey === key ? "bg-red-600 text-white border-red-600" : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"}`}>
+              {label}{sortKey === key && (sortDesc ? " ↓" : " ↑")}
             </button>
           ))}
         </div>
       </div>
 
-      {/* ── Tabla / Lista de vendedores ──────────────────────────────────────── */}
+      {/* Lista de vendedores */}
       <div className="space-y-2">
         {listaFiltrada.length === 0 && (
           <div className="text-center py-12 text-gray-400">
@@ -541,322 +733,69 @@ const VendedoresResumen: React.FC = () => {
 
         {listaFiltrada.map((v) => {
           const isExpanded = expandido === v.username;
-          const eficienciaPdv =
-            v.pdvPlanificados > 0
-              ? Math.round((v.pdvVisitados / v.pdvPlanificados) * 100)
-              : null;
-
-          // Top 3 categorías por monto
-          const topCats = Object.entries(v.ventasPorCategoria)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 3);
+          const efPdv = v.pdvPlanificados > 0 ? Math.round((v.pdvVisitados / v.pdvPlanificados) * 100) : null;
 
           return (
-            <div
-              key={v.username}
-              className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm"
-            >
-              {/* ── Fila principal ───────────────────────────────────────── */}
-              <button
-                type="button"
-                onClick={() => setExpandido(isExpanded ? null : v.username)}
-                className="w-full text-left"
-              >
+            <div key={v.username} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+
+              {/* Fila resumen */}
+              <button type="button" onClick={() => setExpandido(isExpanded ? null : v.username)} className="w-full text-left">
                 <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
 
-                  {/* Avatar */}
                   <div className="w-9 h-9 rounded-full bg-red-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
                     {v.name?.[0]?.toUpperCase()}
                   </div>
 
-                  {/* Nombre + FFVV */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                        {v.name}
-                      </p>
-                      <span
-                        className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getFfvvStyle(v.ffvv)}`}
-                      >
-                        {v.ffvv || "—"}
-                      </span>
+                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{v.name}</p>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getFfvvStyle(v.ffvv)}`}>{v.ffvv || "—"}</span>
                     </div>
-                    <p className="text-xs text-gray-400">
-                      ID {v.username} · {v.supervisor || "Sin supervisor"}
-                    </p>
+                    <p className="text-xs text-gray-400">ID {v.username} · {v.supervisor || "Sin supervisor"}</p>
                   </div>
 
-                  {/* Stats rápidas */}
                   <div className="hidden sm:flex items-center gap-4 text-right shrink-0">
                     <div>
-                      <p className="text-sm font-bold text-emerald-600">
-                        {v.totalVentas > 0 ? formatMoney(v.totalVentas) : "—"}
-                      </p>
-                      <p className="text-[10px] text-gray-400">
-                        {v.cantidadFacturas} fact · {v.cantidadClientes} cl
-                      </p>
+                      <p className="text-sm font-bold text-emerald-600">{v.totalVentas > 0 ? formatMoney(v.totalVentas) : "—"}</p>
+                      <p className="text-[10px] text-gray-400">{v.cantidadFacturas} fact · {v.cantidadClientes} cl</p>
                     </div>
-
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200">
-                        {v.horasTrabajadas > 0
-                          ? formatHoras(v.horasTrabajadas)
-                          : "—"}
-                      </p>
-                      <p className="text-[10px] text-gray-400">
-                        {v.ultimaFecha
-                          ? formatFecha(v.ultimaFecha)
-                          : "Sin registro"}
-                      </p>
+                    <div>
+                      <p className="text-sm font-bold text-gray-700 dark:text-gray-200">{v.horasTrabajadas > 0 ? formatHoras(v.horasTrabajadas) : "—"}</p>
+                      <p className="text-[10px] text-gray-400">{v.ultimaFecha ? formatFecha(v.ultimaFecha) : "Sin registro"}</p>
                     </div>
-
-                    {/* Barra de eficiencia PDV */}
                     <div className="w-24 hidden lg:block">
-                      <div className="flex items-center justify-between text-[10px] text-gray-400 mb-0.5">
+                      <div className="flex justify-between text-[10px] text-gray-400 mb-0.5">
                         <span>PDV</span>
-                        <span>
-                          {v.pdvVisitados}/{v.pdvPlanificados}
-                        </span>
+                        <span>{v.pdvVisitados}/{v.pdvPlanificados}</span>
                       </div>
                       <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5">
-                        <div
-                          className={`h-1.5 rounded-full transition-all ${
-                            eficienciaPdv === null
-                              ? "w-0"
-                              : eficienciaPdv >= 80
-                              ? "bg-emerald-500"
-                              : eficienciaPdv >= 50
-                              ? "bg-amber-400"
-                              : "bg-red-400"
-                          }`}
-                          style={{
-                            width: `${Math.min(eficienciaPdv ?? 0, 100)}%`,
-                          }}
-                        />
+                        <div className={`h-1.5 rounded-full ${efPdv === null ? "" : efPdv >= 80 ? "bg-emerald-500" : efPdv >= 50 ? "bg-amber-400" : "bg-red-400"}`}
+                          style={{ width: `${Math.min(efPdv ?? 0, 100)}%` }} />
                       </div>
+                    </div>
+                    <div className="text-xs text-gray-400 hidden lg:block text-right">
+                      <p className="font-medium text-gray-600 dark:text-gray-300">{v.diasConActividad} días</p>
+                      <p>~{formatHoras(v.promHoras)}</p>
                     </div>
                   </div>
 
-                  {/* Chevron */}
                   <div className="text-gray-400 shrink-0">
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
                 </div>
               </button>
 
-              {/* ── Panel expandido ─────────────────────────────────────── */}
+              {/* Panel expandido: detalle por fecha */}
               {isExpanded && (
                 <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                    {/* Ventas detalle */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1">
-                        <TrendingUp className="w-3.5 h-3.5" /> Ventas
-                      </p>
-                      {v.totalVentas === 0 ? (
-                        <p className="text-sm text-gray-400">Sin ventas registradas</p>
-                      ) : (
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Total facturado</span>
-                            <span className="font-bold text-emerald-600">
-                              {formatMoney(v.totalVentas)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Facturas</span>
-                            <span className="font-medium">{v.cantidadFacturas}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Clientes facturados</span>
-                            <span className="font-medium">{v.cantidadClientes}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Bultos totales</span>
-                            <span className="font-medium">
-                              {v.bultosTotales.toLocaleString("es-AR")}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Marcas distintas</span>
-                            <span className="font-medium">{v.marcasDistintas}</span>
-                          </div>
-                          {topCats.length > 0 && (
-                            <div className="pt-1">
-                              <p className="text-xs text-gray-400 mb-1">Top categorías</p>
-                              {topCats.map(([cat, monto]) => (
-                                <div key={cat} className="flex justify-between text-xs">
-                                  <span className="text-gray-500 truncate max-w-[140px]">
-                                    {cat}
-                                  </span>
-                                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                                    {formatMoney(monto)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Actividad del día */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> Último día registrado
-                        {v.ultimaFecha && (
-                          <span className="ml-1 text-gray-400 font-normal normal-case">
-                            ({formatFecha(v.ultimaFecha)})
-                          </span>
-                        )}
-                      </p>
-                      {!v.ultimaFecha ? (
-                        <p className="text-sm text-gray-400">Sin datos de actividad</p>
-                      ) : (
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Horas trabajadas</span>
-                            <span className="font-bold text-blue-600">
-                              {formatHoras(v.horasTrabajadas)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Primera entrada</span>
-                            <span className="font-medium">
-                              {formatHora(v.primeraEntrada)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Última marca</span>
-                            <span className="font-medium">
-                              {formatHora(v.ultimaSalida)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">PDV planificados</span>
-                            <span className="font-medium">{v.pdvPlanificados}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">PDV visitados</span>
-                            <span
-                              className={`font-bold ${
-                                eficienciaPdv !== null && eficienciaPdv >= 80
-                                  ? "text-emerald-600"
-                                  : eficienciaPdv !== null && eficienciaPdv >= 50
-                                  ? "text-amber-500"
-                                  : "text-red-500"
-                              }`}
-                            >
-                              {v.pdvVisitados}
-                              {eficienciaPdv !== null && (
-                                <span className="ml-1 text-xs font-normal text-gray-400">
-                                  ({eficienciaPdv}%)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          {v.pdvMenos5Min > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">PDV {"<"} 5 min</span>
-                              <span className="font-medium text-amber-500">
-                                {v.pdvMenos5Min}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Puntos GPS</span>
-                            <span className="font-medium">{v.puntoGps}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Promedios históricos */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" /> Histórico
-                      </p>
-                      {v.diasConActividad === 0 ? (
-                        <p className="text-sm text-gray-400">Sin historial</p>
-                      ) : (
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Días con actividad</span>
-                            <span className="font-bold">{v.diasConActividad}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Prom. horas/día</span>
-                            <span className="font-medium text-blue-600">
-                              {formatHoras(v.promHoras)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Prom. PDV visitados</span>
-                            <span className="font-medium">
-                              {v.promPdvVisitados.toFixed(1)}
-                            </span>
-                          </div>
-                          {/* Mini barra eficiencia PDV actual */}
-                          {eficienciaPdv !== null && (
-                            <div className="pt-2">
-                              <div className="flex justify-between text-[11px] text-gray-400 mb-1">
-                                <span>Eficiencia PDV (último día)</span>
-                                <span
-                                  className={
-                                    eficienciaPdv >= 80
-                                      ? "text-emerald-600 font-semibold"
-                                      : eficienciaPdv >= 50
-                                      ? "text-amber-500 font-semibold"
-                                      : "text-red-500 font-semibold"
-                                  }
-                                >
-                                  {eficienciaPdv}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                <div
-                                  className={`h-2 rounded-full ${
-                                    eficienciaPdv >= 80
-                                      ? "bg-emerald-500"
-                                      : eficienciaPdv >= 50
-                                      ? "bg-amber-400"
-                                      : "bg-red-400"
-                                  }`}
-                                  style={{
-                                    width: `${Math.min(eficienciaPdv, 100)}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Unidades de negocio */}
-                          {v.unidadesNegocio.length > 0 && (
-                            <div className="pt-1">
-                              <p className="text-xs text-gray-400 mb-1">
-                                Unidades de negocio
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {v.unidadesNegocio.map((u) => (
-                                  <span
-                                    key={u}
-                                    className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded"
-                                  >
-                                    {u}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide flex items-center gap-1 mb-3">
+                    <Calendar className="w-3.5 h-3.5" /> Detalle por fecha
+                  </p>
+                  <DetalleFechas
+                    username={v.username}
+                    ventas={ventas}
+                    snapshots={snapshots}
+                  />
                 </div>
               )}
             </div>
@@ -864,9 +803,8 @@ const VendedoresResumen: React.FC = () => {
         })}
       </div>
 
-      {/* ── Footer info ──────────────────────────────────────────────────────── */}
       <div className="text-center text-xs text-gray-400 pb-4">
-        {listaFiltrada.length} vendedores · Datos de Supabase en tiempo real
+        {listaFiltrada.length} vendedores · ventas por fecha_comprobante · actividad por created_at
       </div>
     </div>
   );
