@@ -121,10 +121,12 @@ const PosibleRechazos: React.FC = () => {
   ) => {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      if (!supabaseUrl || !supabaseAnonKey) {
-        console.warn("Faltan variables de entorno para llamar a send-push");
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!supabaseUrl || !token) {
+        console.warn("Faltan datos para llamar a send-push");
         return;
       }
 
@@ -132,7 +134,7 @@ const PosibleRechazos: React.FC = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${supabaseAnonKey}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           username: destinatarioUsername,
@@ -151,10 +153,7 @@ const PosibleRechazos: React.FC = () => {
         );
       }
     } catch (error) {
-      console.error(
-        `Error enviando push a ${destinatarioUsername}:`,
-        error
-      );
+      console.error(`Error enviando push a ${destinatarioUsername}:`, error);
     }
   };
 
@@ -227,7 +226,7 @@ const PosibleRechazos: React.FC = () => {
         console.error("Error insertando mensajes de chat:", chatError);
       }
 
-      // Enviar push notification a cada destinatario en paralelo
+      // Enviar push a cada destinatario en paralelo
       await Promise.allSettled(
         destinatarios.map((destinatario) =>
           enviarPushNotification(
