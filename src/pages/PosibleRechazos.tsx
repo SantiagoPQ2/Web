@@ -52,11 +52,9 @@ const PosibleRechazos: React.FC = () => {
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
-
     if (message) {
       setMessage(null);
     }
@@ -112,6 +110,51 @@ const PosibleRechazos: React.FC = () => {
     } catch (error) {
       console.error("Error obteniendo nombre visible del remitente:", error);
       return username;
+    }
+  };
+
+  const enviarPushNotification = async (
+    destinatarioUsername: string,
+    numeroCliente: string,
+    textoMonto: string,
+    remitenteVisible: string
+  ) => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        console.warn("Faltan variables de entorno para llamar a send-push");
+        return;
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          username: destinatarioUsername,
+          title: "⚠️ Posible Rechazo",
+          body: `${remitenteVisible} informa que el cliente ${numeroCliente} tiene un posible rechazo de $${textoMonto}`,
+          url: "/chat",
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.ok) {
+        console.warn(
+          `Push no enviado a ${destinatarioUsername}:`,
+          result.message || result.error
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Error enviando push a ${destinatarioUsername}:`,
+        error
+      );
     }
   };
 
@@ -183,6 +226,18 @@ const PosibleRechazos: React.FC = () => {
       if (chatError) {
         console.error("Error insertando mensajes de chat:", chatError);
       }
+
+      // Enviar push notification a cada destinatario en paralelo
+      await Promise.allSettled(
+        destinatarios.map((destinatario) =>
+          enviarPushNotification(
+            destinatario,
+            clienteBuscado,
+            textoMonto,
+            remitenteVisible
+          )
+        )
+      );
     } catch (error) {
       console.error("Error creando mensajes de chat:", error);
     }
