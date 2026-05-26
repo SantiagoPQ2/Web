@@ -38,6 +38,7 @@ import CatalogoB2B from "./pages/b2b/Catalogo";
 import CarritoB2B from "./pages/b2b/Carrito";
 import PedidosB2B from "./pages/b2b/Pedidos";
 import CuentaCorriente from "./pages/CuentaCorriente";
+import CuentaCorrienteJefe from "./pages/CuentaCorrienteJefe";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -54,21 +55,14 @@ import {
   type AppRole,
 } from "./config/routeConfig";
 
-// ─── Constantes de capacitación ───────────────────────────────────────────────
-
 const DEFAULT_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%204.mp4";
-
 const EUSCKOR_VIDEO_URL =
   "https://qnhjoheazstrjyhhfxev.supabase.co/storage/v1/object/public/documentos_pdf/Capsula%204.mp4";
-
 const DEFAULT_VIDEO_ID = "capsula_1_v1";
 const EUSCKOR_VIDEO_ID = "capsula_eusckor_1_v1";
-
 const DEFAULT_QUIZ_XLSX_PATH = "/Quiz.xlsx";
 const EUSCKOR_QUIZ_XLSX_PATH = "/Quiz2.xlsx";
-
-// ─── Mapa de path → componente página ────────────────────────────────────────
 
 const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/": <SearchPage />,
@@ -99,9 +93,8 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/b2b/carrito": <CarritoB2B />,
   "/b2b/pedidos": <PedidosB2B />,
   "/cuenta-corriente": <CuentaCorriente />,
+  "/cuenta-corriente-jefe": <CuentaCorrienteJefe />,
 };
-
-// ─── Componente principal protegido ──────────────────────────────────────────
 
 function ProtectedApp() {
   const { user } = useAuth();
@@ -112,7 +105,6 @@ function ProtectedApp() {
   const [ffvv, setFfvv] = useState<string | null>(null);
   const [loadingTrainingConfig, setLoadingTrainingConfig] = useState(true);
 
-  // Registro de push notifications
   useEffect(() => {
     if (!user?.username) return;
     registerPushForUser(user.username).catch((err) => {
@@ -120,7 +112,6 @@ function ProtectedApp() {
     });
   }, [user?.username]);
 
-  // Carga del campo FFVV (solo para vendedores)
   useEffect(() => {
     let isMounted = true;
 
@@ -135,7 +126,6 @@ function ProtectedApp() {
 
       try {
         setLoadingTrainingConfig(true);
-
         const { data, error } = await supabase
           .from("usuarios_app")
           .select("FFVV, ffvv")
@@ -148,9 +138,7 @@ function ProtectedApp() {
           return;
         }
 
-        if (isMounted) {
-          setFfvv(data?.FFVV ?? data?.ffvv ?? null);
-        }
+        if (isMounted) setFfvv(data?.FFVV ?? data?.ffvv ?? null);
       } catch (err) {
         console.error("Error inesperado cargando FFVV:", err);
         if (isMounted) setFfvv(null);
@@ -160,9 +148,7 @@ function ProtectedApp() {
     }
 
     loadTrainingConfig();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [user]);
 
   if (!user) return <Login />;
@@ -171,7 +157,6 @@ function ProtectedApp() {
   const defaultPath = getDefaultPathForRole(role);
   const allowedRoutes = getRoutesForRole(role);
 
-  // ── Spinner mientras carga la config de capacitación (solo vendedor) ────────
   if (role === "vendedor" && loadingTrainingConfig) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
@@ -180,14 +165,11 @@ function ProtectedApp() {
     );
   }
 
-  // ── ChatBot solo en sección B2B ─────────────────────────────────────────────
   const showChatBot = location.pathname.startsWith("/b2b");
 
-  // ── Layout principal ────────────────────────────────────────────────────────
   const appLayout = (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
-
       <main className="flex-1 overflow-hidden">
         <Routes>
           {allowedRoutes.map((route) => {
@@ -197,24 +179,15 @@ function ProtectedApp() {
               <Route key={route.path} path={route.path} element={element} />
             );
           })}
-
-          {/* Fallback: redirige a la ruta raíz del rol */}
           <Route path="*" element={<Navigate to={defaultPath} replace />} />
         </Routes>
       </main>
-
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
-
-      {showChatBot && !openChat && (
-        <ChatBubble onOpen={() => setOpenChat(true)} />
-      )}
-      {showChatBot && openChat && (
-        <ChatBot onClose={() => setOpenChat(false)} />
-      )}
+      {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
+      {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
     </div>
   );
 
-  // ── Gate de capacitación diaria (vendedor / test) ───────────────────────────
   if (role === "test") {
     return (
       <DailyTrainingGate
@@ -230,9 +203,7 @@ function ProtectedApp() {
   }
 
   if (role === "vendedor") {
-    const isEusckor =
-      String(ffvv ?? "").trim().toLowerCase() === "eusckor";
-
+    const isEusckor = String(ffvv ?? "").trim().toLowerCase() === "eusckor";
     return (
       <DailyTrainingGate
         rolesToEnforce={["vendedor"]}
@@ -248,8 +219,6 @@ function ProtectedApp() {
 
   return appLayout;
 }
-
-// ─── Raíz de la app ───────────────────────────────────────────────────────────
 
 function App() {
   return (
