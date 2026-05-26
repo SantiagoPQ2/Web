@@ -225,6 +225,14 @@ export const ROUTES: RouteConfig[] = [
     inMenu: true,
   },
   {
+    path: "/vendedores-resumen",
+    label: "Resumen Vendedores",
+    icon: BarChart3,
+    description: "Ventas y actividad de todo el equipo",
+    roles: ["admin"],
+    inMenu: true,
+  },
+  {
     path: "/planilla-carga",
     label: "Planilla de Carga",
     icon: FileText,
