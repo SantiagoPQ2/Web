@@ -37,6 +37,7 @@ import RevisarCompras from "./pages/RevisarCompras";
 import CatalogoB2B from "./pages/b2b/Catalogo";
 import CarritoB2B from "./pages/b2b/Carrito";
 import PedidosB2B from "./pages/b2b/Pedidos";
+import CuentaCorriente from "./pages/CuentaCorriente";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -68,10 +69,6 @@ const DEFAULT_QUIZ_XLSX_PATH = "/Quiz.xlsx";
 const EUSCKOR_QUIZ_XLSX_PATH = "/Quiz2.xlsx";
 
 // ─── Mapa de path → componente página ────────────────────────────────────────
-//
-// Si agregás una nueva ruta en routeConfig.ts, también agregá la entrada acá.
-//
-// ─────────────────────────────────────────────────────────────────────────────
 
 const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/": <SearchPage />,
@@ -101,6 +98,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/b2b/catalogo": <CatalogoB2B />,
   "/b2b/carrito": <CarritoB2B />,
   "/b2b/pedidos": <PedidosB2B />,
+  "/cuenta-corriente": <CuentaCorriente />,
 };
 
 // ─── Componente principal protegido ──────────────────────────────────────────
@@ -162,7 +160,9 @@ function ProtectedApp() {
     }
 
     loadTrainingConfig();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   if (!user) return <Login />;
