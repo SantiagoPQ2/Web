@@ -24,6 +24,7 @@ import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import AdminEquipoPage from "./pages/AdminEquipoPage";
+import VendedoresResumen from "./pages/VendedoresResumen";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
 import PowerBIPage from "./pages/PowerBIPage";
@@ -87,6 +88,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/chat": <ChatPage />,
   "/admin": <AdminPanel />,
   "/admin-equipo": <AdminEquipoPage />,
+  "/vendedores-resumen": <VendedoresResumen />,
   "/planilla-carga": <PlanillaCarga />,
   "/mapa": <Mapa />,
   "/powerbi": <PowerBIPage />,
