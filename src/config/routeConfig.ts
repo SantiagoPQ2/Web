@@ -18,13 +18,12 @@ import {
 
 import type { ComponentType } from "react";
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
-
 export type AppRole =
   | "vendedor"
   | "test"
   | "supervisor"
   | "logistica"
+  | "jefe-transporte"
   | "admin"
   | "administracion-cordoba";
 
@@ -38,8 +37,6 @@ export interface RouteConfig {
   defaultRedirect?: Partial<Record<AppRole, string>>;
 }
 
-// ─── Tabla central ────────────────────────────────────────────────────────────
-
 export const ROUTES: RouteConfig[] = [
   // ── Ruta raíz ──────────────────────────────────────────────────────────────
   {
@@ -52,6 +49,7 @@ export const ROUTES: RouteConfig[] = [
     defaultRedirect: {
       "administracion-cordoba": "/pedido-compra",
       logistica: "/posible-rechazos",
+      "jefe-transporte": "/cuenta-corriente-jefe",
     },
   },
 
@@ -189,6 +187,32 @@ export const ROUTES: RouteConfig[] = [
     inMenu: true,
   },
 
+  // ── Jefe Transporte ─────────────────────────────────────────────────────────
+  {
+    path: "/cuenta-corriente-jefe",
+    label: "Cuenta Corriente",
+    icon: DollarSign,
+    description: "Ver cuentas corrientes de todos los transportes",
+    roles: ["jefe-transporte", "admin"],
+    inMenu: true,
+  },
+  {
+    path: "/posible-rechazos",
+    label: "Posible Rechazos",
+    icon: Plus,
+    description: "Registrar cliente y monto aproximado",
+    roles: ["jefe-transporte"],
+    inMenu: true,
+  },
+  {
+    path: "/coordenadas",
+    label: "Coordenadas",
+    icon: MapPin,
+    description: "Consultar coordenadas",
+    roles: ["jefe-transporte"],
+    inMenu: true,
+  },
+
   // ── Compras ─────────────────────────────────────────────────────────────────
   {
     path: "/pedido-compra",
@@ -261,13 +285,13 @@ export const ROUTES: RouteConfig[] = [
     inMenu: false,
   },
 
-  // ── Comunes a todos los roles ───────────────────────────────────────────────
+  // ── Comunes ─────────────────────────────────────────────────────────────────
   {
     path: "/chat",
     label: "Chat",
     icon: MessageSquare,
     description: "Comunicación interna",
-    roles: ["vendedor", "test", "supervisor", "logistica", "admin"],
+    roles: ["vendedor", "test", "supervisor", "logistica", "jefe-transporte", "admin"],
     inMenu: true,
   },
   {
@@ -275,12 +299,10 @@ export const ROUTES: RouteConfig[] = [
     label: "Configuración",
     icon: SettingsIcon,
     description: "Configuración del usuario",
-    roles: ["vendedor", "test", "supervisor", "logistica", "admin"],
+    roles: ["vendedor", "test", "supervisor", "logistica", "jefe-transporte", "admin"],
     inMenu: true,
   },
 ];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export function getRoutesForRole(role: AppRole): RouteConfig[] {
   return ROUTES.filter((r) => r.roles.includes(role));
@@ -294,6 +316,7 @@ export function getLabelForPath(path: string, role?: AppRole): string {
   if (path === "/") {
     if (role === "administracion-cordoba") return "Pedido de Compra";
     if (role === "logistica") return "Posible Rechazos";
+    if (role === "jefe-transporte") return "Cuenta Corriente";
     return "Buscar Cliente";
   }
   return ROUTES.find((r) => r.path === path)?.label ?? "VaFood SRL - AR";
