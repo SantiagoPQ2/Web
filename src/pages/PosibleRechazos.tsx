@@ -29,7 +29,6 @@ type F96Row = {
 type UsuarioAppRow = {
   id?: string;
   username?: string | null;
-  full_name?: string | null;
   name?: string | null;
 };
 
@@ -85,7 +84,7 @@ const PosibleRechazos: React.FC = () => {
     try {
       const { data, error } = await supabase
         .from("usuarios_app")
-        .select("username, full_name, name")
+        .select("username, name")
         .eq("username", username)
         .maybeSingle();
 
@@ -95,12 +94,7 @@ const PosibleRechazos: React.FC = () => {
       }
 
       const row = data as UsuarioAppRow | null;
-
-      const fullName = row?.full_name?.trim() || row?.name?.trim();
-
-      if (fullName) return fullName;
-
-      return username;
+      return row?.name?.trim() || username;
     } catch (error) {
       console.error("Error obteniendo nombre visible del remitente:", error);
       return username;
@@ -218,7 +212,6 @@ const PosibleRechazos: React.FC = () => {
         console.error("Error insertando mensajes de chat:", chatError);
       }
 
-      // Enviar push a cada destinatario en paralelo
       await Promise.allSettled(
         destinatarios.map((destinatario) =>
           enviarPushNotification(
