@@ -9,8 +9,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export async function registerPushForUser(username: string): Promise<void> {
-  // por ahora dejamos la prueba solo para admin1
-  if (username !== "admin1") return;
+  if (!username) return;
 
   if (!("serviceWorker" in navigator)) {
     console.warn("Service Worker no soportado en este navegador");
