@@ -101,7 +101,7 @@ export const ROUTES: RouteConfig[] = [
     label: "Información",
     icon: Info,
     description: "Resumen y clientes del día",
-    roles: ["vendedor", "test", "logistica", "admin"],
+    roles: ["vendedor", "test", "admin"],  // ← sacado logistica
     inMenu: true,
   },
   {
@@ -185,7 +185,7 @@ export const ROUTES: RouteConfig[] = [
     label: "Nuevo Rechazo",
     icon: Plus,
     description: "Registrar nuevo rechazo",
-    roles: ["logistica", "admin"],
+    roles: ["admin"],  // ← sacado logistica
     inMenu: true,
   },
   {
@@ -238,7 +238,7 @@ export const ROUTES: RouteConfig[] = [
     icon: FileText,
     description: "Carga de planilla",
     roles: ["admin"],
-    inMenu: false, // accesible pero no aparece en el sidebar
+    inMenu: false,
   },
   {
     path: "/admin",
