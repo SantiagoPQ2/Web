@@ -95,11 +95,19 @@ export const ROUTES: RouteConfig[] = [
     inMenu: true,
   },
   {
+    path: "/alta-cliente",
+    label: "Alta de Clientes",
+    icon: Plus,
+    description: "Registrar nuevo cliente",
+    roles: ["admin"],
+    inMenu: true,
+  },
+  {
     path: "/video-log",
     label: "Videos",
     icon: FileText,
     description: "Ver videos disponibles",
-    roles: ["vendedor", "test", "admin"],
+    roles: ["vendedor", "test", "supervisor", "admin"],
     inMenu: true,
   },
 
