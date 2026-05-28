@@ -39,6 +39,7 @@ import CarritoB2B from "./pages/b2b/Carrito";
 import PedidosB2B from "./pages/b2b/Pedidos";
 import CuentaCorriente from "./pages/CuentaCorriente";
 import CuentaCorrienteJefe from "./pages/CuentaCorrienteJefe";
+import AltaClientePage from "./pages/AltaClientePage";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -94,6 +95,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/b2b/pedidos": <PedidosB2B />,
   "/cuenta-corriente": <CuentaCorriente />,
   "/cuenta-corriente-jefe": <CuentaCorrienteJefe />,
+  "/alta-cliente": <AltaClientePage />,
 };
 
 function ProtectedApp() {
@@ -148,7 +150,9 @@ function ProtectedApp() {
     }
 
     loadTrainingConfig();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
   if (!user) return <Login />;
