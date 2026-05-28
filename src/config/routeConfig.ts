@@ -99,7 +99,7 @@ export const ROUTES: RouteConfig[] = [
     label: "Alta de Clientes",
     icon: Plus,
     description: "Registrar nuevo cliente",
-    roles: ["admin"],
+    roles: ["vendedor", "test", "admin"],
     inMenu: true,
   },
   {
@@ -270,6 +270,14 @@ export const ROUTES: RouteConfig[] = [
     icon: Wrench,
     description: "Herramientas admin",
     roles: ["admin"],
+    inMenu: true,
+  },
+  {
+    path: "/alta-cliente-listado",
+    label: "Listado Altas de Clientes",
+    icon: Users,
+    description: "Ver todos los clientes dados de alta",
+    roles: ["admin", "administracion-cordoba"],
     inMenu: true,
   },
 
