@@ -215,25 +215,44 @@ function buildDiasTabla(
     ventasPorFecha[fecha].push(v);
   }
 
-  // Unión de fechas — SOLO días con venta
-  const fechasConVenta = new Set(Object.keys(ventasPorFecha));
+  // SOLO días con venta, ordenados ASC para calcular acumulado
+  const fechasOrdenadas = Array.from(new Set(Object.keys(ventasPorFecha))).sort();
 
-  const resultado: DiaTabla[] = [];
+  // CCC acumulado por mes: clientes ya vistos en días anteriores del mismo mes
+  // cccUnicos del día = clientes de ese día que aparecen por primera vez en el mes
+  const clientesVistosPorMes: Record<string, Set<string>> = {};
+  const resultadoPorFecha: Record<string, { clientesMas25k: number; cccUnicos: number }> = {};
 
-  for (const fecha of Array.from(fechasConVenta).sort().reverse()) {
+  for (const fecha of fechasOrdenadas) {
+    const mes = fecha.slice(0, 7); // YYYY-MM
+    if (!clientesVistosPorMes[mes]) clientesVistosPorMes[mes] = new Set();
+    const yaVistos = clientesVistosPorMes[mes];
+
     const ventasDia = ventasPorFecha[fecha] ?? [];
-    const snap = snapsPorFecha[fecha] ?? null;
-
-    // Clientes únicos con venta > $25.000
     const porCliente: Record<string, number> = {};
     for (const v of ventasDia) {
       const cli = String(v.cliente);
       porCliente[cli] = (porCliente[cli] || 0) + (Number(v.subtotal_final) || 0);
     }
-    const clientesMas25k = Object.values(porCliente).filter((m) => m > 25_000).length;
-    const cccUnicos = Object.keys(porCliente).length;
 
-    // Clientes únicos por SKU en este día
+    const clientesMas25k = Object.values(porCliente).filter((m) => m > 25_000).length;
+    const clientesHoy = Object.keys(porCliente);
+    // Solo cuentan los que no aparecieron antes en el mes
+    const cccUnicos = clientesHoy.filter((cli) => !yaVistos.has(cli)).length;
+    // Agregar al acumulado para los días siguientes
+    for (const cli of clientesHoy) yaVistos.add(cli);
+
+    resultadoPorFecha[fecha] = { clientesMas25k, cccUnicos };
+  }
+
+  const resultado: DiaTabla[] = [];
+
+  // Iterar DESC para mostrar más reciente primero
+  for (const fecha of [...fechasOrdenadas].reverse()) {
+    const ventasDia = ventasPorFecha[fecha] ?? [];
+    const snap = snapsPorFecha[fecha] ?? null;
+    const { clientesMas25k, cccUnicos } = resultadoPorFecha[fecha];
+
     const skuClientes = grupos.map((grupo) => {
       const ventasGrupo = ventasDia.filter(grupo.match);
       return new Set(ventasGrupo.map((v) => String(v.cliente))).size;
