@@ -421,9 +421,9 @@ function calcularProyeccion(
   cccUnicosTotal: number,
   config: VariableConfig
 ): Proyeccion {
-  const diasTranscurridos = dias.length; // solo días con venta
+  const diasSnap = dias.length; // días de trabajo (snaps)
 
-  if (diasTranscurridos === 0) {
+  if (diasSnap === 0) {
     return {
       disciplinaProyPct: 0, coberturaProyPct: 0,
       skuClientesProy: skuClientesPeriodo.map(() => 0),
@@ -431,7 +431,7 @@ function calcularProyeccion(
     };
   }
 
-  const diasOk   = dias.filter((d) => {
+  const diasOk  = dias.filter((d) => {
     if (!d.tieneSnap || d.horasTrabajadas < config.min_horas_dia) return false;
     const pct5 = d.pdvVisitados > 0 ? (d.pdvMenos5Min / d.pdvVisitados) * 100 : 100;
     return pct5 <= config.max_pct_menos5min;
@@ -439,14 +439,28 @@ function calcularProyeccion(
 
   const cobOk = dias.filter((d) => d.clientesMas25k >= config.min_clientes_cob).length;
 
-  // Disciplina y cobertura: si sigue el ritmo actual, cuántos días OK sobre el total hábil del mes
-  const disciplinaProyPct = (diasOk / diasHabilesTotales) * 100;
-  const coberturaProyPct  = (cobOk  / diasHabilesTotales) * 100;
+  // ── Disciplina y cobertura ──────────────────────────────────────────────────
+  // Denominador = dias transcurridos (no el total del mes).
+  // El % actual ES el real (diasOk/diasSnap).
+  // Proyección = si sigue este ritmo hasta fin de mes:
+  //   días OK proyectados = diasOk * (diasHabilesTotales / diasSnap)
+  //   % proyectado        = días OK proy / diasHabilesTotales
+  // Simplificado: pctProy = (diasOk / diasSnap) * 100 — igual al % actual
+  // PERO lo expresamos sobre diasHabilesTotales para la barra:
+  //   okProyectados = round(diasOk * diasHabilesTotales / diasSnap)
+  const disciplinaOkProy  = Math.round((diasOk / diasSnap) * diasHabilesTotales);
+  const coberturaOkProy   = Math.round((cobOk  / diasSnap) * diasHabilesTotales);
+  const disciplinaProyPct = (disciplinaOkProy / diasHabilesTotales) * 100;
+  const coberturaProyPct  = (coberturaOkProy  / diasHabilesTotales) * 100;
 
-  // SKUs y CCC: extrapolación lineal
-  const factor = diasTranscurridos > 0 ? diasHabilesTotales / diasTranscurridos : 1;
-  const skuClientesProy   = skuClientesPeriodo.map((c) => Math.round(c * factor));
-  const cccUnicosProyTotal = Math.round(cccUnicosTotal * factor);
+  // ── SKUs y CCC ──────────────────────────────────────────────────────────────
+  // Solo extrapolamos por días CON VENTA (no todos los snaps).
+  // Un día puede tener snap pero las ventas son del día siguiente hábil,
+  // así que usamos dias.filter(tieneVenta) como base real.
+  const diasConVenta = dias.filter((d) => d.tieneVenta).length;
+  const factorVenta  = diasConVenta > 0 ? diasHabilesTotales / diasConVenta : 1;
+  const skuClientesProy    = skuClientesPeriodo.map((c) => Math.round(c * factorVenta));
+  const cccUnicosProyTotal = Math.round(cccUnicosTotal * factorVenta);
 
   return { disciplinaProyPct, coberturaProyPct, skuClientesProy, cccUnicosProyTotal };
 }
@@ -527,11 +541,11 @@ const PanelPremio: React.FC<{
     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${mult >= 1 ? "bg-emerald-100 text-emerald-700" : mult > 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>×{mult}</span>
   );
 
-  const PctBar: React.FC<{ real: number; proy: number; label: string; ok: number; total: number }> = ({ real, proy, label, ok, total }) => (
+  const PctBar: React.FC<{ real: number; proy: number; label: string; ok: number; total: number; totalMes: number }> = ({ real, proy, label, ok, total, totalMes }) => (
     <div className="space-y-0.5">
       <div className="flex justify-between text-[10px]">
         <span className="text-gray-500">{label}</span>
-        <span className="text-gray-400">{ok}/{total} días</span>
+        <span className="text-gray-400">{ok}/{total} días transcurridos · {totalMes} hábiles en el mes</span>
       </div>
       <div className="relative w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
         <div className={`h-2 rounded-full ${real >= 80 ? "bg-emerald-500" : real >= 65 ? "bg-amber-400" : "bg-red-400"}`}
@@ -692,11 +706,13 @@ const PanelPremio: React.FC<{
                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Disciplina y Cobertura</p>
                 <PctBar
                   real={pctDisciplina} proy={proy.disciplinaProyPct}
-                  label="Disciplina" ok={diasOk} total={periodo.diasHabiles}
+                  label="Disciplina" ok={diasOk} total={diasBase}
+                  totalMes={periodo.diasHabiles}
                 />
                 <PctBar
                   real={pctCobertura} proy={proy.coberturaProyPct}
-                  label="Cobertura" ok={diasCobOk} total={periodo.diasHabiles}
+                  label="Cobertura" ok={diasCobOk} total={diasBase}
+                  totalMes={periodo.diasHabiles}
                 />
               </div>
 
