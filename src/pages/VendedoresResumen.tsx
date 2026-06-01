@@ -822,7 +822,7 @@ const PanelPremio: React.FC<{
                   { label:"Disciplina", real: mDisc, proy: mDiscProy },
                   { label:"Cobertura",  real: mCob,  proy: mCobProy  },
                   { label:"SKUs",       real: mSkus, proy: mSkusProy  },
-                  { label:"Cartera",    real: mCartera ?? null, proy: mCartera ?? null },
+                  { label:"Cartera",    real: mCarteraProy, proy: mCarteraProy },
                 ].map((m) => (
                   <div key={m.label} className="text-center">
                     <p className="text-[10px] text-gray-400">{m.label}</p>
