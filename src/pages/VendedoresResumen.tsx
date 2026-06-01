@@ -28,6 +28,7 @@ interface Snapshot {
   horas_trabajadas: number; puntos_gps: number;
   primera_marca: string; ultima_marca: string;
   created_at: string; fecha: string;
+  snapshot_taken_at: string;
 }
 
 interface VendedorStats {
@@ -329,7 +330,7 @@ function buildDiasTabla(
       : new Date(snap.created_at).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
     // Verificar que sea el snapshot de cierre: entre 20:25 y 20:35 UTC
-    const takenAt   = snap.created_at || "";
+    const takenAt   = snap.snapshot_taken_at || snap.created_at || "";
     const d = new Date(takenAt);
     const horaUTC   = d.getUTCHours();
     const minutoUTC = d.getUTCMinutes();
@@ -1010,7 +1011,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
         while (true) {
           const { data, error: e } = await supabase
             .from("admin_equipo_snapshots")
-            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
+            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha, snapshot_taken_at")
             .eq("username", username)
             .gte("fecha", periodo.snapDesde)
             .lte("fecha", periodo.snapHasta)
