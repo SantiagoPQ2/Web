@@ -320,13 +320,25 @@ function buildDiasTabla(
   ventaMinCliente: number
 ): DiaTabla[] {
 
-  // 1. Snapshots del vendedor por fecha (usamos campo fecha del snapshot)
+  // 1. Snapshots del vendedor por fecha — SOLO los de las 20:30 UTC (snapshot de cierre del día)
+  //    Si un día solo tiene snapshot de las 15:30 (intraday), no cuenta: el día no cerró aún.
   const snapsPorFecha: Record<string, Snapshot> = {};
   for (const snap of snapshots.filter((s) => String(s.username) === String(username))) {
     const fecha = snap.fecha
       ? String(snap.fecha).slice(0, 10)
       : new Date(snap.created_at).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-    if (!snapsPorFecha[fecha]) snapsPorFecha[fecha] = snap;
+
+    // Verificar que sea el snapshot de cierre: entre 20:25 y 20:35 UTC
+    const takenAt   = snap.created_at || "";
+    const d = new Date(takenAt);
+    const horaUTC   = d.getUTCHours();
+    const minutoUTC = d.getUTCMinutes();
+    const totalMin  = horaUTC * 60 + minutoUTC;
+    const esCierre  = totalMin >= 20 * 60 + 25 && totalMin <= 20 * 60 + 35; // 20:25–20:35 UTC
+
+    if (esCierre) {
+      snapsPorFecha[fecha] = snap;
+    }
   }
 
   // 2. Ventas por fecha_comprobante
@@ -992,17 +1004,16 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
           desde += CHUNK;
         }
 
-        // 2. Snapshots del período — solo los de las 20:30 (snapshot diario de cierre)
+        // 2. Snapshots del período — un único snapshot por día por el unique index (fecha, username)
         let todasSnaps: Snapshot[] = [];
         let desdeSnap = 0;
         while (true) {
           const { data, error: e } = await supabase
             .from("admin_equipo_snapshots")
-            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha, snapshot_taken_at")
+            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
             .eq("username", username)
             .gte("fecha", periodo.snapDesde)
             .lte("fecha", periodo.snapHasta)
-            .ilike("snapshot_taken_at", "%20:30:00%")
             .order("fecha", { ascending: false })
             .range(desdeSnap, desdeSnap + CHUNK - 1);
           if (e) throw new Error(e.message);
