@@ -495,10 +495,11 @@ const PanelPremio: React.FC<{
   const pctDisciplina = diasBase > 0 ? (diasOk / diasBase) * 100 : 0;
   const mDisc = multDisciplina(pctDisciplina);
 
-  // Cobertura real
-  const diasCobOk     = dias.filter((d) => d.clientesMas25k >= config.min_clientes_cob).length;
-  const pctCobertura  = diasBase > 0 ? (diasCobOk / diasBase) * 100 : 0;
-  const mCob          = multCobertura(pctCobertura);
+  // Cobertura real — solo sobre días CON VENTA (días sin venta no cuentan ni a favor ni en contra)
+  const diasConVentaReal = dias.filter((d) => d.tieneVenta).length;
+  const diasCobOk        = dias.filter((d) => d.tieneVenta && d.clientesMas25k >= config.min_clientes_cob).length;
+  const pctCobertura     = diasConVentaReal > 0 ? (diasCobOk / diasConVentaReal) * 100 : 0;
+  const mCob             = multCobertura(pctCobertura);
 
   // SKUs acumulados (con compra mínima)
   const skuClientesPeriodo = useMemo(() => grupos.map((grupo) => {
@@ -529,8 +530,28 @@ const PanelPremio: React.FC<{
   const mDiscProy          = multDisciplina(proy.disciplinaProyPct);
   const mCobProy           = multCobertura(proy.coberturaProyPct);
   const mSkusProy          = multSkus(skusLogradosProy);
-  // Para cartera proyectada usamos mismo pct (no cambia en proyección simple)
-  const premioProy         = pozo * mDiscProy * mCobProy * mSkusProy * (mCartera ?? 1);
+
+  // Venta proyectada: extrapolación lineal por días con venta
+  const diasConVentaActual = dias.filter((d) => d.tieneVenta).length;
+  const ventaProyectada    = diasConVentaActual > 0
+    ? ventaTotal * periodo.diasHabiles / diasConVentaActual
+    : ventaTotal;
+  const pozoProyectado     = calcularPozoConTramos(ventaProyectada, config.escala_pozo_id, tramos);
+
+  // Cartera proyectada: asumimos misma tasa de CCC nuevos
+  const pctCarteraProyectada = config.base_cartera_sana > 0 && diasConVentaActual > 0
+    ? (proy.cccUnicosProyTotal / config.base_cartera_sana) * 100
+    : pctCartera;
+  const mCarteraProy = pctCarteraProyectada !== null ? multCartera(pctCarteraProyectada) : (mCartera ?? 1);
+
+  const premioProy = pozoProyectado * mDiscProy * mCobProy * mSkusProy * mCarteraProy;
+
+  // ── Supuesto mínimo: qué pasaría si cumple condiciones base ──────────────────
+  // Venta mínima para generar pozo: primer tramo > 0
+  const tramosOrdenados    = tramos.filter((t) => t.escala_id === config.escala_pozo_id && t.desde_monto > 0).sort((a,b) => a.desde_monto - b.desde_monto);
+  const ventaMinPozo       = tramosOrdenados[0]?.desde_monto ?? 0;
+  const pozoMinimo         = calcularPozoConTramos(ventaMinPozo, config.escala_pozo_id, tramos);
+  const premioSupuesto     = pozoMinimo * multDisciplina(100) * multCobertura(100) * multSkus(2) * multCartera(100);
 
   const [mostrarTabla, setMostrarTabla] = useState(true);
   const [mostrarProy,  setMostrarProy]  = useState(true);
@@ -604,7 +625,7 @@ const PanelPremio: React.FC<{
           ))}
           {[
             { label: `Disciplina ${pctDisciplina.toFixed(0)}% (${diasOk}/${diasBase})`, sub: `≥${config.min_horas_dia}h · <${config.max_pct_menos5min}% <5min`, value: formatMoney(pozo * mDisc), mult: mDisc },
-            { label: `Cobertura ${pctCobertura.toFixed(0)}% (${diasCobOk}/${diasBase})`, sub: `≥${config.min_clientes_cob} cl >$${(config.venta_min_cliente/1000).toFixed(0)}k`, value: formatMoney(pozo * mDisc * mCob), mult: mCob },
+            { label: `Cobertura ${pctCobertura.toFixed(0)}% (${diasCobOk}/${diasConVentaReal} días con venta)`, sub: `≥${config.min_clientes_cob} cl >$${(config.venta_min_cliente/1000).toFixed(0)}k`, value: formatMoney(pozo * mDisc * mCob), mult: mCob },
             { label: `SKUs (${skusLogrados}/${grupos.length})`, sub: "", value: formatMoney(premioReal), mult: mSkus },
           ].map((r) => (
             <div key={r.label} className="flex justify-between items-start py-1 border-b border-gray-100 dark:border-gray-700">
@@ -696,7 +717,7 @@ const PanelPremio: React.FC<{
               <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Premio proyectado a fin de mes</p>
               <p className={`text-xl font-bold mt-1 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</p>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                Si mantiene el ritmo actual hasta el {formatFecha(periodo.snapHasta.slice(0,10))}
+                Si mantiene el ritmo actual hasta el {formatFecha(periodo.ultimoDiaVentas)}
               </p>
             </div>
 
@@ -711,7 +732,7 @@ const PanelPremio: React.FC<{
                 />
                 <PctBar
                   real={pctCobertura} proy={proy.coberturaProyPct}
-                  label="Cobertura" ok={diasCobOk} total={diasBase}
+                  label="Cobertura" ok={diasCobOk} total={diasConVentaReal}
                   totalMes={periodo.diasHabiles}
                 />
               </div>
@@ -769,12 +790,55 @@ const PanelPremio: React.FC<{
         )}
       </div>
 
+      {/* Supuesto mínimo */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
+        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
+          <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5" />
+            Supuesto mínimo — ¿Cuánto cobraría si cumple las condiciones base?
+          </p>
+          <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">
+            Venta mínima de {formatMoney(ventaMinPozo)} · 100% disciplina · 100% cobertura · 2/5 SKUs · cartera 100%
+          </p>
+        </div>
+        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-3 text-center text-xs">
+          {[
+            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),                  color: "text-violet-600" },
+            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,                color: "text-emerald-600" },
+            { label: "× Cobertura",    value: `×${multCobertura(100)}`,                 color: "text-emerald-600" },
+            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,                        color: "text-blue-600" },
+            { label: "× Cartera 100%", value: `×${multCartera(100)}`,                   color: "text-emerald-600" },
+          ].map((item) => (
+            <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
+              <p className="text-[10px] text-gray-400">{item.label}</p>
+              <p className={`text-sm font-bold mt-0.5 ${item.color}`}>{item.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pb-3 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-gray-400">Premio supuesto mínimo</p>
+            <p className={`text-xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-gray-400">vs. premio actual</p>
+            <p className={`text-sm font-semibold ${premioSupuesto > premioFinal ? "text-emerald-600" : premioSupuesto < premioFinal ? "text-amber-500" : "text-gray-500"}`}>
+              {premioSupuesto > premioFinal
+                ? `+${formatMoney(premioSupuesto - premioFinal)}`
+                : premioSupuesto < premioFinal
+                ? `-${formatMoney(premioFinal - premioSupuesto)}`
+                : "igual"}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Indicadores resumen */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { label: "Días trabajados",   value: diasBase,                                                  color: "text-gray-700 dark:text-gray-200" },
           { label: "Disciplina OK",     value: `${diasOk} (${pctDisciplina.toFixed(0)}%)`,               color: pctDisciplina >= 80 ? "text-emerald-600" : pctDisciplina >= 65 ? "text-amber-500" : "text-red-500" },
-          { label: "Cobertura OK",      value: `${diasCobOk} (${pctCobertura.toFixed(0)}%)`,             color: pctCobertura  >= 80 ? "text-emerald-600" : pctCobertura  >= 65 ? "text-amber-500" : "text-red-500" },
+          { label: "Cobertura OK",      value: `${diasCobOk}/${diasConVentaReal} (${pctCobertura.toFixed(0)}%)`, color: pctCobertura  >= 80 ? "text-emerald-600" : pctCobertura  >= 65 ? "text-amber-500" : "text-red-500" },
           { label: "Clientes únicos",   value: `${clientesUnicos}${config.base_cartera_sana > 0 ? ` / ${config.base_cartera_sana}` : ""}`, color: "text-blue-600" },
         ].map((item) => (
           <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
