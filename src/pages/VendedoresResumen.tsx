@@ -519,7 +519,6 @@ const PanelPremio: React.FC<{
   const pctCartera     = config.base_cartera_sana > 0 ? (clientesUnicos / config.base_cartera_sana) * 100 : null;
   const mCartera       = pctCartera !== null ? multCartera(pctCartera) : null;
   const premioReal     = pozo * mDisc * mCob * mSkus;
-  const premioFinal    = mCartera !== null ? premioReal * mCartera : premioReal;
 
   // Proyección
   const proy = useMemo(() => calcularProyeccion(
@@ -543,6 +542,9 @@ const PanelPremio: React.FC<{
     ? (proy.cccUnicosProyTotal / config.base_cartera_sana) * 100
     : pctCartera;
   const mCarteraProy = pctCarteraProyectada !== null ? multCartera(pctCarteraProyectada) : (mCartera ?? 1);
+
+  // premioFinal usa cartera proyectada (no la parcial del mes en curso)
+  const premioFinal = premioReal * mCarteraProy;
 
   const premioProy = pozoProyectado * mDiscProy * mCobProy * mSkusProy * mCarteraProy;
 
@@ -585,6 +587,40 @@ const PanelPremio: React.FC<{
 
   return (
     <div className="space-y-4">
+
+      {/* Supuesto mínimo */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
+        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
+          <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5" />
+            Supuesto mínimo — ¿Cuánto cobraría si cumple las condiciones base?
+          </p>
+          <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">
+            Venta mínima de {formatMoney(ventaMinPozo)} · 100% disciplina · 100% cobertura · 2/5 SKUs · cartera 100%
+          </p>
+        </div>
+        {/* Premio grande centrado */}
+        <div className="px-4 py-4 text-center border-b border-blue-100 dark:border-blue-800">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Premio supuesto mínimo</p>
+          <p className={`text-3xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
+        </div>
+        {/* Desglose */}
+        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+          {[
+            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),     color: "text-violet-600" },
+            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,   color: "text-emerald-600" },
+            { label: "× Cobertura",    value: `×${multCobertura(100)}`,    color: "text-emerald-600" },
+            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,           color: "text-blue-600" },
+            { label: "× Cartera 100%", value: `×${multCartera(100)}`,      color: "text-emerald-600" },
+          ].map((item) => (
+            <div key={item.label} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+              <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
 
       {/* Badge config */}
       <div className="flex items-center gap-2 text-[10px] text-gray-400">
@@ -639,7 +675,7 @@ const PanelPremio: React.FC<{
           {pctCartera !== null ? (
             <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-gray-700">
               <span className="text-xs text-gray-500 flex items-center gap-1">
-                Cartera {pctCartera.toFixed(0)}% ({clientesUnicos}/{config.base_cartera_sana}) <MultBadge mult={mCartera!} />
+                Cartera sana (proyección fin de mes) <MultBadge mult={mCarteraProy} />
               </span>
               <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{formatMoney(premioFinal)}</span>
             </div>
@@ -790,39 +826,6 @@ const PanelPremio: React.FC<{
         )}
       </div>
 
-      {/* Supuesto mínimo */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
-        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
-          <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5" />
-            Supuesto mínimo — ¿Cuánto cobraría si cumple las condiciones base?
-          </p>
-          <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">
-            Venta mínima de {formatMoney(ventaMinPozo)} · 100% disciplina · 100% cobertura · 2/5 SKUs · cartera 100%
-          </p>
-        </div>
-        {/* Premio grande centrado */}
-        <div className="px-4 py-4 text-center border-b border-blue-100 dark:border-blue-800">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Premio supuesto mínimo</p>
-          <p className={`text-3xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
-        </div>
-        {/* Desglose */}
-        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
-          {[
-            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),     color: "text-violet-600" },
-            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,   color: "text-emerald-600" },
-            { label: "× Cobertura",    value: `×${multCobertura(100)}`,    color: "text-emerald-600" },
-            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,           color: "text-blue-600" },
-            { label: "× Cartera 100%", value: `×${multCartera(100)}`,      color: "text-emerald-600" },
-          ].map((item) => (
-            <div key={item.label} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
-              <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{item.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Indicadores resumen */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
@@ -912,8 +915,8 @@ const PanelPremio: React.FC<{
                   <td className="px-2 py-2 text-center text-gray-500">—</td>
                   <td className="px-2 py-2 text-center text-gray-500">—</td>
                   <td className="px-2 py-2 text-center border-r border-gray-200 dark:border-gray-600 text-gray-500">—</td>
-                  <td className={`px-2 py-2 text-center border-r border-gray-200 dark:border-gray-600 ${diasCobOk===diasBase ? "text-emerald-600" : "text-amber-500"}`}>
-                    {diasCobOk}/{diasBase}
+                  <td className={`px-2 py-2 text-center border-r border-gray-200 dark:border-gray-600 ${diasCobOk===diasConVentaReal ? "text-emerald-600" : "text-amber-500"}`}>
+                    {diasCobOk}/{diasConVentaReal}
                   </td>
                   {skuClientesPeriodo.map((cu, gi) => (
                     <td key={gi} className={`px-2 py-2 text-center border-r border-gray-200 dark:border-gray-600 ${cu >= grupos[gi]?.objClientes ? "text-emerald-600" : cu >= (grupos[gi]?.objClientes ?? 100) * 0.6 ? "text-amber-500" : "text-red-500"}`}>
