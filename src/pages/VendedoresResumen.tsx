@@ -72,11 +72,12 @@ interface SkuDefinicion {
 // Para el selector de mes usamos el mes de las VENTAS como referencia.
 
 interface Periodo {
-  label: string;          // "Junio 2026"
-  mesVentas: string;      // "2026-06"  → para filtrar chess_ventas por fecha_comprobante
-  snapDesde: string;      // "2026-05-28" → para filtrar snapshots por fecha
-  snapHasta: string;      // "2026-06-26"
-  diasHabiles: number;    // días hábiles del mes (para proyección)
+  label: string;           // "Junio 2026"
+  mesVentas: string;       // "2026-06"
+  ultimoDiaVentas: string; // "2026-06-30" — último día real del mes
+  snapDesde: string;       // "2026-05-28"
+  snapHasta: string;       // "2026-06-26"
+  diasHabiles: number;
 }
 
 function esHabil(fecha: Date): boolean {
@@ -147,7 +148,8 @@ function buildPeriodo(anio: number, mes: number): Periodo {
     toYMD(ultimoDiaHabilDelMes(anio, mes))
   );
 
-  return { label: `${meses[mes-1]} ${anio}`, mesVentas, snapDesde, snapHasta, diasHabiles };
+    const ultimoDiaVentas = toYMD(new Date(anio, mes, 0));
+  return { label: `${meses[mes-1]} ${anio}`, mesVentas, ultimoDiaVentas, snapDesde, snapHasta, diasHabiles };
 }
 
 // Genera últimos N meses + mes actual
@@ -951,24 +953,25 @@ const DetalleFechasList: React.FC<{
 const PERIODOS_DISPONIBLES = generarPeriodos(4);
 const PERIODO_ACTUAL_IDX   = PERIODOS_DISPONIBLES.length - 1; // el más reciente
 
-const DetalleFechas: React.FC<{ username: string; ffvv: string; snapshots: Snapshot[] }> = ({ username, ffvv, snapshots }) => {
-  const [periodoIdx, setPeriodoIdx] = useState(PERIODO_ACTUAL_IDX);
-  const [ventas,     setVentas]     = useState<ChessVenta[]>([]);
-  const [config,     setConfig]     = useState<VariableConfig | null>(null);
-  const [grupos,     setGrupos]     = useState<SkuGrupo[]>([]);
-  const [tramos,     setTramos]     = useState<TramoPozo[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [tab,        setTab]        = useState<"premio" | "fechas">("premio");
+const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username, ffvv }) => {
+  const [periodoIdx,      setPeriodoIdx]      = useState(PERIODO_ACTUAL_IDX);
+  const [ventas,          setVentas]          = useState<ChessVenta[]>([]);
+  const [snapshotsPeriodo,setSnapshotsPeriodo]= useState<Snapshot[]>([]);
+  const [config,          setConfig]          = useState<VariableConfig | null>(null);
+  const [grupos,          setGrupos]          = useState<SkuGrupo[]>([]);
+  const [tramos,          setTramos]          = useState<TramoPozo[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState<string | null>(null);
+  const [tab,             setTab]             = useState<"premio" | "fechas">("premio");
 
   const periodo = PERIODOS_DISPONIBLES[periodoIdx];
 
   useEffect(() => {
     let cancelado = false;
     const cargar = async () => {
-      setLoading(true); setError(null); setVentas([]); setConfig(null); setGrupos([]);
+      setLoading(true); setError(null); setVentas([]); setSnapshotsPeriodo([]); setConfig(null); setGrupos([]);
       try {
-        // 1. Ventas del mes de ventas (fecha_comprobante dentro del mes)
+        // 1. Ventas del mes (fecha_comprobante dentro del mes)
         let todas: ChessVenta[] = [];
         let desde = 0;
         const CHUNK = 1000;
@@ -978,7 +981,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string; snapshots: Snaps
             .select("id, numero, fecha_comprobante, cliente, categoria, division, marca, unidad_de_negocio, codigo_articulo, bultos_total, subtotal_final, id_vendedor")
             .eq("id_vendedor", username)
             .gte("fecha_comprobante", `${periodo.mesVentas}-01`)
-            .lte("fecha_comprobante", `${periodo.mesVentas}-31`)
+            .lte("fecha_comprobante", periodo.ultimoDiaVentas)
             .order("fecha_comprobante", { ascending: false })
             .range(desde, desde + CHUNK - 1);
           if (e) throw new Error(e.message);
@@ -988,7 +991,26 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string; snapshots: Snaps
           desde += CHUNK;
         }
 
-        // 2. Config del período + tablas maestras
+        // 2. Snapshots del período (snapDesde → snapHasta) para este vendedor
+        let todasSnaps: Snapshot[] = [];
+        let desdeSnap = 0;
+        while (true) {
+          const { data, error: e } = await supabase
+            .from("admin_equipo_snapshots")
+            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
+            .eq("username", username)
+            .gte("fecha", periodo.snapDesde)
+            .lte("fecha", periodo.snapHasta)
+            .order("fecha", { ascending: false })
+            .range(desdeSnap, desdeSnap + CHUNK - 1);
+          if (e) throw new Error(e.message);
+          if (!data || data.length === 0) break;
+          todasSnaps = todasSnaps.concat(data as Snapshot[]);
+          if (data.length < CHUNK) break;
+          desdeSnap += CHUNK;
+        }
+
+        // 3. Config + tablas maestras
         const [{ data: configData }, { tramos: tramosData, skuDef }] = await Promise.all([
           supabase.from("variable_config").select("*")
             .eq("username", username).eq("periodo", periodo.mesVentas).eq("activo", true).maybeSingle(),
@@ -997,6 +1019,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string; snapshots: Snaps
 
         if (!cancelado) {
           setVentas(todas);
+          setSnapshotsPeriodo(todasSnaps);
           setTramos(tramosData);
           if (configData) {
             const cfg = configData as VariableConfig;
@@ -1015,14 +1038,6 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string; snapshots: Snaps
     cargar();
     return () => { cancelado = true; };
   }, [username, ffvv, periodo.mesVentas]);
-
-  // Snapshots filtrados por el rango del período (snapDesde → snapHasta)
-  const snapshotsPeriodo = useMemo(() =>
-    snapshots.filter((s) => {
-      const f = new Date(s.created_at).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-      return f >= periodo.snapDesde && f <= periodo.snapHasta;
-    })
-  , [snapshots, periodo.snapDesde, periodo.snapHasta]);
 
   if (loading) return (
     <div className="flex items-center gap-2 py-4 text-sm text-gray-400">
@@ -1304,7 +1319,7 @@ const VendedoresResumen: React.FC = () => {
               </button>
               {isExpanded && (
                 <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 bg-gray-50 dark:bg-gray-900/40">
-                  <DetalleFechas username={v.username} ffvv={v.ffvv} snapshots={snapshots}/>
+                  <DetalleFechas username={v.username} ffvv={v.ffvv}/>
                 </div>
               )}
             </div>
