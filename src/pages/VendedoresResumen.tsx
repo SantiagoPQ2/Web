@@ -437,28 +437,21 @@ function calcularProyeccion(
     return pct5 <= config.max_pct_menos5min;
   }).length;
 
-  const cobOk = dias.filter((d) => d.clientesMas25k >= config.min_clientes_cob).length;
+  // Disciplina: sobre días de snap (tiene snaps propios)
+  // Cobertura: sobre días CON VENTA (son independientes)
+  const diasConVenta   = dias.filter((d) => d.tieneVenta).length;
+  const cobOk          = dias.filter((d) => d.tieneVenta && d.clientesMas25k >= config.min_clientes_cob).length;
 
-  // ── Disciplina y cobertura ──────────────────────────────────────────────────
-  // Denominador = dias transcurridos (no el total del mes).
-  // El % actual ES el real (diasOk/diasSnap).
-  // Proyección = si sigue este ritmo hasta fin de mes:
-  //   días OK proyectados = diasOk * (diasHabilesTotales / diasSnap)
-  //   % proyectado        = días OK proy / diasHabilesTotales
-  // Simplificado: pctProy = (diasOk / diasSnap) * 100 — igual al % actual
-  // PERO lo expresamos sobre diasHabilesTotales para la barra:
-  //   okProyectados = round(diasOk * diasHabilesTotales / diasSnap)
+  // Disciplina proyectada: ritmo actual extrapolado a días hábiles totales
   const disciplinaOkProy  = Math.round((diasOk / diasSnap) * diasHabilesTotales);
-  const coberturaOkProy   = Math.round((cobOk  / diasSnap) * diasHabilesTotales);
   const disciplinaProyPct = (disciplinaOkProy / diasHabilesTotales) * 100;
-  const coberturaProyPct  = (coberturaOkProy  / diasHabilesTotales) * 100;
 
-  // ── SKUs y CCC ──────────────────────────────────────────────────────────────
-  // Solo extrapolamos por días CON VENTA (no todos los snaps).
-  // Un día puede tener snap pero las ventas son del día siguiente hábil,
-  // así que usamos dias.filter(tieneVenta) como base real.
-  const diasConVenta = dias.filter((d) => d.tieneVenta).length;
-  const factorVenta  = diasConVenta > 0 ? diasHabilesTotales / diasConVenta : 1;
+  // Cobertura proyectada: ritmo actual sobre días con venta, extrapolado
+  const coberturaOkProy  = diasConVenta > 0 ? Math.round((cobOk / diasConVenta) * diasHabilesTotales) : 0;
+  const coberturaProyPct = (coberturaOkProy / diasHabilesTotales) * 100;
+
+  // SKUs y CCC: extrapolación por días con venta
+  const factorVenta        = diasConVenta > 0 ? diasHabilesTotales / diasConVenta : 1;
   const skuClientesProy    = skuClientesPeriodo.map((c) => Math.round(c * factorVenta));
   const cccUnicosProyTotal = Math.round(cccUnicosTotal * factorVenta);
 
@@ -537,10 +530,16 @@ const PanelPremio: React.FC<{
     : ventaTotal;
   const pozoProyectado     = calcularPozoConTramos(ventaProyectada, config.escala_pozo_id, tramos);
 
-  // Cartera proyectada: asumimos misma tasa de CCC nuevos
-  const pctCarteraProyectada = config.base_cartera_sana > 0 && diasConVentaActual > 0
-    ? (proy.cccUnicosProyTotal / config.base_cartera_sana) * 100
-    : pctCartera;
+  // Cartera proyectada: clientes únicos proyectados vs base del mes anterior
+  // proy.cccUnicosProyTotal ya está extrapolado por días con venta
+  // Pero necesitamos el total de clientes únicos proyectados (no solo los nuevos del período)
+  // Los clientes únicos proyectados = clientesUnicos * factor de días con venta
+  const clientesUnicosProyectados = diasConVentaActual > 0
+    ? Math.round(clientesUnicos * periodo.diasHabiles / diasConVentaActual)
+    : clientesUnicos;
+  const pctCarteraProyectada = config.base_cartera_sana > 0
+    ? (clientesUnicosProyectados / config.base_cartera_sana) * 100
+    : null;
   const mCarteraProy = pctCarteraProyectada !== null ? multCartera(pctCarteraProyectada) : (mCartera ?? 1);
 
   // premioFinal usa cartera proyectada (no la parcial del mes en curso)
@@ -993,16 +992,17 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
           desde += CHUNK;
         }
 
-        // 2. Snapshots del período (snapDesde → snapHasta) para este vendedor
+        // 2. Snapshots del período — solo los de las 20:30 (snapshot diario de cierre)
         let todasSnaps: Snapshot[] = [];
         let desdeSnap = 0;
         while (true) {
           const { data, error: e } = await supabase
             .from("admin_equipo_snapshots")
-            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
+            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha, snapshot_taken_at")
             .eq("username", username)
             .gte("fecha", periodo.snapDesde)
             .lte("fecha", periodo.snapHasta)
+            .ilike("snapshot_taken_at", "%20:30:00%")
             .order("fecha", { ascending: false })
             .range(desdeSnap, desdeSnap + CHUNK - 1);
           if (e) throw new Error(e.message);
