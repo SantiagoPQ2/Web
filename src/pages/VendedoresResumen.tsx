@@ -801,35 +801,25 @@ const PanelPremio: React.FC<{
             Venta mínima de {formatMoney(ventaMinPozo)} · 100% disciplina · 100% cobertura · 2/5 SKUs · cartera 100%
           </p>
         </div>
-        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-3 text-center text-xs">
+        {/* Premio grande centrado */}
+        <div className="px-4 py-4 text-center border-b border-blue-100 dark:border-blue-800">
+          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Premio supuesto mínimo</p>
+          <p className={`text-3xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
+        </div>
+        {/* Desglose */}
+        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
           {[
-            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),                  color: "text-violet-600" },
-            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,                color: "text-emerald-600" },
-            { label: "× Cobertura",    value: `×${multCobertura(100)}`,                 color: "text-emerald-600" },
-            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,                        color: "text-blue-600" },
-            { label: "× Cartera 100%", value: `×${multCartera(100)}`,                   color: "text-emerald-600" },
+            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),     color: "text-violet-600" },
+            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,   color: "text-emerald-600" },
+            { label: "× Cobertura",    value: `×${multCobertura(100)}`,    color: "text-emerald-600" },
+            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,           color: "text-blue-600" },
+            { label: "× Cartera 100%", value: `×${multCartera(100)}`,      color: "text-emerald-600" },
           ].map((item) => (
-            <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-              <p className="text-[10px] text-gray-400">{item.label}</p>
-              <p className={`text-sm font-bold mt-0.5 ${item.color}`}>{item.value}</p>
+            <div key={item.label} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+              <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{item.label}</p>
             </div>
           ))}
-        </div>
-        <div className="px-4 pb-3 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] text-gray-400">Premio supuesto mínimo</p>
-            <p className={`text-xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] text-gray-400">vs. premio actual</p>
-            <p className={`text-sm font-semibold ${premioSupuesto > premioFinal ? "text-emerald-600" : premioSupuesto < premioFinal ? "text-amber-500" : "text-gray-500"}`}>
-              {premioSupuesto > premioFinal
-                ? `+${formatMoney(premioSupuesto - premioFinal)}`
-                : premioSupuesto < premioFinal
-                ? `-${formatMoney(premioFinal - premioSupuesto)}`
-                : "igual"}
-            </p>
-          </div>
         </div>
       </div>
 
@@ -904,8 +894,8 @@ const PanelPremio: React.FC<{
                         {dia.tieneSnap ? `${pct5.toFixed(0)}%` : "—"}
                       </td>
                       <td className={`px-2 py-1.5 text-center border-r border-gray-200 dark:border-gray-600 ${cellNA}`}>—</td>
-                      <td className={`px-2 py-1.5 text-center font-semibold border-r border-gray-200 dark:border-gray-600 ${cobOk ? cellOk : dia.clientesMas25k >= config.min_clientes_cob * 0.6 ? "text-amber-500" : cellBad}`}>
-                        {dia.clientesMas25k}
+                      <td className={`px-2 py-1.5 text-center font-semibold border-r border-gray-200 dark:border-gray-600 ${!dia.tieneVenta ? cellNA : cobOk ? cellOk : dia.clientesMas25k >= config.min_clientes_cob * 0.6 ? "text-amber-500" : cellBad}`}>
+                        {dia.tieneVenta ? dia.clientesMas25k : "—"}
                       </td>
                       {dia.skuClientes.map((cu, gi) => (
                         <td key={gi} className={`px-2 py-1.5 text-center font-semibold border-r border-gray-200 dark:border-gray-600 ${cu >= 10 ? cellOk : cu >= 5 ? "text-amber-500" : cu > 0 ? cellBad : cellNA}`}>
