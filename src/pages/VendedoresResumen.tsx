@@ -278,6 +278,7 @@ type SortKey = "name" | "horasTrabajadas" | "pdvVisitados" | "ffvv";
 
 interface DiaTabla {
   fecha: string;
+  nroDia: number;           // número correlativo: Día 1 = primer día del período
   horasTrabajadas: number; pdvMenos5Min: number; pdvVisitados: number;
   tieneSnap: boolean; primeraEntrada: string | null; ultimaSalida: string | null;
   tieneVenta: boolean; clientesMas25k: number; cccUnicos: number;
@@ -309,7 +310,12 @@ function buildDiasTabla(
     ventasPorFecha[fecha].push(v);
   }
 
-  const fechasOrdenadas = Array.from(new Set(Object.keys(ventasPorFecha))).sort();
+  // Unión de todas las fechas: días con venta O con snapshot
+  const todasFechas = new Set([
+    ...Object.keys(ventasPorFecha),
+    ...Object.keys(snapsPorFecha),
+  ]);
+  const fechasOrdenadas = Array.from(todasFechas).sort();
 
   // CCC acumulado por mes
   const clientesVistosPorMes: Record<string, Set<string>> = {};
@@ -332,18 +338,25 @@ function buildDiasTabla(
     resultadoPorFecha[fecha] = { clientesMas25k, cccUnicos };
   }
 
-  return [...fechasOrdenadas].reverse().map((fecha) => {
+  // Numeración correlativa: Día 1 = primer día del período (snap o venta)
+  // ASC = orden cronológico → invertimos para mostrar más reciente primero
+  const totalDias = fechasOrdenadas.length;
+
+  return [...fechasOrdenadas].reverse().map((fecha, idx) => {
     const ventasDia = ventasPorFecha[fecha] ?? [];
     const snap      = snapsPorFecha[fecha] ?? null;
-    const { clientesMas25k, cccUnicos } = resultadoPorFecha[fecha];
+    const res       = resultadoPorFecha[fecha] ?? { clientesMas25k: 0, cccUnicos: 0 };
     const skuClientes = grupos.map((grupo) => new Set(ventasDia.filter(grupo.match).map((v) => String(v.cliente))).size);
+    // nroDia: DESC → idx 0 es el más reciente (totalDias), idx 1 es totalDias-1, etc.
+    const nroDia = totalDias - idx;
     return {
       fecha,
+      nroDia,
       horasTrabajadas: snap ? Number(snap.horas_trabajadas) || 0 : 0,
       pdvMenos5Min:    snap ? Number(snap.pdv_menos_5_min)  || 0 : 0,
       pdvVisitados:    snap ? Number(snap.pdv_visitados)    || 0 : 0,
       tieneSnap: !!snap, primeraEntrada: snap?.primera_marca || null, ultimaSalida: snap?.ultima_marca || null,
-      tieneVenta: ventasDia.length > 0, clientesMas25k, cccUnicos, skuClientes,
+      tieneVenta: ventasDia.length > 0, clientesMas25k: res.clientesMas25k, cccUnicos: res.cccUnicos, skuClientes,
     };
   });
 }
@@ -469,7 +482,7 @@ const PanelPremio: React.FC<{
   // Para cartera proyectada usamos mismo pct (no cambia en proyección simple)
   const premioProy         = pozo * mDiscProy * mCobProy * mSkusProy * (mCartera ?? 1);
 
-  const [mostrarTabla, setMostrarTabla] = useState(false);
+  const [mostrarTabla, setMostrarTabla] = useState(true);
   const [mostrarProy,  setMostrarProy]  = useState(true);
 
   const pisoEscala = tramos.filter((t) => t.escala_id === config.escala_pozo_id && t.desde_monto > 0).sort((a,b) => a.desde_monto - b.desde_monto)[0]?.desde_monto ?? 0;
@@ -764,8 +777,8 @@ const PanelPremio: React.FC<{
                   return (
                     <tr key={dia.fecha} className={`${rowBg} border-b border-gray-100 dark:border-gray-700/50`}>
                       <td className="px-2 py-1.5 border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
-                        <span className="font-semibold text-gray-700 dark:text-gray-200">{dia.fecha.slice(8)}/{dia.fecha.slice(5,7)}</span>
-                        <span className="ml-1 text-gray-400">{diaSemana(dia.fecha)}</span>
+                        <span className="font-bold text-gray-700 dark:text-gray-200">Día {dia.nroDia}</span>
+                        <span className="block text-[10px] text-gray-400">{dia.fecha.slice(8)}/{dia.fecha.slice(5,7)} {diaSemana(dia.fecha)}</span>
                       </td>
                       <td className={`px-2 py-1.5 text-center ${dia.tieneSnap ? (dia.horasTrabajadas >= config.min_horas_dia ? cellOk : cellBad) : cellNA}`}>
                         {dia.tieneSnap ? formatHoras(dia.horasTrabajadas) : "—"}
@@ -827,127 +840,6 @@ const PanelPremio: React.FC<{
   );
 };
 
-// ─── DetalleFechasList ────────────────────────────────────────────────────────
-
-const DetalleFechasList: React.FC<{
-  ventas: ChessVenta[]; snapshots: Snapshot[]; username: string;
-}> = ({ ventas, snapshots, username }) => {
-  const [paginaActual, setPaginaActual] = useState(0);
-  const POR_PAGINA = 5;
-
-  interface RF {
-    fecha: string; totalVentas: number; cantidadFacturas: number; cantidadClientes: number;
-    bultos: number; marcas: string[]; categorias: Record<string,number>;
-    horasTrabajadas: number|null; pdvPlanificados: number|null; pdvVisitados: number|null;
-    pdvMenos5Min: number|null; puntoGps: number|null; primeraEntrada: string|null; ultimaSalida: string|null;
-  }
-
-  const fechas = useMemo(() => {
-    const map: Record<string,RF> = {};
-    const asegurar = (f: string) => { if (!map[f]) map[f] = { fecha:f, totalVentas:0, cantidadFacturas:0, cantidadClientes:0, bultos:0, marcas:[], categorias:{}, horasTrabajadas:null, pdvPlanificados:null, pdvVisitados:null, pdvMenos5Min:null, puntoGps:null, primeraEntrada:null, ultimaSalida:null }; };
-    const fac: Record<string,Set<string>> = {};
-    const cli: Record<string,Set<string>> = {};
-    const mrc: Record<string,Set<string>> = {};
-    for (const v of ventas) {
-      const f = v.fecha_comprobante?.slice(0,10); if (!f) continue;
-      asegurar(f);
-      if (!fac[f]) { fac[f]=new Set(); cli[f]=new Set(); mrc[f]=new Set(); }
-      fac[f].add(v.numero); cli[f].add(String(v.cliente)); mrc[f].add(v.marca);
-      map[f].totalVentas += Number(v.subtotal_final)||0;
-      map[f].bultos      += Number(v.bultos_total)||0;
-      if (v.categoria) map[f].categorias[v.categoria] = (map[f].categorias[v.categoria]||0) + (Number(v.subtotal_final)||0);
-    }
-    for (const f of Object.keys(fac)) { map[f].cantidadFacturas=fac[f].size; map[f].cantidadClientes=cli[f].size; map[f].marcas=Array.from(mrc[f]); }
-    const vistas = new Set<string>();
-    for (const snap of snapshots.filter((s) => String(s.username)===String(username))) {
-      const f = new Date(snap.created_at).toLocaleDateString("en-CA",{timeZone:"America/Argentina/Buenos_Aires"});
-      if (vistas.has(f)) continue; vistas.add(f); asegurar(f);
-      map[f].horasTrabajadas=Number(snap.horas_trabajadas)||0; map[f].pdvPlanificados=Number(snap.pdv_planificados)||0;
-      map[f].pdvVisitados=Number(snap.pdv_visitados)||0; map[f].pdvMenos5Min=Number(snap.pdv_menos_5_min)||0;
-      map[f].puntoGps=Number(snap.puntos_gps)||0; map[f].primeraEntrada=snap.primera_marca||null; map[f].ultimaSalida=snap.ultima_marca||null;
-    }
-    return Object.values(map).filter((d) => d.totalVentas > 0).sort((a,b) => b.fecha.localeCompare(a.fecha));
-  }, [ventas, snapshots, username]);
-
-  const totalPaginas = Math.ceil(fechas.length / POR_PAGINA);
-  const paginadas    = fechas.slice(paginaActual * POR_PAGINA, (paginaActual + 1) * POR_PAGINA);
-
-  if (fechas.length === 0) return <p className="text-sm text-gray-400 py-2">Sin registros de ventas</p>;
-
-  return (
-    <div className="space-y-2">
-      {paginadas.map((dia) => {
-        const efPdv   = dia.pdvPlanificados && dia.pdvPlanificados > 0 ? Math.round(((dia.pdvVisitados??0)/dia.pdvPlanificados)*100) : null;
-        const topCats = Object.entries(dia.categorias).sort(([,a],[,b])=>b-a).slice(0,3);
-        return (
-          <div key={dia.fecha} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="flex items-center gap-3 px-3 py-2 bg-gray-100 dark:bg-gray-800">
-              <div className="text-center shrink-0 w-10">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase">{diaSemana(dia.fecha)}</p>
-                <p className="text-sm font-bold text-gray-800 dark:text-gray-100">{dia.fecha.slice(8)}/{dia.fecha.slice(5,7)}</p>
-              </div>
-              <div className="flex-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-                <span className="text-emerald-600 font-bold">{formatMoney(dia.totalVentas)}</span>
-                <span className="text-gray-500">{dia.cantidadFacturas} fact · {dia.cantidadClientes} cl</span>
-                {dia.horasTrabajadas !== null && <span className="text-blue-600 font-medium">{formatHoras(dia.horasTrabajadas)}</span>}
-                {dia.pdvVisitados !== null && (
-                  <span className={`font-medium ${efPdv!==null&&efPdv>=80?"text-emerald-600":efPdv!==null&&efPdv>=50?"text-amber-500":"text-red-500"}`}>
-                    {dia.pdvVisitados}/{dia.pdvPlanificados} PDV{efPdv!==null&&<span className="text-gray-400 font-normal ml-0.5">({efPdv}%)</span>}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1">
-                <p className="font-semibold text-gray-500 uppercase tracking-wide text-[10px] flex items-center gap-1"><TrendingUp className="w-3 h-3"/>Ventas</p>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                  <span className="text-gray-400">Facturas</span> <span className="font-medium text-right">{dia.cantidadFacturas}</span>
-                  <span className="text-gray-400">Clientes</span> <span className="font-medium text-right">{dia.cantidadClientes}</span>
-                  <span className="text-gray-400">Bultos</span>   <span className="font-medium text-right">{dia.bultos}</span>
-                  <span className="text-gray-400">Marcas</span>   <span className="font-medium text-right">{dia.marcas.length}</span>
-                </div>
-                {topCats.length > 0 && <div className="pt-1 space-y-0.5"><p className="text-[10px] text-gray-400">Top categorías</p>{topCats.map(([cat,monto])=>(
-                  <div key={cat} className="flex justify-between"><span className="text-gray-500 truncate max-w-[130px]">{cat}</span><span className="font-medium text-gray-700 dark:text-gray-300 ml-2">{formatMoney(monto)}</span></div>
-                ))}</div>}
-              </div>
-              {dia.horasTrabajadas !== null && (
-                <div className="space-y-1">
-                  <p className="font-semibold text-gray-500 uppercase tracking-wide text-[10px] flex items-center gap-1"><Clock className="w-3 h-3"/>Actividad</p>
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                    <span className="text-gray-400">Entrada</span>   <span className="font-medium text-right">{formatHora(dia.primeraEntrada)}</span>
-                    <span className="text-gray-400">Salida</span>    <span className="font-medium text-right">{formatHora(dia.ultimaSalida)}</span>
-                    <span className="text-gray-400">Horas</span>     <span className="font-medium text-right text-blue-600">{formatHoras(dia.horasTrabajadas!)}</span>
-                    <span className="text-gray-400">PDV plan.</span> <span className="font-medium text-right">{dia.pdvPlanificados}</span>
-                    <span className="text-gray-400">PDV visit.</span>
-                    <span className={`font-bold text-right ${efPdv!==null&&efPdv>=80?"text-emerald-600":efPdv!==null&&efPdv>=50?"text-amber-500":"text-red-500"}`}>
-                      {dia.pdvVisitados}{efPdv!==null&&<span className="text-gray-400 font-normal ml-1">({efPdv}%)</span>}
-                    </span>
-                    {(dia.pdvMenos5Min??0)>0&&<><span className="text-gray-400">PDV &lt;5min</span><span className="font-medium text-right text-amber-500">{dia.pdvMenos5Min}</span></>}
-                    <span className="text-gray-400">GPS pts</span> <span className="font-medium text-right">{dia.puntoGps}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-      {totalPaginas > 1 && (
-        <div className="flex items-center justify-between pt-1 text-xs text-gray-500">
-          <button onClick={() => setPaginaActual((p) => Math.max(0, p-1))} disabled={paginaActual===0}
-            className="flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-            <ChevronLeft className="w-3.5 h-3.5"/> Anterior
-          </button>
-          <span>Página {paginaActual+1} de {totalPaginas} · {fechas.length} días</span>
-          <button onClick={() => setPaginaActual((p) => Math.min(totalPaginas-1, p+1))} disabled={paginaActual===totalPaginas-1}
-            className="flex items-center gap-1 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-            Siguiente <ChevronRight className="w-3.5 h-3.5"/>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // ─── DetalleFechas: lazy load + config + selector de período ──────────────────
 
 const PERIODOS_DISPONIBLES = generarPeriodos(4);
@@ -962,7 +854,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
   const [tramos,          setTramos]          = useState<TramoPozo[]>([]);
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState<string | null>(null);
-  const [tab,             setTab]             = useState<"premio" | "fechas">("premio");
+
 
   const periodo = PERIODOS_DISPONIBLES[periodoIdx];
 
@@ -1057,7 +949,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
         <span className="text-xs text-gray-500">Período:</span>
         <div className="flex gap-1 flex-wrap">
           {PERIODOS_DISPONIBLES.map((p, i) => (
-            <button key={p.mesVentas} onClick={() => { setPeriodoIdx(i); setTab("premio"); }}
+            <button key={p.mesVentas} onClick={() => setPeriodoIdx(i)}
               className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${periodoIdx === i ? "bg-red-600 text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"}`}>
               {p.label}
             </button>
@@ -1069,34 +961,20 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
         </span>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2">
-        {showPremio && (
-          <button onClick={() => setTab("premio")}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${tab==="premio" ? "bg-red-600 text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"}`}>
-            🏆 Tablero de Premio
-          </button>
-        )}
-        <button onClick={() => setTab("fechas")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${tab==="fechas" ? "bg-red-600 text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"}`}>
-          📅 Detalle por Fecha
-        </button>
-        {!showPremio && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="w-3.5 h-3.5"/> Sin config para {periodo.label}
-          </div>
-        )}
-      </div>
+      {/* Tablero: siempre visible, aviso si no hay config */}
+      {!showPremio && (
+        <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800">
+          <AlertTriangle className="w-3.5 h-3.5"/>
+          Sin config en Supabase para {periodo.label} — subí el CSV con periodo={periodo.mesVentas}
+        </div>
+      )}
 
-      {tab === "premio" && showPremio && config && (
+      {showPremio && config && (
         <PanelPremio
           ventas={ventas} snapshots={snapshotsPeriodo}
           username={username} config={config} grupos={grupos}
           tramos={tramos} periodo={periodo}
         />
-      )}
-      {tab === "fechas" && (
-        <DetalleFechasList ventas={ventas} snapshots={snapshotsPeriodo} username={username} />
       )}
     </div>
   );
