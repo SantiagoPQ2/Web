@@ -277,8 +277,9 @@ type SortKey = "name" | "horasTrabajadas" | "pdvVisitados" | "ffvv";
 // ─── Tipos para tabla diaria ──────────────────────────────────────────────────
 
 interface DiaTabla {
-  fecha: string;
-  nroDia: number;           // número correlativo: Día 1 = primer día del período
+  fecha: string;           // fecha del snapshot (día de trabajo real, ej: 28/05)
+  fechaVenta: string;      // fecha de las ventas asociadas (+2 hábiles, ej: 01/06)
+  nroDia: number;          // número correlativo: Día 1 = primer snap del período
   horasTrabajadas: number; pdvMenos5Min: number; pdvVisitados: number;
   tieneSnap: boolean; primeraEntrada: string | null; ultimaSalida: string | null;
   tieneVenta: boolean; clientesMas25k: number; cccUnicos: number;
@@ -286,8 +287,30 @@ interface DiaTabla {
 }
 
 // ─── buildDiasTabla ───────────────────────────────────────────────────────────
-// Solo días CON VENTA en el período de ventas.
-// Los snapshots se cruzan por fecha, usando el período de snapshots del período.
+//
+// LÓGICA DE CRUCE (delay de entrega 2 días hábiles):
+//   Snapshot fecha X  →  Ventas fecha X + 2 días hábiles
+//   Ejemplo: snap 28/5 → ventas 1/6
+//            snap 29/5 → ventas 2/6
+//            snap 2/6  → ventas 4/6
+//
+// Cada fila de la tabla = UN DÍA DE TRABAJO:
+//   Disciplina  (Hs, <5min, +40min) → del snapshot
+//   Cobertura, SKUs, CCC            → de las ventas del día correspondiente
+//
+// La numeración Día 1, Día 2... arranca desde el primer snapshot del período.
+
+function addDiasHabilesStr(fechaStr: string, n: number): string {
+  // Suma n días hábiles a una fecha YYYY-MM-DD y devuelve YYYY-MM-DD
+  const d = new Date(fechaStr + "T12:00:00");
+  let restantes = n;
+  while (restantes > 0) {
+    d.setDate(d.getDate() + 1);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) restantes--;
+  }
+  return d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+}
 
 function buildDiasTabla(
   ventas: ChessVenta[],
@@ -296,12 +319,17 @@ function buildDiasTabla(
   grupos: SkuGrupo[],
   ventaMinCliente: number
 ): DiaTabla[] {
+
+  // 1. Snapshots del vendedor por fecha (usamos campo fecha del snapshot)
   const snapsPorFecha: Record<string, Snapshot> = {};
   for (const snap of snapshots.filter((s) => String(s.username) === String(username))) {
-    const fecha = new Date(snap.created_at).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const fecha = snap.fecha
+      ? String(snap.fecha).slice(0, 10)
+      : new Date(snap.created_at).toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
     if (!snapsPorFecha[fecha]) snapsPorFecha[fecha] = snap;
   }
 
+  // 2. Ventas por fecha_comprobante
   const ventasPorFecha: Record<string, ChessVenta[]> = {};
   for (const v of ventas) {
     const fecha = v.fecha_comprobante?.slice(0, 10);
@@ -310,22 +338,21 @@ function buildDiasTabla(
     ventasPorFecha[fecha].push(v);
   }
 
-  // Unión de todas las fechas: días con venta O con snapshot
-  const todasFechas = new Set([
-    ...Object.keys(ventasPorFecha),
-    ...Object.keys(snapsPorFecha),
-  ]);
-  const fechasOrdenadas = Array.from(todasFechas).sort();
+  // 3. Construir lista de días de trabajo desde los snapshots (fuente principal del eje temporal)
+  //    Para cada día de snapshot, buscamos las ventas del día +2 hábiles
+  const fechasSnap = Object.keys(snapsPorFecha).sort();
 
-  // CCC acumulado por mes
+  // 4. CCC acumulado — lo calculamos sobre la fecha de VENTA (no de snap) en orden cronológico
+  //    para que el acumulado sea correcto dentro del mes
+  const fechasVenta = Object.keys(ventasPorFecha).sort();
   const clientesVistosPorMes: Record<string, Set<string>> = {};
-  const resultadoPorFecha: Record<string, { clientesMas25k: number; cccUnicos: number }> = {};
+  const cccPorFechaVenta: Record<string, { clientesMas25k: number; cccUnicos: number }> = {};
 
-  for (const fecha of fechasOrdenadas) {
-    const mes = fecha.slice(0, 7);
+  for (const fv of fechasVenta) {
+    const mes = fv.slice(0, 7);
     if (!clientesVistosPorMes[mes]) clientesVistosPorMes[mes] = new Set();
     const yaVistos  = clientesVistosPorMes[mes];
-    const ventasDia = ventasPorFecha[fecha] ?? [];
+    const ventasDia = ventasPorFecha[fv] ?? [];
     const porCliente: Record<string, number> = {};
     for (const v of ventasDia) {
       const cli = String(v.cliente);
@@ -335,30 +362,39 @@ function buildDiasTabla(
     const clientesHoy    = Object.keys(porCliente);
     const cccUnicos      = clientesHoy.filter((cli) => !yaVistos.has(cli)).length;
     for (const cli of clientesHoy) yaVistos.add(cli);
-    resultadoPorFecha[fecha] = { clientesMas25k, cccUnicos };
+    cccPorFechaVenta[fv] = { clientesMas25k, cccUnicos };
   }
 
-  // Numeración correlativa: Día 1 = primer día del período (snap o venta)
-  // ASC = orden cronológico → invertimos para mostrar más reciente primero
-  const totalDias = fechasOrdenadas.length;
-
-  return [...fechasOrdenadas].reverse().map((fecha, idx) => {
-    const ventasDia = ventasPorFecha[fecha] ?? [];
-    const snap      = snapsPorFecha[fecha] ?? null;
-    const res       = resultadoPorFecha[fecha] ?? { clientesMas25k: 0, cccUnicos: 0 };
-    const skuClientes = grupos.map((grupo) => new Set(ventasDia.filter(grupo.match).map((v) => String(v.cliente))).size);
-    // nroDia: DESC → idx 0 es el más reciente (totalDias), idx 1 es totalDias-1, etc.
-    const nroDia = totalDias - idx;
+  // 5. Construir fila por cada día de snap, cruzando con ventas del día +2 hábiles
+  const totalDias = fechasSnap.length;
+  const filas = fechasSnap.map((fechaSnap, idx) => {
+    const snap         = snapsPorFecha[fechaSnap];
+    const fechaVenta   = addDiasHabilesStr(fechaSnap, 2);
+    const ventasDia    = ventasPorFecha[fechaVenta] ?? [];
+    const res          = cccPorFechaVenta[fechaVenta] ?? { clientesMas25k: 0, cccUnicos: 0 };
+    const skuClientes  = grupos.map((grupo) =>
+      new Set(ventasDia.filter(grupo.match).map((v) => String(v.cliente))).size
+    );
+    const nroDia = idx + 1; // ASC → Día 1 es el más antiguo
     return {
-      fecha,
+      fecha: fechaSnap,        // fecha del snap = día de trabajo real
+      fechaVenta,              // fecha de las ventas asociadas (para display)
       nroDia,
-      horasTrabajadas: snap ? Number(snap.horas_trabajadas) || 0 : 0,
-      pdvMenos5Min:    snap ? Number(snap.pdv_menos_5_min)  || 0 : 0,
-      pdvVisitados:    snap ? Number(snap.pdv_visitados)    || 0 : 0,
-      tieneSnap: !!snap, primeraEntrada: snap?.primera_marca || null, ultimaSalida: snap?.ultima_marca || null,
-      tieneVenta: ventasDia.length > 0, clientesMas25k: res.clientesMas25k, cccUnicos: res.cccUnicos, skuClientes,
+      horasTrabajadas: Number(snap.horas_trabajadas) || 0,
+      pdvMenos5Min:    Number(snap.pdv_menos_5_min)  || 0,
+      pdvVisitados:    Number(snap.pdv_visitados)    || 0,
+      tieneSnap:       true,
+      primeraEntrada:  snap.primera_marca || null,
+      ultimaSalida:    snap.ultima_marca  || null,
+      tieneVenta:      ventasDia.length > 0,
+      clientesMas25k:  res.clientesMas25k,
+      cccUnicos:       res.cccUnicos,
+      skuClientes,
     };
   });
+
+  // Mostrar más reciente primero (DESC)
+  return filas.reverse();
 }
 
 // ─── Proyección fin de mes ────────────────────────────────────────────────────
@@ -776,9 +812,10 @@ const PanelPremio: React.FC<{
                   const rowBg  = idx % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50/50 dark:bg-gray-700/20";
                   return (
                     <tr key={dia.fecha} className={`${rowBg} border-b border-gray-100 dark:border-gray-700/50`}>
-                      <td className="px-2 py-1.5 border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
-                        <span className="font-bold text-gray-700 dark:text-gray-200">Día {dia.nroDia}</span>
-                        <span className="block text-[10px] text-gray-400">{dia.fecha.slice(8)}/{dia.fecha.slice(5,7)} {diaSemana(dia.fecha)}</span>
+                      <td className="px-2 py-1.5 border-r border-gray-200 dark:border-gray-600 whitespace-nowrap min-w-[72px]">
+                        <span className="font-bold text-gray-700 dark:text-gray-200 block">Día {dia.nroDia}</span>
+                        <span className="text-[10px] text-gray-400">{dia.fecha.slice(8)}/{dia.fecha.slice(5,7)}</span>
+                        <span className="text-[10px] text-blue-400 ml-1">→{dia.fechaVenta.slice(8)}/{dia.fechaVenta.slice(5,7)}</span>
                       </td>
                       <td className={`px-2 py-1.5 text-center ${dia.tieneSnap ? (dia.horasTrabajadas >= config.min_horas_dia ? cellOk : cellBad) : cellNA}`}>
                         {dia.tieneSnap ? formatHoras(dia.horasTrabajadas) : "—"}
