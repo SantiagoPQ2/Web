@@ -16,11 +16,16 @@ interface UsuarioApp {
 
 interface ChessVenta {
   id: number; numero: string; fecha_comprobante: string;
+  descripcion_comprobante: string;
   cliente: string; categoria: string; division: string;
   marca: string; unidad_de_negocio: string; codigo_articulo: string;
   bultos_total: number; subtotal_final: number;
   id_vendedor: number | string;
 }
+
+// Todos los comprobantes se incluyen — devoluciones y notas de crédito
+// tienen subtotal_final negativo y restan automáticamente al sumar
+const esVentaValida = (_v: ChessVenta) => true;
 
 interface Snapshot {
   id: number; username: string;
@@ -195,10 +200,23 @@ interface SkuGrupo {
 function buildSkuMatch(def: SkuDefinicion): (v: ChessVenta) => boolean {
   const campo = def.campo_filtro.trim();
   const valor = def.valor_filtro.trim();
-  if (campo.includes("AND") && campo.includes("codigo_articulo")) {
-    const codigos = valor.split(";").map((s) => s.trim());
-    return (v) => v.marca?.trim().toUpperCase() === "SADIA" && codigos.includes(String(v.codigo_articulo).trim());
+  const nombre = def.nombre_grupo?.trim().toUpperCase() ?? "";
+
+  // ── Jamón Sadia: (marca SADIA AND cod 597030/559467) OR cod 1153 por separado
+  if (nombre === "JAMON SADIA") {
+    return (v) => {
+      const cod = String(v.codigo_articulo).trim();
+      const marca = v.marca?.trim().toUpperCase() ?? "";
+      return (marca === "SADIA" && ["597030", "559467"].includes(cod)) || cod === "1153";
+    };
   }
+
+  // ── Danica: unidad_de_negocio IN [MAYONESAS Y ADEREZOS, MARGARINAS]
+  if (nombre === "DANICA") {
+    return (v) => ["MAYONESAS Y ADEREZOS", "MARGARINAS"].includes(v.unidad_de_negocio?.trim().toUpperCase() ?? "");
+  }
+
+  // ── Lógica genérica para el resto ──────────────────────────────────────────
   if (campo.includes("AND") && campo.includes("division")) {
     const marcaMatch = campo.match(/marca=(\S+)/)?.[1]?.toUpperCase() ?? "";
     return (v) => v.marca?.trim().toUpperCase() === marcaMatch && v.division?.trim().toUpperCase() === valor.toUpperCase();
@@ -343,8 +361,11 @@ function buildDiasTabla(
   }
 
   // 2. Ventas por fecha_comprobante
+  // Solo ventas válidas (excluir devoluciones y notas de crédito)
+  const ventasValidas = ventas.filter(esVentaValida);
+
   const ventasPorFecha: Record<string, ChessVenta[]> = {};
-  for (const v of ventas) {
+  for (const v of ventasValidas) {
     const fecha = v.fecha_comprobante?.slice(0, 10);
     if (!fecha) continue;
     if (!ventasPorFecha[fecha]) ventasPorFecha[fecha] = [];
@@ -488,7 +509,9 @@ const PanelPremio: React.FC<{
     [ventas, snapshots, username, grupos, config.venta_min_cliente]
   );
 
-  const ventaTotal = ventas.reduce((a, v) => a + (Number(v.subtotal_final) || 0), 0);
+  // Filtrar devoluciones y notas de crédito antes de cualquier cálculo
+  const ventasValidas = ventas.filter(esVentaValida);
+  const ventaTotal = ventasValidas.reduce((a, v) => a + (Number(v.subtotal_final) || 0), 0);
   const pozo       = calcularPozoConTramos(ventaTotal, config.escala_pozo_id, tramos);
 
   const diasBase = dias.length;
@@ -510,16 +533,16 @@ const PanelPremio: React.FC<{
   // SKUs acumulados (con compra mínima)
   const skuClientesPeriodo = useMemo(() => grupos.map((grupo) => {
     const porCliente: Record<string, number> = {};
-    ventas.filter(grupo.match).forEach((v) => {
+    ventasValidas.filter(grupo.match).forEach((v) => {
       const cli = String(v.cliente);
       porCliente[cli] = (porCliente[cli] || 0) + (Number(v.bultos_total) || 1);
     });
     return Object.values(porCliente).filter((c) => c >= grupo.minCompra).length;
-  }), [ventas, grupos]);
+  }), [ventasValidas, grupos]);
 
   const skusLogrados   = skuClientesPeriodo.filter((c, i) => c >= grupos[i]?.objClientes).length;
   const mSkus          = multSkus(skusLogrados);
-  const clientesUnicos = new Set(ventas.map((v) => String(v.cliente))).size;
+  const clientesUnicos = new Set(ventasValidas.map((v) => String(v.cliente))).size;
   const cccUnicosTotal = dias.reduce((a, d) => a + d.cccUnicos, 0);
 
   const pctCartera     = config.base_cartera_sana > 0 ? (clientesUnicos / config.base_cartera_sana) * 100 : null;
@@ -992,7 +1015,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
         while (true) {
           const { data, error: e } = await supabase
             .from("chess_ventas")
-            .select("id, numero, fecha_comprobante, cliente, categoria, division, marca, unidad_de_negocio, codigo_articulo, bultos_total, subtotal_final, id_vendedor")
+            .select("id, numero, fecha_comprobante, descripcion_comprobante, cliente, categoria, division, marca, unidad_de_negocio, codigo_articulo, bultos_total, subtotal_final, id_vendedor")
             .eq("id_vendedor", username)
             .gte("fecha_comprobante", `${periodo.mesVentas}-01`)
             .lte("fecha_comprobante", periodo.ultimoDiaVentas)
