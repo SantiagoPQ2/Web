@@ -225,6 +225,10 @@ function buildSkuMatch(def: SkuDefinicion): (v: ChessVenta) => boolean {
     const vals = valor.split(";").map((s) => s.trim().toUpperCase());
     return (v) => vals.includes(v.unidad_de_negocio?.trim().toUpperCase());
   }
+  if (campo === "division") {
+    const vals = valor.split(";").map((s) => s.trim().toUpperCase());
+    return (v) => vals.includes(v.division?.trim().toUpperCase());
+  }
   if (campo === "marca") return (v) => v.marca?.trim().toUpperCase() === valor.toUpperCase();
   if (campo === "codigo_articulo") {
     const vals = valor.split(";").map((s) => s.trim());
