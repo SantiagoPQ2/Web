@@ -595,12 +595,24 @@ const PanelPremio: React.FC<{
 
   const premioProy = pozoProyectado * mDiscProy * mCobProy * mSkusProy * mCarteraProy;
 
-  // ── Supuesto mínimo: qué pasaría si cumple condiciones base ──────────────────
-  // Venta mínima para generar pozo: primer tramo > 0
+  // ── Supuesto mínimo ────────────────────────────────────────────────────────
   const tramosOrdenados    = tramos.filter((t) => t.escala_id === config.escala_pozo_id && t.desde_monto > 0).sort((a,b) => a.desde_monto - b.desde_monto);
   const ventaMinPozo       = tramosOrdenados[0]?.desde_monto ?? 0;
   const pozoMinimo         = calcularPozoConTramos(ventaMinPozo, config.escala_pozo_id, tramos);
   const premioSupuesto     = pozoMinimo * multDisciplina(100) * multCobertura(100) * multSkus(2) * multCartera(100);
+
+  // ── Proy. 5 SKUs: si venta proyectada no llega al mínimo, usar el mínimo para el pozo
+  const ventaProy5SKUs      = Math.max(ventaProyectada, ventaMinPozo);
+  const pozoProy5SKUs       = calcularPozoConTramos(ventaProy5SKUs, config.escala_pozo_id, tramos);
+  const premioProy5SKUs     = pozoProy5SKUs * mDiscProy * mCobProy * multSkus(5) * mCarteraProy;
+
+  // ── Cuánto tiene que vender por día para llegar al mínimo ─────────────────
+  // Regla de 3: ventaMinPozo es el objetivo, ventaTotal es lo acumulado
+  // diasRestantes = diasHabiles - diasConVenta
+  const diasRestantes        = Math.max(periodo.diasHabiles - diasConVentaActual, 0);
+  const ventaFaltante        = Math.max(ventaMinPozo - ventaTotal, 0);
+  const ventaPorDiaNecesaria = diasRestantes > 0 ? ventaFaltante / diasRestantes : 0;
+  const yaAlcanzoMinimo      = ventaTotal >= ventaMinPozo;
 
   const [mostrarTabla, setMostrarTabla] = useState(true);
   const [mostrarProy,  setMostrarProy]  = useState(true);
@@ -654,7 +666,13 @@ const PanelPremio: React.FC<{
                 {[
                   { label: "Real actual",       sub: "a hoy",                              color: "text-gray-700 dark:text-gray-200",   bg: "" },
                   { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700",                     bg: "bg-blue-50/40 dark:bg-blue-900/10" },
-                  { label: "Proyección actual", sub: "si sigue igual",                     color: "text-emerald-700",                  bg: "bg-emerald-50/40 dark:bg-emerald-900/10" },
+                  { label: "Proyección actual",
+                    sub: yaAlcanzoMinimo
+                      ? "✓ ya superó el mínimo"
+                      : diasRestantes > 0
+                        ? `necesita ${formatMoney(ventaPorDiaNecesaria)}/día para llegar`
+                        : "sin días restantes",
+                    color: "text-emerald-700", bg: "bg-emerald-50/40 dark:bg-emerald-900/10" },
                   { label: "Proy. 5 SKUs",      sub: "proyectado + 5/5 SKUs",              color: "text-violet-700",                   bg: "bg-violet-50/40 dark:bg-violet-900/10" },
                 ].map((col) => (
                   <th key={col.label} className={`px-3 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide border-r last:border-r-0 border-gray-200 dark:border-gray-700 ${col.bg}`}>
@@ -671,7 +689,12 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(ventaTotal)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(ventaProyectada)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(ventaProyectada)}</td>
+                <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
+                  <span className="font-semibold text-violet-600">{formatMoney(ventaProy5SKUs)}</span>
+                  {ventaProyectada < ventaMinPozo && (
+                    <span className="block text-[10px] text-amber-500 mt-0.5">↑ ajustado al mínimo</span>
+                  )}
+                </td>
               </tr>
               {/* Pozo */}
               <tr className="border-b border-gray-100 dark:border-gray-700/50">
@@ -679,7 +702,7 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(pozo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(pozoProyectado)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(pozoProyectado)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(pozoProy5SKUs)}</td>
               </tr>
               {/* Disciplina */}
               <tr className="border-b border-gray-100 dark:border-gray-700/50">
@@ -778,8 +801,8 @@ const PanelPremio: React.FC<{
                 <td className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</td>
                 <td className={`px-3 py-3 text-center text-sm bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</td>
                 <td className={`px-3 py-3 text-center text-sm bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</td>
-                <td className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(pozoProyectado * mDiscProy * mCobProy * multSkus(5) * mCarteraProy)}`}>
-                  {formatMoney(pozoProyectado * mDiscProy * mCobProy * multSkus(5) * mCarteraProy)}
+                <td className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
+                  {formatMoney(premioProy5SKUs)}
                 </td>
               </tr>
             </tbody>
