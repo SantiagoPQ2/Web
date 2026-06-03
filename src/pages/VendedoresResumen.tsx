@@ -656,8 +656,7 @@ const PanelPremio: React.FC<{
         ))}
       </div>
 
-      {/* ── TABLA COMPARATIVA ────────────────────────────────────────────────── */}
-      {{/* 4 columnas: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}}
+      {/* ── TABLA COMPARATIVA: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
