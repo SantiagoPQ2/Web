@@ -252,8 +252,8 @@ export const ROUTES: RouteConfig[] = [
     path: "/vendedores-resumen",
     label: "Resumen Vendedores",
     icon: BarChart3,
-    description: "Ventas y actividad de todo el equipo",
-    roles: ["admin"],
+    description: "Ventas, actividad y premios del equipo",
+    roles: ["vendedor", "admin"],
     inMenu: true,
   },
   {
@@ -325,10 +325,22 @@ export function getRoutesForRole(role: AppRole): RouteConfig[] {
 }
 
 export function getMenuItemsForRole(role: AppRole): RouteConfig[] {
-  return ROUTES.filter((r) => r.roles.includes(role) && r.inMenu);
+  return ROUTES
+    .filter((r) => r.roles.includes(role) && r.inMenu)
+    .map((r) => {
+      if (role === "vendedor" && r.path === "/vendedores-resumen") {
+        return {
+          ...r,
+          label: "Mi Premio",
+          description: "Ver mi premio, ventas y objetivos",
+        };
+      }
+      return r;
+    });
 }
 
 export function getLabelForPath(path: string, role?: AppRole): string {
+  if (path === "/vendedores-resumen" && role === "vendedor") return "Mi Premio";
   if (path === "/") {
     if (role === "administracion-cordoba") return "Pedido de Compra";
     if (role === "logistica") return "Posible Rechazos";
