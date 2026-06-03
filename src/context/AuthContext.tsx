@@ -7,6 +7,9 @@ type User = {
   name?: string
   phone?: string
   role?: string
+  FFVV?: string
+  ffvv?: string
+  supervisor?: string
 } | null
 
 type AuthContextType = {
@@ -42,6 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       name: data.name,
       phone: data.phone,
       role: data.role,
+      FFVV: data.FFVV,
+      ffvv: data.ffvv,
+      supervisor: data.supervisor,
     }
 
     setUser(u)
