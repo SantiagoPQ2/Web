@@ -612,6 +612,7 @@ const PanelPremio: React.FC<{
   const diasRestantes        = Math.max(periodo.diasHabiles - diasConVentaActual, 0);
   const ventaFaltante        = Math.max(ventaMinPozo - ventaTotal, 0);
   const ventaPorDiaNecesaria = diasRestantes > 0 ? ventaFaltante / diasRestantes : 0;
+  const ventaPromedioDiaActual = diasConVentaActual > 0 ? ventaTotal / diasConVentaActual : 0;
   const yaAlcanzoMinimo      = ventaTotal >= ventaMinPozo;
 
   const [mostrarTabla, setMostrarTabla] = useState(true);
@@ -654,18 +655,27 @@ const PanelPremio: React.FC<{
       </div>
 
 
-      {/* ── TABLA COMPARATIVA: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}
+      {/* ── TABLA COMPARATIVA: Real actual | Proyección actual | Supuesto mínimo | Proy. con 5 SKUs */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
+              {/* PREMIO FINAL arriba de todo */}
+              <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold border-b border-gray-200 dark:border-gray-700">
+                <th className="px-3 py-3 text-left text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-sm">Premio final</th>
+                <th className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</th>
+                <th className={`px-3 py-3 text-center text-sm bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</th>
+                <th className={`px-3 py-3 text-center text-sm bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</th>
+                <th className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
+                  {formatMoney(premioProy5SKUs)}
+                </th>
+              </tr>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase tracking-wide text-[10px] w-44 border-r border-gray-200 dark:border-gray-700">
                   Indicador
                 </th>
                 {[
-                  { label: "Real actual",       sub: "a hoy",                              color: "text-gray-700 dark:text-gray-200",   bg: "" },
-                  { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700",                     bg: "bg-blue-50/40 dark:bg-blue-900/10" },
+                  { label: "Real actual",       sub: `a hoy · venís vendiendo ${formatMoney(ventaPromedioDiaActual)}/día`, color: "text-gray-700 dark:text-gray-200",   bg: "" },
                   { label: "Proyección actual",
                     sub: yaAlcanzoMinimo
                       ? "✓ ya superó el mínimo"
@@ -673,6 +683,7 @@ const PanelPremio: React.FC<{
                         ? `necesita ${formatMoney(ventaPorDiaNecesaria)}/día para llegar`
                         : "sin días restantes",
                     color: "text-emerald-700", bg: "bg-emerald-50/40 dark:bg-emerald-900/10" },
+                  { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700",                     bg: "bg-blue-50/40 dark:bg-blue-900/10" },
                   { label: "Proy. 5 SKUs",      sub: "proyectado + 5/5 SKUs",              color: "text-violet-700",                   bg: "bg-violet-50/40 dark:bg-violet-900/10" },
                 ].map((col) => (
                   <th key={col.label} className={`px-3 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide border-r last:border-r-0 border-gray-200 dark:border-gray-700 ${col.bg}`}>
@@ -687,8 +698,8 @@ const PanelPremio: React.FC<{
               <tr className="border-b border-gray-100 dark:border-gray-700/50">
                 <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Venta del período</td>
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(ventaTotal)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(ventaProyectada)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <span className="font-semibold text-violet-600">{formatMoney(ventaProy5SKUs)}</span>
                   {ventaProyectada < ventaMinPozo && (
@@ -700,8 +711,8 @@ const PanelPremio: React.FC<{
               <tr className="border-b border-gray-100 dark:border-gray-700/50">
                 <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Pozo</td>
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(pozo)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(pozoProyectado)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(pozoProy5SKUs)}</td>
               </tr>
               {/* Disciplina */}
@@ -714,13 +725,13 @@ const PanelPremio: React.FC<{
                   <MultBadge mult={mDisc} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctDisciplina.toFixed(0)}% ({diasOk}/{diasBase})</span>
                 </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
-                  <MultBadge mult={multDisciplina(100)} />
-                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
-                </td>
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mDiscProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multDisciplina(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
                 </td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mDiscProy} />
@@ -737,13 +748,13 @@ const PanelPremio: React.FC<{
                   <MultBadge mult={mCob} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctCobertura.toFixed(0)}% ({diasCobOk}/{diasConVentaReal})</span>
                 </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
-                  <MultBadge mult={multCobertura(100)} />
-                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
-                </td>
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mCobProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{proy.coberturaProyPct.toFixed(0)}%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multCobertura(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
                 </td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mCobProy} />
@@ -759,13 +770,13 @@ const PanelPremio: React.FC<{
                   <MultBadge mult={mSkus} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{skusLogrados}/{grupos.length}</span>
                 </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
-                  <MultBadge mult={multSkus(2)} />
-                  <span className="block text-[10px] text-gray-400 mt-0.5">2/5</span>
-                </td>
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mSkusProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{skusLogradosProy}/{grupos.length}</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multSkus(2)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">2/5</span>
                 </td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={multSkus(5)} />
@@ -782,27 +793,17 @@ const PanelPremio: React.FC<{
                   <MultBadge mult={mCarteraProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{clientesUnicosProyectados}/{config.base_cartera_sana}</span>
                 </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
-                  <MultBadge mult={multCartera(100)} />
-                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
-                </td>
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mCarteraProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
                 </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multCartera(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
+                </td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mCarteraProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
-                </td>
-              </tr>
-              {/* PREMIO TOTAL */}
-              <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold">
-                <td className="px-3 py-3 text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-sm">Premio final</td>
-                <td className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</td>
-                <td className={`px-3 py-3 text-center text-sm bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</td>
-                <td className={`px-3 py-3 text-center text-sm bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</td>
-                <td className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
-                  {formatMoney(premioProy5SKUs)}
                 </td>
               </tr>
             </tbody>
