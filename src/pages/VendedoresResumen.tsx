@@ -801,6 +801,21 @@ const PanelPremio: React.FC<{
         </div>
       </div>
 
+      {/* Indicadores resumen */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[
+          { label: "Días trabajados",  value: diasBase,                                                   color: "text-gray-700 dark:text-gray-200" },
+          { label: "Disciplina OK",    value: `${diasOk} (${pctDisciplina.toFixed(0)}%)`,                 color: pctDisciplina >= 80 ? "text-emerald-600" : pctDisciplina >= 65 ? "text-amber-500" : "text-red-500" },
+          { label: "Cobertura OK",     value: `${diasCobOk}/${diasConVentaReal} (${pctCobertura.toFixed(0)}%)`, color: pctCobertura >= 80 ? "text-emerald-600" : pctCobertura >= 65 ? "text-amber-500" : "text-red-500" },
+          { label: "Clientes únicos",  value: `${clientesUnicos}${config.base_cartera_sana > 0 ? ` / ${config.base_cartera_sana}` : ""}`, color: "text-blue-600" },
+        ].map((item) => (
+          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide">{item.label}</p>
+            <p className={`text-sm font-bold mt-0.5 ${item.color}`}>{item.value}</p>
+          </div>
+        ))}
+      </div>
+
       {/* SKUs detalle */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
