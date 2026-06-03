@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 import {
   TrendingUp, Clock, ShoppingBag, Users, ChevronDown, ChevronUp,
   Store, Search, Filter, Calendar, ArrowUpDown, ChevronLeft,
@@ -1102,6 +1103,9 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 const VendedoresResumen: React.FC = () => {
+  const { user } = useAuth();
+  const esVistaVendedor = user?.role === "vendedor";
+
   const [usuarios,  setUsuarios]  = useState<UsuarioApp[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -1115,6 +1119,11 @@ const VendedoresResumen: React.FC = () => {
   const [expandido,        setExpandido]        = useState<string | null>(null);
 
   useEffect(() => {
+    if (esVistaVendedor) {
+      setLoading(false);
+      return;
+    }
+
     const cargar = async () => {
       setLoading(true); setError(null);
       try {
@@ -1135,7 +1144,7 @@ const VendedoresResumen: React.FC = () => {
       }
     };
     cargar();
-  }, []);
+  }, [esVistaVendedor]);
 
   const statsMap = useMemo<Record<string, VendedorStats>>(() => {
     const map: Record<string, VendedorStats> = {};
@@ -1195,6 +1204,40 @@ const VendedoresResumen: React.FC = () => {
   const toggleSort = (key: SortKey) => { if (sortKey===key) setSortDesc(!sortDesc); else {setSortKey(key);setSortDesc(true);} };
 
   const periodoCurrent = PERIODOS_DISPONIBLES[PERIODO_ACTUAL_IDX];
+
+  if (esVistaVendedor) {
+    if (!user?.username) {
+      return (
+        <div className="p-6 text-sm text-red-500">
+          No se pudo identificar el usuario vendedor logueado.
+        </div>
+      );
+    }
+
+    const ffvvUsuario = String(user.FFVV ?? user.ffvv ?? "");
+    const nombreUsuario = user.name || user.username;
+
+    return (
+      <div className="h-full overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+              {nombreUsuario?.[0]?.toUpperCase()}
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Mi premio</h2>
+              <p className="text-xs text-gray-400">
+                {nombreUsuario} · ID vendedor {user.username}
+                {ffvvUsuario ? ` · ${ffvvUsuario}` : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <DetalleFechas username={user.username} ffvv={ffvvUsuario} />
+      </div>
+    );
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-full min-h-[60vh]">
