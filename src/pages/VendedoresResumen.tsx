@@ -641,20 +641,6 @@ const PanelPremio: React.FC<{
         <span>{config.escala_pozo_id} · piso {formatMoney(pisoEscala)} · base cartera {config.base_cartera_sana} cl · {periodo.diasHabiles} días hábiles</span>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { label: "Venta Total",   value: formatMoney(ventaTotal),    bg: "bg-emerald-50 dark:bg-emerald-900/20",  color: "text-emerald-700" },
-          { label: "Pozo Base",     value: formatMoney(pozo),          bg: pozo > 0 ? "bg-violet-50 dark:bg-violet-900/20" : "bg-gray-100 dark:bg-gray-800", color: pozo > 0 ? "text-violet-700" : "text-gray-400" },
-          { label: "SKUs logrados", value: `${skusLogrados}/${grupos.length}`, bg: "bg-blue-50 dark:bg-blue-900/20", color: "text-blue-700" },
-          { label: "Premio final",  value: formatMoney(premioFinal),   bg: premioFinal > 0 ? "bg-amber-50 dark:bg-amber-900/20" : "bg-gray-100 dark:bg-gray-800", color: premioColor(premioFinal) },
-        ].map((k) => (
-          <div key={k.label} className={`${k.bg} rounded-lg p-3 text-center`}>
-            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">{k.label}</p>
-            <p className={`text-base font-bold mt-0.5 ${k.color}`}>{k.value}</p>
-          </div>
-        ))}
-      </div>
 
       {/* ── TABLA COMPARATIVA: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -801,21 +787,6 @@ const PanelPremio: React.FC<{
         </div>
       </div>
 
-      {/* Indicadores resumen */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { label: "Días trabajados",  value: diasBase,                                                   color: "text-gray-700 dark:text-gray-200" },
-          { label: "Disciplina OK",    value: `${diasOk} (${pctDisciplina.toFixed(0)}%)`,                 color: pctDisciplina >= 80 ? "text-emerald-600" : pctDisciplina >= 65 ? "text-amber-500" : "text-red-500" },
-          { label: "Cobertura OK",     value: `${diasCobOk}/${diasConVentaReal} (${pctCobertura.toFixed(0)}%)`, color: pctCobertura >= 80 ? "text-emerald-600" : pctCobertura >= 65 ? "text-amber-500" : "text-red-500" },
-          { label: "Clientes únicos",  value: `${clientesUnicos}${config.base_cartera_sana > 0 ? ` / ${config.base_cartera_sana}` : ""}`, color: "text-blue-600" },
-        ].map((item) => (
-          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2 text-center border border-gray-200 dark:border-gray-700">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide">{item.label}</p>
-            <p className={`text-sm font-bold mt-0.5 ${item.color}`}>{item.value}</p>
-          </div>
-        ))}
-      </div>
-
       {/* SKUs detalle */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
         <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -856,99 +827,6 @@ const PanelPremio: React.FC<{
             );
           })}
         </div>
-      </div>
-
-      {/* Proyección */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <button type="button" onClick={() => setMostrarProy(!mostrarProy)}
-          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            Proyección fin de mes — {periodo.diasHabiles} días hábiles
-            <span className="ml-1 text-[10px] font-normal text-gray-400">({diasBase} transcurridos)</span>
-          </span>
-          {mostrarProy ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-        </button>
-
-        {mostrarProy && (
-          <div className="px-4 pb-4 space-y-4">
-
-            {/* Premio proyectado */}
-            <div className={`rounded-lg p-3 text-center ${premioProy > premioFinal ? "bg-emerald-50 dark:bg-emerald-900/20" : premioProy < premioFinal ? "bg-red-50 dark:bg-red-900/20" : "bg-gray-50 dark:bg-gray-800"}`}>
-              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Premio proyectado a fin de mes</p>
-              <p className={`text-xl font-bold mt-1 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                Si mantiene el ritmo actual hasta el {formatFecha(periodo.ultimoDiaVentas)}
-              </p>
-            </div>
-
-            {/* Barras disciplina y cobertura */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Disciplina y Cobertura</p>
-                <PctBar
-                  real={pctDisciplina} proy={proy.disciplinaProyPct}
-                  label="Disciplina" ok={diasOk} total={diasBase}
-                  totalMes={periodo.diasHabiles}
-                />
-                <PctBar
-                  real={pctCobertura} proy={proy.coberturaProyPct}
-                  label="Cobertura" ok={diasCobOk} total={diasConVentaReal}
-                  totalMes={periodo.diasHabiles}
-                />
-              </div>
-
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 space-y-2">
-                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">SKUs y CCC (proyección lineal)</p>
-                {grupos.map((g, i) => {
-                  const cu     = skuClientesPeriodo[i];
-                  const cuProy = proy.skuClientesProy[i] ?? 0;
-                  return (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500 truncate max-w-[120px]">{g.nombre}</span>
-                      <div className="flex items-center gap-2 text-right">
-                        <span className="font-semibold text-gray-700 dark:text-gray-200">{cu}</span>
-                        <span className="text-gray-400">→</span>
-                        <span className={`font-bold ${cuProy >= g.objClientes ? "text-emerald-600" : cuProy >= g.objClientes * 0.8 ? "text-amber-500" : "text-red-500"}`}>
-                          {cuProy}<span className="text-gray-400 font-normal">/{g.objClientes}</span>
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-200 dark:border-gray-700">
-                  <span className="text-gray-500">CCC únicos nuevos</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-700 dark:text-gray-200">{cccUnicosTotal}</span>
-                    <span className="text-gray-400">→</span>
-                    <span className="font-bold text-blue-600">{proy.cccUnicosProyTotal}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tabla multiplicadores proyectados */}
-            <div className="text-xs bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Multiplicadores proyectados</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {[
-                  { label:"Disciplina", real: mDisc, proy: mDiscProy },
-                  { label:"Cobertura",  real: mCob,  proy: mCobProy  },
-                  { label:"SKUs",       real: mSkus, proy: mSkusProy  },
-                  { label:"Cartera",    real: mCarteraProy, proy: mCarteraProy },
-                ].map((m) => (
-                  <div key={m.label} className="text-center">
-                    <p className="text-[10px] text-gray-400">{m.label}</p>
-                    <p className="font-semibold text-gray-700 dark:text-gray-200">×{m.real ?? "?"}</p>
-                    <p className={`text-[10px] ${m.proy !== null && m.proy !== m.real ? (m.proy > (m.real ?? 0) ? "text-emerald-600" : "text-red-500") : "text-gray-400"}`}>
-                      {m.proy !== null ? `→ ×${m.proy}` : "sin datos"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Indicadores resumen */}
@@ -1077,11 +955,11 @@ const PanelPremio: React.FC<{
 
 // ─── DetalleFechas: lazy load + config + selector de período ──────────────────
 
-const PERIODOS_DISPONIBLES = generarPeriodos(4);
+const PERIODOS_DISPONIBLES = generarPeriodos(1);
 const PERIODO_ACTUAL_IDX   = PERIODOS_DISPONIBLES.length - 1; // el más reciente
 
 const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username, ffvv }) => {
-  const [periodoIdx,      setPeriodoIdx]      = useState(PERIODO_ACTUAL_IDX);
+  const periodoIdx = PERIODO_ACTUAL_IDX;
   const [ventas,          setVentas]          = useState<ChessVenta[]>([]);
   const [snapshotsPeriodo,setSnapshotsPeriodo]= useState<Snapshot[]>([]);
   const [config,          setConfig]          = useState<VariableConfig | null>(null);
@@ -1177,24 +1055,6 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
 
   return (
     <div className="space-y-3">
-
-      {/* Selector de período */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-        <span className="text-xs text-gray-500">Período:</span>
-        <div className="flex gap-1 flex-wrap">
-          {PERIODOS_DISPONIBLES.map((p, i) => (
-            <button key={p.mesVentas} onClick={() => setPeriodoIdx(i)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition ${periodoIdx === i ? "bg-red-600 text-white" : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-red-400"}`}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-[10px] text-gray-400 ml-1">
-          Ventas {formatFecha(periodo.mesVentas+"-01")}→{formatFecha(periodo.mesVentas+"-30")} ·
-          Activ. {formatFecha(periodo.snapDesde)}→{formatFecha(periodo.snapHasta)}
-        </span>
-      </div>
 
       {/* Tablero: siempre visible, aviso si no hay config */}
       {!showPremio && (
