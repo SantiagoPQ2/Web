@@ -269,7 +269,7 @@ function calcularPozoConTramos(venta: number, escalaId: string, tramos: TramoPoz
 
 const multDisciplina = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.82 : p >= 65 ? 0.58 : p >= 50 ? 0.25 : 0;
 const multCobertura  = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.93 : p >= 65 ? 0.74 : p >= 50 ? 0.50 : 0.25;
-const multSkus       = (n: number) => ({ 0: 0.50, 1: 0.90, 2: 1.075, 3: 1.18, 4: 1.33, 5: 1.50 }[Math.min(n, 5)] ?? 0.50);
+const multSkus       = (n: number) => ({ 0: 0.50, 1: 0.70, 2: 1.05, 3: 1.15, 4: 1.33, 5: 1.50 }[Math.min(n, 5)] ?? 0.50);
 const multCartera    = (p: number) => p >= 110 ? 1.15 : p >= 105 ? 1.10 : p >= 100 ? 1.05 : p >= 90 ? 0.95 : 0.60;
 
 // ─── Helpers de formato ───────────────────────────────────────────────────────
@@ -412,16 +412,45 @@ function buildDiasTabla(
     cccPorFechaVenta[fv] = { clientesMas25k, cccUnicos };
   }
 
-  // 5. Construir fila por cada día de snap, cruzando con ventas del día +2 hábiles
-  const totalDias = fechasSnap.length;
+  // 5. SKUs por día — clientes únicos NUEVOS que llegan al mínimo de compra.
+  //    Antes se mostraban clientes únicos del día; si un mismo cliente compraba el mismo SKU
+  //    en más de un día, se repetía visualmente y la suma diaria no coincidía con el total.
+  //    Ahora cada cliente se acredita una sola vez: el día en que alcanza el mínimo del SKU.
+  const skuClientesPorFechaVenta: Record<string, number[]> = {};
+  const skuAcumPorCliente = grupos.map(() => ({} as Record<string, number>));
+  const skuClientesYaContados = grupos.map(() => new Set<string>());
+
+  for (const fechaSnap of fechasSnap) {
+    const fechaVenta = addDiasHabilesStr(fechaSnap, 2);
+    const ventasDia  = ventasPorFecha[fechaVenta] ?? [];
+    skuClientesPorFechaVenta[fechaVenta] = grupos.map(() => 0);
+
+    grupos.forEach((grupo, gi) => {
+      const compraDiaPorCliente: Record<string, number> = {};
+
+      ventasDia.filter(grupo.match).forEach((v) => {
+        const cli = String(v.cliente);
+        compraDiaPorCliente[cli] = (compraDiaPorCliente[cli] || 0) + (Number(v.bultos_total) || 1);
+      });
+
+      Object.entries(compraDiaPorCliente).forEach(([cli, compraDia]) => {
+        skuAcumPorCliente[gi][cli] = (skuAcumPorCliente[gi][cli] || 0) + compraDia;
+
+        if (!skuClientesYaContados[gi].has(cli) && skuAcumPorCliente[gi][cli] >= grupo.minCompra) {
+          skuClientesYaContados[gi].add(cli);
+          skuClientesPorFechaVenta[fechaVenta][gi] += 1;
+        }
+      });
+    });
+  }
+
+  // 6. Construir fila por cada día de snap, cruzando con ventas del día +2 hábiles
   const filas = fechasSnap.map((fechaSnap, idx) => {
     const snap         = snapsPorFecha[fechaSnap];
     const fechaVenta   = addDiasHabilesStr(fechaSnap, 2);
     const ventasDia    = ventasPorFecha[fechaVenta] ?? [];
     const res          = cccPorFechaVenta[fechaVenta] ?? { clientesMas25k: 0, cccUnicos: 0 };
-    const skuClientes  = grupos.map((grupo) =>
-      new Set(ventasDia.filter(grupo.match).map((v) => String(v.cliente))).size
-    );
+    const skuClientes  = skuClientesPorFechaVenta[fechaVenta] ?? grupos.map(() => 0);
     const nroDia = idx + 1; // ASC → Día 1 es el más antiguo
     return {
       fecha: fechaSnap,        // fecha del snap = día de trabajo real
@@ -663,11 +692,11 @@ const PanelPremio: React.FC<{
             <thead>
               {/* PREMIO FINAL arriba de todo */}
               <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold border-b border-gray-200 dark:border-gray-700">
-                <th className="px-3 py-3 text-left text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-sm">Premio final</th>
-                <th className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</th>
-                <th className={`px-3 py-3 text-center text-sm bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</th>
-                <th className={`px-3 py-3 text-center text-sm bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</th>
-                <th className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
+                <th className="px-3 py-3.5 text-left text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-[15px]">Premio final</th>
+                <th className={`px-3 py-3.5 text-center text-[15px] ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</th>
+                <th className={`px-3 py-3.5 text-center text-[15px] bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</th>
+                <th className={`px-3 py-3.5 text-center text-[15px] bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</th>
+                <th className={`px-3 py-3.5 text-center text-[15px] bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
                   {formatMoney(premioProy5SKUs)}
                 </th>
               </tr>
