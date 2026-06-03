@@ -12,7 +12,7 @@ import {
 
 interface UsuarioApp {
   id: string; username: string; name: string;
-  FFVV: string; supervisor: string; role: string;
+  FFVV: string; ffvv?: string; supervisor: string; role: string;
 }
 
 interface ChessVenta {
@@ -1134,6 +1134,8 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
 const VendedoresResumen: React.FC = () => {
   const { user } = useAuth();
   const esVistaVendedor = user?.role === "vendedor";
+  const esVistaSupervisor = user?.role === "supervisor";
+  const ffvvUsuarioLogueado = normalizarFFVV(String(user?.FFVV ?? user?.ffvv ?? ""));
 
   const [usuarios,  setUsuarios]  = useState<UsuarioApp[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -1154,31 +1156,60 @@ const VendedoresResumen: React.FC = () => {
     }
 
     const cargar = async () => {
-      setLoading(true); setError(null);
+      setLoading(true);
+      setError(null);
+      setUsuarios([]);
+      setSnapshots([]);
+
       try {
-        const [{ data: u, error: e1 }, { data: s, error: e3 }] = await Promise.all([
-          supabase.from("usuarios_app").select("id, username, name, FFVV, supervisor, role").eq("role", "vendedor"),
-          supabase.from("admin_equipo_snapshots")
-            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
-            .eq("role", "vendedor").order("created_at", { ascending: false }),
-        ]);
+        if (esVistaSupervisor && !ffvvUsuarioLogueado) {
+          throw new Error("Tu usuario supervisor no tiene FFVV cargada en usuarios_app. Cargá la columna FFVV para poder filtrar sus vendedores.");
+        }
+
+        const { data: u, error: e1 } = await supabase
+          .from("usuarios_app")
+          .select("id, username, name, FFVV, ffvv, supervisor, role")
+          .eq("role", "vendedor");
+
         if (e1) throw new Error(`Usuarios: ${e1.message}`);
-        if (e3) throw new Error(`Snapshots: ${e3.message}`);
-        setUsuarios((u as UsuarioApp[]) || []);
-        setSnapshots((s as Snapshot[]) || []);
+
+        const vendedoresBase = ((u as UsuarioApp[]) || []).filter((v) => {
+          if (!esVistaSupervisor) return true;
+          const ffvvVendedor = normalizarFFVV(String(v.FFVV ?? v.ffvv ?? ""));
+          return ffvvVendedor === ffvvUsuarioLogueado;
+        });
+
+        const usernamesPermitidos = vendedoresBase.map((v) => String(v.username)).filter(Boolean);
+
+        let snapsFiltrados: Snapshot[] = [];
+        if (usernamesPermitidos.length > 0) {
+          const { data: s, error: e3 } = await supabase
+            .from("admin_equipo_snapshots")
+            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha, snapshot_taken_at")
+            .in("username", usernamesPermitidos)
+            .order("created_at", { ascending: false });
+
+          if (e3) throw new Error(`Snapshots: ${e3.message}`);
+          snapsFiltrados = (s as Snapshot[]) || [];
+        }
+
+        setUsuarios(vendedoresBase);
+        setSnapshots(snapsFiltrados);
       } catch (err: any) {
         setError(err.message || "Error desconocido");
       } finally {
         setLoading(false);
       }
     };
+
     cargar();
-  }, [esVistaVendedor]);
+  }, [esVistaVendedor, esVistaSupervisor, ffvvUsuarioLogueado]);
 
   const statsMap = useMemo<Record<string, VendedorStats>>(() => {
     const map: Record<string, VendedorStats> = {};
     for (const u of usuarios) {
-      map[u.username] = { username: u.username, name: u.name || u.username, ffvv: normalizarFFVV(u.FFVV), ffvvRaw: u.FFVV?.trim() || "", supervisor: u.supervisor || "", ultimaFecha: null, horasTrabajadas: 0, pdvPlanificados: 0, pdvVisitados: 0, promHoras: 0, promPdvVisitados: 0, diasConActividad: 0 };
+      const ffvvRaw = String(u.FFVV ?? u.ffvv ?? "").trim();
+      map[u.username] = { username: u.username, name: u.name || u.username, ffvv: normalizarFFVV(ffvvRaw), ffvvRaw, supervisor: u.supervisor || "", ultimaFecha: null, horasTrabajadas: 0, pdvPlanificados: 0, pdvVisitados: 0, promHoras: 0, promPdvVisitados: 0, diasConActividad: 0 };
     }
     const snapsX: Record<string, Snapshot[]> = {};
     for (const snap of snapshots) {
@@ -1285,13 +1316,20 @@ const VendedoresResumen: React.FC = () => {
   );
 
   const efTotal = totales.pdvPlanificados > 0 ? Math.round((totales.pdvVisitados/totales.pdvPlanificados)*100) : null;
+  const tituloPagina = esVistaSupervisor ? "Premios de mi FFVV" : "Resumen de Vendedores";
+  const subtituloScope = esVistaSupervisor && user
+    ? `Supervisor ${user.name || user.username} · FFVV ${String(user.FFVV ?? user.ffvv ?? "—")}`
+    : "";
 
   return (
     <div className="h-full overflow-y-auto px-4 py-5 space-y-5">
       <div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-amber-500"/> Resumen de Vendedores
+          <Trophy className="w-5 h-5 text-amber-500"/> {tituloPagina}
         </h2>
+        {subtituloScope && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{subtituloScope}</p>
+        )}
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
           {periodoCurrent.label} · Ventas {formatFecha(periodoCurrent.mesVentas+"-01")}→{formatFecha(periodoCurrent.mesVentas+"-30")} · Actividad {formatFecha(periodoCurrent.snapDesde)}→{formatFecha(periodoCurrent.snapHasta)} · {periodoCurrent.diasHabiles} días hábiles
         </p>
@@ -1320,9 +1358,9 @@ const VendedoresResumen: React.FC = () => {
             className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 w-48"/>
         </div>
         <Filter className="w-4 h-4 text-gray-400"/>
-        <select value={filtroFFVV} onChange={(e)=>setFiltroFFVV(e.target.value)}
-          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none">
-          <option value="todos">Todas las FFVV</option>
+        <select value={filtroFFVV} onChange={(e)=>setFiltroFFVV(e.target.value)} disabled={esVistaSupervisor}
+          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed">
+          <option value="todos">{esVistaSupervisor ? "Mi FFVV" : "Todas las FFVV"}</option>
           {ffvvOpciones.map((f)=><option key={f.norm} value={f.norm}>{f.raw}</option>)}
         </select>
         <select value={filtroSupervisor} onChange={(e)=>setFiltroSupervisor(e.target.value)}
