@@ -202,18 +202,26 @@ function buildSkuMatch(def: SkuDefinicion): (v: ChessVenta) => boolean {
   const valor = def.valor_filtro.trim();
   const nombre = def.nombre_grupo?.trim().toUpperCase() ?? "";
 
-  // ── Jamón Sadia: (marca SADIA AND cod 597030/559467) OR cod 1153 por separado
-  if (nombre === "JAMON SADIA") {
+  // ── Jamón Sadia: (marca SADIA AND cod 597030/559467) OR cod 1153 independiente
+  if (nombre === "JAMON SADIA" || campo === "jamon_sadia_especial") {
+    const todos = valor.split(";").map((s) => s.trim());
     return (v) => {
-      const cod = String(v.codigo_articulo).trim();
+      const cod   = String(v.codigo_articulo).trim();
       const marca = v.marca?.trim().toUpperCase() ?? "";
-      return (marca === "SADIA" && ["597030", "559467"].includes(cod)) || cod === "1153";
+      return (marca === "SADIA" && ["597030","559467"].includes(cod)) || cod === "1153";
     };
+  }
+
+  // ── Lucchetti Fideos: marca=LUCCHETTI AND division=FIDEOS
+  if (nombre === "LUCCHETTI FIDEOS" || campo === "lucchetti_fideos_especial") {
+    return (v) =>
+      v.marca?.trim().toUpperCase() === "LUCCHETTI" &&
+      v.division?.trim().toUpperCase() === valor.toUpperCase();
   }
 
   // ── Danica: unidad_de_negocio IN [MAYONESAS Y ADEREZOS, MARGARINAS]
   if (nombre === "DANICA") {
-    return (v) => ["MAYONESAS Y ADEREZOS", "MARGARINAS"].includes(v.unidad_de_negocio?.trim().toUpperCase() ?? "");
+    return (v) => ["MAYONESAS Y ADEREZOS","MARGARINAS"].includes(v.unidad_de_negocio?.trim().toUpperCase() ?? "");
   }
 
   // ── Lógica genérica para el resto ──────────────────────────────────────────
@@ -627,40 +635,6 @@ const PanelPremio: React.FC<{
   return (
     <div className="space-y-4">
 
-      {/* Supuesto mínimo */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
-        <div className="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-800">
-          <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5" />
-            Supuesto mínimo — ¿Cuánto cobraría si cumple las condiciones base?
-          </p>
-          <p className="text-[10px] text-blue-500 dark:text-blue-400 mt-0.5">
-            Venta mínima de {formatMoney(ventaMinPozo)} · 100% disciplina · 100% cobertura · 2/5 SKUs · cartera 100%
-          </p>
-        </div>
-        {/* Premio grande centrado */}
-        <div className="px-4 py-4 text-center border-b border-blue-100 dark:border-blue-800">
-          <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Premio supuesto mínimo</p>
-          <p className={`text-3xl font-bold ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</p>
-        </div>
-        {/* Desglose */}
-        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
-          {[
-            { label: "Pozo mínimo",    value: formatMoney(pozoMinimo),     color: "text-violet-600" },
-            { label: "× Disciplina",   value: `×${multDisciplina(100)}`,   color: "text-emerald-600" },
-            { label: "× Cobertura",    value: `×${multCobertura(100)}`,    color: "text-emerald-600" },
-            { label: "× SKUs (2/5)",   value: `×${multSkus(2)}`,           color: "text-blue-600" },
-            { label: "× Cartera 100%", value: `×${multCartera(100)}`,      color: "text-emerald-600" },
-          ].map((item) => (
-            <div key={item.label} className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
-              <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{item.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-
       {/* Badge config */}
       <div className="flex items-center gap-2 text-[10px] text-gray-400">
         <Database className="w-3 h-3" />
@@ -670,10 +644,10 @@ const PanelPremio: React.FC<{
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
-          { label: "Venta Total",  value: formatMoney(ventaTotal),      bg: "bg-emerald-50 dark:bg-emerald-900/20", color: "text-emerald-700" },
-          { label: "Pozo Base",    value: formatMoney(pozo),            bg: pozo > 0 ? "bg-violet-50 dark:bg-violet-900/20" : "bg-gray-100 dark:bg-gray-800", color: pozo > 0 ? "text-violet-700" : "text-gray-400" },
-          { label: "SKUs logrados",value: `${skusLogrados}/${grupos.length}`, bg: "bg-blue-50 dark:bg-blue-900/20", color: "text-blue-700" },
-          { label: "Premio final", value: formatMoney(premioFinal),     bg: premioFinal > 0 ? "bg-amber-50 dark:bg-amber-900/20" : "bg-gray-100 dark:bg-gray-800", color: premioColor(premioFinal) },
+          { label: "Venta Total",   value: formatMoney(ventaTotal),    bg: "bg-emerald-50 dark:bg-emerald-900/20",  color: "text-emerald-700" },
+          { label: "Pozo Base",     value: formatMoney(pozo),          bg: pozo > 0 ? "bg-violet-50 dark:bg-violet-900/20" : "bg-gray-100 dark:bg-gray-800", color: pozo > 0 ? "text-violet-700" : "text-gray-400" },
+          { label: "SKUs logrados", value: `${skusLogrados}/${grupos.length}`, bg: "bg-blue-50 dark:bg-blue-900/20", color: "text-blue-700" },
+          { label: "Premio final",  value: formatMoney(premioFinal),   bg: premioFinal > 0 ? "bg-amber-50 dark:bg-amber-900/20" : "bg-gray-100 dark:bg-gray-800", color: premioColor(premioFinal) },
         ].map((k) => (
           <div key={k.label} className={`${k.bg} rounded-lg p-3 text-center`}>
             <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">{k.label}</p>
@@ -682,93 +656,191 @@ const PanelPremio: React.FC<{
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-        {/* Cálculo paso a paso */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-1.5">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <BarChart2 className="w-3.5 h-3.5" /> Cálculo real
-          </p>
-          {[
-            { label: "Venta del período", value: formatMoney(ventaTotal) },
-            { label: `Pozo (${config.escala_pozo_id})`, value: formatMoney(pozo), color: pozo > 0 ? "text-violet-600" : "text-gray-400" },
-          ].map((r) => (
-            <div key={r.label} className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-gray-500 truncate max-w-[180px]">{r.label}</span>
-              <span className={`text-sm font-bold shrink-0 ${r.color ?? "text-gray-800 dark:text-gray-100"}`}>{r.value}</span>
-            </div>
-          ))}
-          {[
-            { label: `Disciplina ${pctDisciplina.toFixed(0)}% (${diasOk}/${diasBase})`, sub: `≥${config.min_horas_dia}h · <${config.max_pct_menos5min}% <5min`, value: formatMoney(pozo * mDisc), mult: mDisc },
-            { label: `Cobertura ${pctCobertura.toFixed(0)}% (${diasCobOk}/${diasConVentaReal} días con venta)`, sub: `≥${config.min_clientes_cob} cl >$${(config.venta_min_cliente/1000).toFixed(0)}k`, value: formatMoney(pozo * mDisc * mCob), mult: mCob },
-            { label: `SKUs (${skusLogrados}/${grupos.length})`, sub: "", value: formatMoney(premioReal), mult: mSkus },
-          ].map((r) => (
-            <div key={r.label} className="flex justify-between items-start py-1 border-b border-gray-100 dark:border-gray-700">
-              <div className="mr-2 min-w-0">
-                <span className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">{r.label} <MultBadge mult={r.mult} /></span>
-                {r.sub && <span className="text-[10px] text-gray-400">{r.sub}</span>}
-              </div>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-100 shrink-0">{r.value}</span>
-            </div>
-          ))}
-          {pctCartera !== null ? (
-            <div className="flex justify-between items-center py-1 border-b border-gray-100 dark:border-gray-700">
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                Cartera sana (proyección fin de mes) <MultBadge mult={mCarteraProy} />
-              </span>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{formatMoney(premioFinal)}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 py-1 text-xs text-gray-400">
-              <AlertTriangle className="w-3 h-3 text-amber-500" /> Cartera sana: base no configurada
-            </div>
-          )}
-          <div className="flex justify-between pt-1">
-            <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Premio final</span>
-            <span className={`text-base font-bold ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</span>
-          </div>
+      {/* ── TABLA COMPARATIVA ────────────────────────────────────────────────── */}
+      {{/* 4 columnas: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase tracking-wide text-[10px] w-44 border-r border-gray-200 dark:border-gray-700">
+                  Indicador
+                </th>
+                {[
+                  { label: "Real actual",       sub: "a hoy",                              color: "text-gray-700 dark:text-gray-200",   bg: "" },
+                  { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700",                     bg: "bg-blue-50/40 dark:bg-blue-900/10" },
+                  { label: "Proyección actual", sub: "si sigue igual",                     color: "text-emerald-700",                  bg: "bg-emerald-50/40 dark:bg-emerald-900/10" },
+                  { label: "Proy. 5 SKUs",      sub: "proyectado + 5/5 SKUs",              color: "text-violet-700",                   bg: "bg-violet-50/40 dark:bg-violet-900/10" },
+                ].map((col) => (
+                  <th key={col.label} className={`px-3 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide border-r last:border-r-0 border-gray-200 dark:border-gray-700 ${col.bg}`}>
+                    <span className={col.color}>{col.label}</span>
+                    <span className="block text-gray-400 font-normal normal-case mt-0.5">{col.sub}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Venta */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Venta del período</td>
+                <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(ventaTotal)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(ventaProyectada)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(ventaProyectada)}</td>
+              </tr>
+              {/* Pozo */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Pozo</td>
+                <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(pozo)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(pozoProyectado)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(pozoProyectado)}</td>
+              </tr>
+              {/* Disciplina */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-500 font-medium">Disciplina</span>
+                  <span className="block text-[10px] text-gray-400">≥{config.min_horas_dia}h · &lt;{config.max_pct_menos5min}% &lt;5min</span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <MultBadge mult={mDisc} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{pctDisciplina.toFixed(0)}% ({diasOk}/{diasBase})</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multDisciplina(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
+                  <MultBadge mult={mDiscProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
+                  <MultBadge mult={mDiscProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
+                </td>
+              </tr>
+              {/* Cobertura */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-500 font-medium">Cobertura</span>
+                  <span className="block text-[10px] text-gray-400">≥{config.min_clientes_cob} cl &gt;${(config.venta_min_cliente/1000).toFixed(0)}k</span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <MultBadge mult={mCob} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{pctCobertura.toFixed(0)}% ({diasCobOk}/{diasConVentaReal})</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multCobertura(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
+                  <MultBadge mult={mCobProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.coberturaProyPct.toFixed(0)}%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
+                  <MultBadge mult={mCobProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.coberturaProyPct.toFixed(0)}%</span>
+                </td>
+              </tr>
+              {/* SKUs */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-500 font-medium">SKUs estratégicos</span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <MultBadge mult={mSkus} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{skusLogrados}/{grupos.length}</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multSkus(2)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">2/5</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
+                  <MultBadge mult={mSkusProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{skusLogradosProy}/{grupos.length}</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
+                  <MultBadge mult={multSkus(5)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">5/5</span>
+                </td>
+              </tr>
+              {/* Cartera */}
+              <tr className="border-b border-gray-100 dark:border-gray-700/50">
+                <td className="px-3 py-2 border-r border-gray-200 dark:border-gray-700">
+                  <span className="text-gray-500 font-medium">Cartera sana</span>
+                  <span className="block text-[10px] text-gray-400">proyectada vs base {config.base_cartera_sana} cl</span>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <MultBadge mult={mCarteraProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{clientesUnicosProyectados}/{config.base_cartera_sana}</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                  <MultBadge mult={multCartera(100)} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
+                  <MultBadge mult={mCarteraProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
+                </td>
+                <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
+                  <MultBadge mult={mCarteraProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
+                </td>
+              </tr>
+              {/* PREMIO TOTAL */}
+              <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold">
+                <td className="px-3 py-3 text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-sm">Premio final</td>
+                <td className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(pozoProyectado * mDiscProy * mCobProy * multSkus(5) * mCarteraProy)}`}>
+                  {formatMoney(pozoProyectado * mDiscProy * mCobProy * multSkus(5) * mCarteraProy)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </div>
 
-        {/* SKUs detalle */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
-          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <Star className="w-3.5 h-3.5" /> SKUs estratégicos
-          </p>
-          <div className="space-y-2">
-            {grupos.map((grupo, i) => {
-              const cu     = skuClientesPeriodo[i];
-              const obj    = grupo.objClientes;
-              const cuProy = proy.skuClientesProy[i] ?? 0;
-              const logrado = cu >= obj;
-              const proyLogrado = cuProy >= obj;
-              return (
-                <div key={i} className={`rounded-md p-2 border ${logrado ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200" : "bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-600"}`}>
-                  <div className="flex justify-between items-center">
-                    <span className={`text-xs font-semibold ${logrado ? "text-emerald-700" : "text-gray-500"}`}>{i+1}. {grupo.nombre}</span>
-                    <div className="flex items-center gap-1">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${logrado ? "bg-emerald-200 text-emerald-800" : "bg-gray-200 text-gray-600"}`}>
-                        {logrado ? "✓" : "✗"} {cu}/{obj}
+      {/* SKUs detalle */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+          <Star className="w-3.5 h-3.5" /> SKUs estratégicos
+        </p>
+        <div className="space-y-2">
+          {grupos.map((grupo, i) => {
+            const cu     = skuClientesPeriodo[i];
+            const obj    = grupo.objClientes;
+            const cuProy = proy.skuClientesProy[i] ?? 0;
+            const logrado = cu >= obj;
+            const proyLogrado = cuProy >= obj;
+            return (
+              <div key={i} className={`rounded-md p-2 border ${logrado ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200" : "bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-600"}`}>
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs font-semibold ${logrado ? "text-emerald-700" : "text-gray-500"}`}>{i+1}. {grupo.nombre}</span>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${logrado ? "bg-emerald-200 text-emerald-800" : "bg-gray-200 text-gray-600"}`}>
+                      {logrado ? "✓" : "✗"} {cu}/{obj}
+                    </span>
+                    {!logrado && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${proyLogrado ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
+                        proy: {cuProy}
                       </span>
-                      {!logrado && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${proyLogrado ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
-                          proy: {cuProy}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-1 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 relative">
-                    <div className={`h-1.5 rounded-full ${logrado ? "bg-emerald-500" : "bg-red-400"}`}
-                      style={{ width: `${Math.min((cu / obj) * 100, 100)}%` }} />
-                    {!logrado && cuProy > cu && (
-                      <div className="absolute top-0 h-1.5 rounded-full bg-blue-400/50"
-                        style={{ left: `${Math.min((cu/obj)*100,100)}%`, width: `${Math.min(((cuProy-cu)/obj)*100, 100-(cu/obj)*100)}%` }} />
                     )}
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{grupo.descripcion}</p>
                 </div>
-              );
-            })}
-          </div>
+                <div className="mt-1 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1.5 relative">
+                  <div className={`h-1.5 rounded-full ${logrado ? "bg-emerald-500" : "bg-red-400"}`}
+                    style={{ width: `${Math.min((cu / obj) * 100, 100)}%` }} />
+                  {!logrado && cuProy > cu && (
+                    <div className="absolute top-0 h-1.5 rounded-full bg-blue-400/50"
+                      style={{ left: `${Math.min((cu/obj)*100,100)}%`, width: `${Math.min(((cuProy-cu)/obj)*100, 100-(cu/obj)*100)}%` }} />
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-0.5">{grupo.descripcion}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
