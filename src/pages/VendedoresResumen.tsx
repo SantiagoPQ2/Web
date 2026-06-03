@@ -1168,7 +1168,7 @@ const VendedoresResumen: React.FC = () => {
 
         const { data: u, error: e1 } = await supabase
           .from("usuarios_app")
-          .select("id, username, name, FFVV, ffvv, supervisor, role")
+          .select("id, username, name, FFVV, supervisor, role")
           .eq("role", "vendedor");
 
         if (e1) throw new Error(`Usuarios: ${e1.message}`);
