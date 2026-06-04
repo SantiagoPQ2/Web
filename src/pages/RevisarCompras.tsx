@@ -3,6 +3,8 @@ import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 import * as XLSX from "xlsx";
 
+type Estado = "pendiente" | "aprobado" | "rechazado";
+
 interface CompraItem {
   id: string;
   que_es: string;
@@ -14,7 +16,7 @@ interface CompraItem {
   vendedor_nombre: string | null;
   vendedor_username: string | null;
 
-  aprobado: boolean;
+  estado: Estado;
   supervisor_nombre: string | null;
   created_at: string;
 
@@ -26,6 +28,30 @@ interface CompraItem {
 
   respuesta?: string | null;
 }
+
+const ESTADO_LABELS: Record<Estado, string> = {
+  pendiente: "Pendiente",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
+};
+
+const ESTADO_BADGE: Record<Estado, string> = {
+  pendiente: "bg-yellow-100 text-yellow-800",
+  aprobado: "bg-green-100 text-green-700",
+  rechazado: "bg-red-100 text-red-700",
+};
+
+const BOTON_ACTIVO: Record<Estado, string> = {
+  pendiente: "bg-yellow-400 text-white ring-2 ring-yellow-500",
+  aprobado: "bg-green-600 text-white ring-2 ring-green-700",
+  rechazado: "bg-red-600 text-white ring-2 ring-red-700",
+};
+
+const BOTON_INACTIVO: Record<Estado, string> = {
+  pendiente: "bg-gray-100 text-yellow-700 hover:bg-yellow-50",
+  aprobado: "bg-gray-100 text-green-700 hover:bg-green-50",
+  rechazado: "bg-gray-100 text-red-700 hover:bg-red-50",
+};
 
 const RevisarCompras: React.FC = () => {
   const { user } = useAuth();
@@ -48,16 +74,14 @@ const RevisarCompras: React.FC = () => {
   } | null>(null);
 
   // Respuesta (draft por fila)
-  const [respuestasDraft, setRespuestasDraft] = useState<Record<string, string>>(
-    {}
-  );
-  const [guardandoRespuestaId, setGuardandoRespuestaId] = useState<string | null>(
-    null
-  );
+  const [respuestasDraft, setRespuestasDraft] = useState<Record<string, string>>({});
+  const [guardandoRespuestaId, setGuardandoRespuestaId] = useState<string | null>(null);
+
+  // Estado cambiando (para deshabilitar botones mientras se guarda)
+  const [cambiandoEstadoId, setCambiandoEstadoId] = useState<string | null>(null);
 
   const esAdmin = user?.role === "admin";
 
-  // ✅ Admin ve todo; no-admin solo lo suyo (por vendedor_username)
   const cargar = async () => {
     if (!user?.username) return;
 
@@ -75,10 +99,21 @@ const RevisarCompras: React.FC = () => {
     }
 
     const rows = (data || []) as CompraItem[];
-    setItems(rows);
+
+    // Normalizar: si viene aprobado boolean (datos viejos), mapearlo a estado
+    const normalized = rows.map((r) => {
+      if (!r.estado) {
+        const estadoCompat: Estado =
+          (r as any).aprobado === true ? "aprobado" : "pendiente";
+        return { ...r, estado: estadoCompat };
+      }
+      return r;
+    });
+
+    setItems(normalized);
 
     const initDrafts: Record<string, string> = {};
-    for (const r of rows) initDrafts[r.id] = r.respuesta ?? "";
+    for (const r of normalized) initDrafts[r.id] = r.respuesta ?? "";
     setRespuestasDraft(initDrafts);
   };
 
@@ -111,30 +146,34 @@ const RevisarCompras: React.FC = () => {
     if (paginaActual > 1) setPaginaActual(paginaActual - 1);
   };
 
-  // ✅ Aprobar/Desaprobar SOLO admin
-  const toggleAprobado = async (item: CompraItem) => {
+  // Cambiar estado (pendiente / aprobado / rechazado)
+  const cambiarEstado = async (item: CompraItem, nuevoEstado: Estado) => {
     if (!esAdmin) {
-      alert("Solo admin puede aprobar/desaprobar.");
+      alert("Solo admin puede cambiar el estado.");
       return;
     }
+    if (item.estado === nuevoEstado) return; // ya está, no hacer nada
 
-    const nuevoValor = !item.aprobado;
-
+    setCambiandoEstadoId(item.id);
     setLoading(true);
 
     const { error } = await supabase
       .from("pedidos_compra")
       .update({
-        aprobado: nuevoValor,
-        supervisor_nombre: nuevoValor ? user?.name ?? user?.username : null,
+        estado: nuevoEstado,
+        // Mantenemos compatibilidad con columna aprobado si existe
+        aprobado: nuevoEstado === "aprobado",
+        supervisor_nombre:
+          nuevoEstado !== "pendiente" ? user?.name ?? user?.username : null,
       })
       .eq("id", item.id);
 
     setLoading(false);
+    setCambiandoEstadoId(null);
 
     if (error) {
       console.error(error);
-      alert("Error actualizando aprobado.");
+      alert("Error actualizando el estado.");
       return;
     }
 
@@ -143,15 +182,18 @@ const RevisarCompras: React.FC = () => {
         r.id === item.id
           ? {
               ...r,
-              aprobado: nuevoValor,
-              supervisor_nombre: nuevoValor ? user?.name ?? user?.username : null,
+              estado: nuevoEstado,
+              supervisor_nombre:
+                nuevoEstado !== "pendiente"
+                  ? user?.name ?? user?.username
+                  : null,
             }
           : r
       )
     );
   };
 
-  // ✅ Guardar Respuesta SOLO admin
+  // Guardar Respuesta — solo admin
   const guardarRespuesta = async (item: CompraItem) => {
     if (!esAdmin) {
       alert("Solo admin puede editar la respuesta.");
@@ -220,7 +262,7 @@ const RevisarCompras: React.FC = () => {
       Monto: i.monto_total_estimado,
       Personal: i.vendedor_nombre ?? "",
       "Personal username": i.vendedor_username ?? "",
-      Aprobado: i.aprobado ? "Sí" : "No",
+      Estado: ESTADO_LABELS[i.estado] ?? i.estado,
       CEO: i.supervisor_nombre ?? "",
       Respuesta: i.respuesta ?? "",
       Adjuntos: (i.adjuntos_urls ?? []).join(" | ") || (i.foto_url ?? ""),
@@ -235,9 +277,10 @@ const RevisarCompras: React.FC = () => {
 
   useEffect(() => {
     cargar();
-    // si cambia usuario/rol, recarga
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.username, user?.role]);
+
+  const ESTADOS: Estado[] = ["pendiente", "aprobado", "rechazado"];
 
   return (
     <div className="max-w-7xl w-[98vw] mx-auto mt-4 p-4 sm:p-6 bg-white shadow rounded">
@@ -334,13 +377,13 @@ const RevisarCompras: React.FC = () => {
             <col style={{ width: "12%" }} />  {/* ¿Qué es? */}
             <col style={{ width: "8%" }} />   {/* Tipo */}
             <col style={{ width: "7%" }} />   {/* Urgencia */}
-            <col style={{ width: "22%" }} />  {/* Detalle */}
+            <col style={{ width: "18%" }} />  {/* Detalle */}
             <col style={{ width: "6%" }} />   {/* Monto */}
             <col style={{ width: "7%" }} />   {/* Personal */}
-            <col style={{ width: "6%" }} />   {/* Aprobado */}
+            <col style={{ width: "7%" }} />   {/* Estado */}
             <col style={{ width: "6%" }} />   {/* CEO */}
-            <col style={{ width: "14%" }} />  {/* Respuesta */}
-            <col style={{ width: "7%" }} />   {/* Acción */}
+            <col style={{ width: "13%" }} />  {/* Respuesta */}
+            <col style={{ width: "11%" }} />  {/* Acción */}
             <col style={{ width: "8%" }} />   {/* Adjuntos */}
           </colgroup>
 
@@ -353,7 +396,7 @@ const RevisarCompras: React.FC = () => {
               <th className="p-2 border">Detalle</th>
               <th className="p-2 border">Monto</th>
               <th className="p-2 border">Personal</th>
-              <th className="p-2 border text-center">Aprobado</th>
+              <th className="p-2 border text-center">Estado</th>
               <th className="p-2 border">CEO</th>
               <th className="p-2 border">Respuesta</th>
               <th className="p-2 border text-center">Acción</th>
@@ -368,6 +411,8 @@ const RevisarCompras: React.FC = () => {
                 !!item.foto_url;
 
               const draft = respuestasDraft[item.id] ?? (item.respuesta ?? "");
+              const estadoActual: Estado = item.estado ?? "pendiente";
+              const cambiando = cambiandoEstadoId === item.id;
 
               return (
                 <tr key={item.id} className="align-top">
@@ -401,12 +446,13 @@ const RevisarCompras: React.FC = () => {
                     {item.vendedor_nombre ?? "-"}
                   </td>
 
+                  {/* ESTADO — badge */}
                   <td className="p-2 border text-center">
-                    {item.aprobado ? (
-                      <span className="text-green-600 font-bold">✔</span>
-                    ) : (
-                      <span className="text-red-600 font-bold">✘</span>
-                    )}
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ESTADO_BADGE[estadoActual]}`}
+                    >
+                      {ESTADO_LABELS[estadoActual]}
+                    </span>
                   </td>
 
                   <td className="p-2 border whitespace-normal break-words">
@@ -448,17 +494,27 @@ const RevisarCompras: React.FC = () => {
                     )}
                   </td>
 
+                  {/* ACCIÓN — 3 botones */}
                   <td className="p-2 border text-center">
                     {esAdmin ? (
-                      <button
-                        disabled={loading}
-                        onClick={() => toggleAprobado(item)}
-                        className={`w-full whitespace-nowrap text-xs px-2 py-2 rounded text-white ${
-                          item.aprobado ? "bg-gray-600" : "bg-green-600"
-                        }`}
-                      >
-                        {item.aprobado ? "Desaprobar" : "Aprobar"}
-                      </button>
+                      <div className="flex flex-col gap-1">
+                        {ESTADOS.map((e) => (
+                          <button
+                            key={e}
+                            disabled={cambiando}
+                            onClick={() => cambiarEstado(item, e)}
+                            className={`w-full text-xs px-2 py-1.5 rounded border transition-all ${
+                              estadoActual === e
+                                ? BOTON_ACTIVO[e]
+                                : BOTON_INACTIVO[e]
+                            } disabled:opacity-50`}
+                          >
+                            {cambiando && estadoActual !== e
+                              ? "..."
+                              : ESTADO_LABELS[e]}
+                          </button>
+                        ))}
+                      </div>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
@@ -520,4 +576,3 @@ const RevisarCompras: React.FC = () => {
 };
 
 export default RevisarCompras;
-
