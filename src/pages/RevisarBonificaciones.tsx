@@ -30,6 +30,32 @@ type UserMini = {
 const PAGE_SIZE = 10;
 const EXPORT_BATCH_SIZE = 1000;
 
+const ESTADOS: Estado[] = ["pendiente", "aprobada", "rechazada"];
+
+const ESTADO_LABELS: Record<Estado, string> = {
+  pendiente: "Pendiente",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+};
+
+const ESTADO_BADGE: Record<Estado, string> = {
+  pendiente: "bg-yellow-100 text-yellow-800",
+  aprobada: "bg-green-100 text-green-800",
+  rechazada: "bg-red-100 text-red-800",
+};
+
+const BOTON_ACTIVO: Record<Estado, string> = {
+  pendiente: "bg-yellow-400 text-white ring-2 ring-yellow-500",
+  aprobada: "bg-green-600 text-white ring-2 ring-green-700",
+  rechazada: "bg-red-600 text-white ring-2 ring-red-700",
+};
+
+const BOTON_INACTIVO: Record<Estado, string> = {
+  pendiente: "bg-gray-100 text-yellow-700 hover:bg-yellow-50",
+  aprobada: "bg-gray-100 text-green-700 hover:bg-green-50",
+  rechazada: "bg-gray-100 text-red-700 hover:bg-red-50",
+};
+
 function toIsoStart(desde: string) {
   return new Date(desde + "T00:00:00").toISOString();
 }
@@ -161,32 +187,26 @@ const RevisarBonificaciones: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, page]);
 
-  const cambiarEstado = async (row: Row) => {
+  const cambiarEstado = async (row: Row, nuevoEstado: Estado) => {
     if (!canApprove) return;
+    if (row.estado === nuevoEstado) return; // ya está activo, no hacer nada
 
     if (!user?.id) {
-      alert("No se encontró user.id (usuarios_app.id). Revisá tu AuthContext/login.");
+      alert("No se encontró user.id. Revisá tu AuthContext/login.");
       return;
     }
-
-    const nuevoEstado: Estado =
-      row.estado === "aprobada" ? "pendiente" : "aprobada";
 
     setActionId(row.id);
 
     try {
-      const payload =
-        nuevoEstado === "aprobada"
-          ? {
-              estado: "aprobada" as Estado,
-              aprobado_by: user.id,
-              aprobado_at: new Date().toISOString(),
-            }
-          : {
-              estado: "pendiente" as Estado,
-              aprobado_by: null,
-              aprobado_at: null,
-            };
+      const esAprobada = nuevoEstado === "aprobada";
+      const esPendiente = nuevoEstado === "pendiente";
+
+      const payload: Record<string, any> = {
+        estado: nuevoEstado,
+        aprobado_by: esPendiente ? null : user.id,
+        aprobado_at: esPendiente ? null : new Date().toISOString(),
+      };
 
       const { error } = await supabase
         .from("bonificaciones")
@@ -201,18 +221,14 @@ const RevisarBonificaciones: React.FC = () => {
             ? {
                 ...r,
                 estado: nuevoEstado,
-                aprobado_by:
-                  nuevoEstado === "aprobada" ? user.id : null,
-                aprobado_at:
-                  nuevoEstado === "aprobada"
-                    ? new Date().toISOString()
-                    : null,
+                aprobado_by: esPendiente ? null : user.id,
+                aprobado_at: esPendiente ? null : new Date().toISOString(),
               }
             : r
         )
       );
 
-      await ensureUsersLoaded([user.id]);
+      if (!esPendiente) await ensureUsersLoaded([user.id]);
     } catch (e: any) {
       alert(e?.message ?? "Error al cambiar estado");
     } finally {
@@ -269,7 +285,7 @@ const RevisarBonificaciones: React.FC = () => {
         "% Bonif": Number(r.porcentaje_bonificacion),
         "Monto adicional": Number(r.monto_adicional),
         Motivo: r.motivo,
-        Estado: r.estado,
+        Estado: ESTADO_LABELS[r.estado] ?? r.estado,
         "Aprobado por": r.aprobado_by ? getUserLabel(r.aprobado_by) : "-",
         "Aprobado at": r.aprobado_at ? formatDateTime(r.aprobado_at) : "-",
         "ID Bonificación": r.id,
@@ -376,55 +392,57 @@ const RevisarBonificaciones: React.FC = () => {
             </thead>
 
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td className="p-3">{r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-"}</td>
-                  <td className="p-3">{getUserLabel(r.created_by)}</td>
-                  <td className="p-3">{r.cliente}</td>
-                  <td className="p-3">{r.articulo}</td>
-                  <td className="p-3">{r.bultos}</td>
-                  <td className="p-3">{Number(r.porcentaje_bonificacion).toFixed(2)}%</td>
-                  <td className="p-3">${Number(r.monto_adicional).toFixed(2)}</td>
-                  <td className="p-3">{r.motivo}</td>
-                  <td className="p-3">
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        r.estado === "pendiente"
-                          ? "bg-gray-200 text-gray-800"
-                          : r.estado === "aprobada"
-                          ? "bg-green-200 text-green-800"
-                          : "bg-red-200 text-red-800"
-                      }`}
-                    >
-                      {r.estado}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    {canApprove ? (
-                      <button
-                        disabled={loading || actionId === r.id || r.estado === "rechazada"}
-                        onClick={() => cambiarEstado(r)}
-                        className={`px-3 py-1 rounded text-white ${
-                          r.estado === "rechazada"
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : r.estado === "aprobada"
-                            ? "bg-yellow-600 hover:bg-yellow-700"
-                            : "bg-green-600 hover:bg-green-700"
-                        } ${actionId === r.id ? "opacity-60 cursor-not-allowed" : ""}`}
+              {rows.map((r) => {
+                const estadoActual: Estado = r.estado ?? "pendiente";
+                const cambiando = actionId === r.id;
+
+                return (
+                  <tr key={r.id} className="border-t">
+                    <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td className="p-3">{r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-"}</td>
+                    <td className="p-3">{getUserLabel(r.created_by)}</td>
+                    <td className="p-3">{r.cliente}</td>
+                    <td className="p-3">{r.articulo}</td>
+                    <td className="p-3">{r.bultos}</td>
+                    <td className="p-3">{Number(r.porcentaje_bonificacion).toFixed(2)}%</td>
+                    <td className="p-3">${Number(r.monto_adicional).toFixed(2)}</td>
+                    <td className="p-3">{r.motivo}</td>
+
+                    {/* ESTADO — badge */}
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${ESTADO_BADGE[estadoActual]}`}
                       >
-                        {actionId === r.id
-                          ? "Guardando..."
-                          : r.estado === "aprobada"
-                          ? "Volver a pendiente"
-                          : "Aprobar"}
-                      </button>
-                    ) : (
-                      <span className="text-gray-500">-</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        {ESTADO_LABELS[estadoActual]}
+                      </span>
+                    </td>
+
+                    {/* ACCIÓN — 3 botones */}
+                    <td className="p-3">
+                      {canApprove ? (
+                        <div className="flex flex-col gap-1 min-w-[110px]">
+                          {ESTADOS.map((e) => (
+                            <button
+                              key={e}
+                              disabled={cambiando || loading}
+                              onClick={() => cambiarEstado(r, e)}
+                              className={`w-full text-xs px-2 py-1.5 rounded border transition-all ${
+                                estadoActual === e
+                                  ? BOTON_ACTIVO[e]
+                                  : BOTON_INACTIVO[e]
+                              } disabled:opacity-50`}
+                            >
+                              {ESTADO_LABELS[e]}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {!loading && rows.length === 0 && (
                 <tr>
