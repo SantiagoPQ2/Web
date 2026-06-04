@@ -74,12 +74,37 @@ function formatDateTime(d: string) {
 
 function formatDateOnly(d: string) {
   try {
-    const dt = new Date(d + "T00:00:00");
-    return dt.toLocaleDateString();
+    return new Date(d + "T00:00:00").toLocaleDateString();
   } catch {
     return d;
   }
 }
+
+type ColFilters = {
+  fecha: string;
+  fecha_entrega: string;
+  cargado_por: string;
+  cliente: string;
+  articulo: string;
+  bultos: string;
+  porcentaje: string;
+  monto: string;
+  motivo: string;
+  estado: string;
+};
+
+const EMPTY_FILTERS: ColFilters = {
+  fecha: "",
+  fecha_entrega: "",
+  cargado_por: "",
+  cliente: "",
+  articulo: "",
+  bultos: "",
+  porcentaje: "",
+  monto: "",
+  motivo: "",
+  estado: "",
+};
 
 const RevisarBonificaciones: React.FC = () => {
   const { user } = useAuth();
@@ -103,7 +128,14 @@ const RevisarBonificaciones: React.FC = () => {
 
   const [userMap, setUserMap] = useState<Record<string, UserMini>>({});
 
+  const [colFilters, setColFilters] = useState<ColFilters>({ ...EMPTY_FILTERS });
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const setColFilter = (key: keyof ColFilters, value: string) =>
+    setColFilters((prev) => ({ ...prev, [key]: value }));
+
+  const clearFilters = () => setColFilters({ ...EMPTY_FILTERS });
 
   const ensureUsersLoaded = async (ids: string[]) => {
     const unique = Array.from(new Set(ids.filter(Boolean)));
@@ -124,11 +156,7 @@ const RevisarBonificaciones: React.FC = () => {
 
     const add: Record<string, UserMini> = {};
     (data ?? []).forEach((u: any) => {
-      add[u.id] = {
-        id: u.id,
-        name: u.name ?? null,
-        username: u.username ?? null,
-      };
+      add[u.id] = { id: u.id, name: u.name ?? null, username: u.username ?? null };
     });
 
     setUserMap((prev) => ({ ...prev, ...add }));
@@ -187,9 +215,58 @@ const RevisarBonificaciones: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canView, page]);
 
+  // Filtrado client-side
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      const f = colFilters;
+
+      if (f.fecha) {
+        const fechaFila = new Date(r.created_at).toLocaleDateString();
+        if (!fechaFila.toLowerCase().includes(f.fecha.toLowerCase())) return false;
+      }
+      if (f.fecha_entrega) {
+        const fe = r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-";
+        if (!fe.toLowerCase().includes(f.fecha_entrega.toLowerCase())) return false;
+      }
+      if (f.cargado_por) {
+        const label = getUserLabel(r.created_by).toLowerCase();
+        if (!label.includes(f.cargado_por.toLowerCase())) return false;
+      }
+      if (f.cliente) {
+        if (!r.cliente.toLowerCase().includes(f.cliente.toLowerCase())) return false;
+      }
+      if (f.articulo) {
+        if (!r.articulo.toLowerCase().includes(f.articulo.toLowerCase())) return false;
+      }
+      if (f.bultos) {
+        if (!String(r.bultos).includes(f.bultos)) return false;
+      }
+      if (f.porcentaje) {
+        if (!String(r.porcentaje_bonificacion).includes(f.porcentaje)) return false;
+      }
+      if (f.monto) {
+        if (!String(r.monto_adicional).includes(f.monto)) return false;
+      }
+      if (f.motivo) {
+        if (!r.motivo.toLowerCase().includes(f.motivo.toLowerCase())) return false;
+      }
+      if (f.estado) {
+        const label = ESTADO_LABELS[r.estado]?.toLowerCase() ?? r.estado.toLowerCase();
+        if (!label.includes(f.estado.toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }, [rows, colFilters, userMap]);
+
+  const hayFiltrosActivos = useMemo(
+    () => Object.values(colFilters).some((v) => v !== ""),
+    [colFilters]
+  );
+
   const cambiarEstado = async (row: Row, nuevoEstado: Estado) => {
     if (!canApprove) return;
-    if (row.estado === nuevoEstado) return; // ya está activo, no hacer nada
+    if (row.estado === nuevoEstado) return;
 
     if (!user?.id) {
       alert("No se encontró user.id. Revisá tu AuthContext/login.");
@@ -199,7 +276,6 @@ const RevisarBonificaciones: React.FC = () => {
     setActionId(row.id);
 
     try {
-      const esAprobada = nuevoEstado === "aprobada";
       const esPendiente = nuevoEstado === "pendiente";
 
       const payload: Record<string, any> = {
@@ -242,19 +318,16 @@ const RevisarBonificaciones: React.FC = () => {
     setLoading(true);
     try {
       const all: Row[] = [];
-
       let offset = 0;
-      while (true) {
-        const from = offset;
-        const to = offset + EXPORT_BATCH_SIZE - 1;
 
+      while (true) {
         let q = supabase
           .from("bonificaciones")
           .select(
             "id, created_at, cliente, articulo, bultos, porcentaje_bonificacion, monto_adicional, motivo, fecha_entrega, estado, created_by, aprobado_by, aprobado_at"
           )
           .order("created_at", { ascending: false })
-          .range(from, to);
+          .range(offset, offset + EXPORT_BATCH_SIZE - 1);
 
         if (desde) q = q.gte("created_at", toIsoStart(desde));
         if (hasta) q = q.lte("created_at", toIsoEnd(hasta));
@@ -315,9 +388,14 @@ const RevisarBonificaciones: React.FC = () => {
     );
   }
 
+  const inputCls =
+    "w-full px-1.5 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white";
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="bg-white rounded-lg shadow-sm p-6">
+
+        {/* HEADER */}
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Revisar Bonificaciones</h1>
@@ -333,16 +411,14 @@ const RevisarBonificaciones: React.FC = () => {
           </button>
         </div>
 
+        {/* RANGO DE FECHAS */}
         <div className="flex flex-col sm:flex-row gap-3 items-end mb-4">
           <div>
             <label className="block text-sm text-gray-700 mb-1">Desde</label>
             <input
               type="date"
               value={desde}
-              onChange={(e) => {
-                setPage(1);
-                setDesde(e.target.value);
-              }}
+              onChange={(e) => { setPage(1); setDesde(e.target.value); }}
               className="px-3 py-2 border rounded-lg"
               disabled={loading}
             />
@@ -352,30 +428,127 @@ const RevisarBonificaciones: React.FC = () => {
             <input
               type="date"
               value={hasta}
-              onChange={(e) => {
-                setPage(1);
-                setHasta(e.target.value);
-              }}
+              onChange={(e) => { setPage(1); setHasta(e.target.value); }}
               className="px-3 py-2 border rounded-lg"
               disabled={loading}
             />
           </div>
 
           <button
-            onClick={() => {
-              setPage(1);
-              fetchData();
-            }}
+            onClick={() => { setPage(1); fetchData(); }}
             disabled={loading}
             className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-60"
           >
             Aplicar
           </button>
+
+          {hayFiltrosActivos && (
+            <button
+              onClick={clearFilters}
+              className="px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 text-sm"
+            >
+              Limpiar filtros ✕
+            </button>
+          )}
         </div>
 
+        {/* TABLA */}
         <div className="overflow-x-auto border rounded-lg">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
+
+              {/* FILA FILTROS POR COLUMNA */}
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.fecha}
+                    onChange={(e) => setColFilter("fecha", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.fecha_entrega}
+                    onChange={(e) => setColFilter("fecha_entrega", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.cargado_por}
+                    onChange={(e) => setColFilter("cargado_por", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.cliente}
+                    onChange={(e) => setColFilter("cliente", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.articulo}
+                    onChange={(e) => setColFilter("articulo", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.bultos}
+                    onChange={(e) => setColFilter("bultos", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.porcentaje}
+                    onChange={(e) => setColFilter("porcentaje", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.monto}
+                    onChange={(e) => setColFilter("monto", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <input
+                    className={inputCls}
+                    placeholder="Filtrar..."
+                    value={colFilters.motivo}
+                    onChange={(e) => setColFilter("motivo", e.target.value)}
+                  />
+                </th>
+                <th className="p-2">
+                  <select
+                    className={inputCls}
+                    value={colFilters.estado}
+                    onChange={(e) => setColFilter("estado", e.target.value)}
+                  >
+                    <option value="">Todos</option>
+                    {ESTADOS.map((e) => (
+                      <option key={e} value={ESTADO_LABELS[e]}>
+                        {ESTADO_LABELS[e]}
+                      </option>
+                    ))}
+                  </select>
+                </th>
+                <th className="p-2" />
+              </tr>
+
+              {/* FILA HEADERS */}
               <tr>
                 <th className="text-left p-3">Fecha</th>
                 <th className="text-left p-3">Fecha entrega</th>
@@ -392,12 +565,12 @@ const RevisarBonificaciones: React.FC = () => {
             </thead>
 
             <tbody>
-              {rows.map((r) => {
+              {filteredRows.map((r) => {
                 const estadoActual: Estado = r.estado ?? "pendiente";
                 const cambiando = actionId === r.id;
 
                 return (
-                  <tr key={r.id} className="border-t">
+                  <tr key={r.id} className="border-t hover:bg-gray-50">
                     <td className="p-3">{new Date(r.created_at).toLocaleDateString()}</td>
                     <td className="p-3">{r.fecha_entrega ? formatDateOnly(r.fecha_entrega) : "-"}</td>
                     <td className="p-3">{getUserLabel(r.created_by)}</td>
@@ -408,16 +581,12 @@ const RevisarBonificaciones: React.FC = () => {
                     <td className="p-3">${Number(r.monto_adicional).toFixed(2)}</td>
                     <td className="p-3">{r.motivo}</td>
 
-                    {/* ESTADO — badge */}
                     <td className="p-3">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${ESTADO_BADGE[estadoActual]}`}
-                      >
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${ESTADO_BADGE[estadoActual]}`}>
                         {ESTADO_LABELS[estadoActual]}
                       </span>
                     </td>
 
-                    {/* ACCIÓN — 3 botones */}
                     <td className="p-3">
                       {canApprove ? (
                         <div className="flex flex-col gap-1 min-w-[110px]">
@@ -427,9 +596,7 @@ const RevisarBonificaciones: React.FC = () => {
                               disabled={cambiando || loading}
                               onClick={() => cambiarEstado(r, e)}
                               className={`w-full text-xs px-2 py-1.5 rounded border transition-all ${
-                                estadoActual === e
-                                  ? BOTON_ACTIVO[e]
-                                  : BOTON_INACTIVO[e]
+                                estadoActual === e ? BOTON_ACTIVO[e] : BOTON_INACTIVO[e]
                               } disabled:opacity-50`}
                             >
                               {ESTADO_LABELS[e]}
@@ -444,10 +611,10 @@ const RevisarBonificaciones: React.FC = () => {
                 );
               })}
 
-              {!loading && rows.length === 0 && (
+              {!loading && filteredRows.length === 0 && (
                 <tr>
                   <td className="p-4 text-gray-600" colSpan={11}>
-                    Sin resultados.
+                    Sin resultados{hayFiltrosActivos ? " para los filtros aplicados" : ""}.
                   </td>
                 </tr>
               )}
@@ -455,9 +622,11 @@ const RevisarBonificaciones: React.FC = () => {
           </table>
         </div>
 
+        {/* PAGINACIÓN */}
         <div className="flex items-center justify-between mt-4">
           <div className="text-sm text-gray-600">
             Página {page} / {totalPages} — Total: {total}
+            {hayFiltrosActivos && ` (${filteredRows.length} filtrados en esta página)`}
           </div>
           <div className="flex gap-2">
             <button
@@ -476,6 +645,7 @@ const RevisarBonificaciones: React.FC = () => {
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
