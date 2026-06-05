@@ -12,7 +12,7 @@ import {
 
 interface UsuarioApp {
   id: string; username: string; name: string;
-  FFVV: string; ffvv?: string; supervisor: string; role: string;
+  FFVV: string; supervisor: string; role: string;
 }
 
 interface ChessVenta {
@@ -269,7 +269,7 @@ function calcularPozoConTramos(venta: number, escalaId: string, tramos: TramoPoz
 
 const multDisciplina = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.82 : p >= 65 ? 0.58 : p >= 50 ? 0.25 : 0;
 const multCobertura  = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.93 : p >= 65 ? 0.74 : p >= 50 ? 0.50 : 0.25;
-const multSkus       = (n: number) => ({ 0: 0.50, 1: 0.70, 2: 1.05, 3: 1.15, 4: 1.33, 5: 1.50 }[Math.min(n, 5)] ?? 0.50);
+const multSkus       = (n: number) => ({ 0: 0.50, 1: 0.90, 2: 1.075, 3: 1.18, 4: 1.33, 5: 1.50 }[Math.min(n, 5)] ?? 0.50);
 const multCartera    = (p: number) => p >= 110 ? 1.15 : p >= 105 ? 1.10 : p >= 100 ? 1.05 : p >= 90 ? 0.95 : 0.60;
 
 // ─── Helpers de formato ───────────────────────────────────────────────────────
@@ -412,45 +412,32 @@ function buildDiasTabla(
     cccPorFechaVenta[fv] = { clientesMas25k, cccUnicos };
   }
 
-  // 5. SKUs por día — clientes únicos NUEVOS que llegan al mínimo de compra.
-  //    Antes se mostraban clientes únicos del día; si un mismo cliente compraba el mismo SKU
-  //    en más de un día, se repetía visualmente y la suma diaria no coincidía con el total.
-  //    Ahora cada cliente se acredita una sola vez: el día en que alcanza el mínimo del SKU.
-  const skuClientesPorFechaVenta: Record<string, number[]> = {};
-  const skuAcumPorCliente = grupos.map(() => ({} as Record<string, number>));
-  const skuClientesYaContados = grupos.map(() => new Set<string>());
+  // 4b. SKU acumulado — igual que CCC, cada cliente cuenta solo la primera vez por SKU
+  const clientesVistosPorSku: Record<number, Set<string>> = {};
+  grupos.forEach((_, i) => { clientesVistosPorSku[i] = new Set(); });
+  const skuPorFechaVenta: Record<string, number[]> = {};
 
-  for (const fechaSnap of fechasSnap) {
-    const fechaVenta = addDiasHabilesStr(fechaSnap, 2);
-    const ventasDia  = ventasPorFecha[fechaVenta] ?? [];
-    skuClientesPorFechaVenta[fechaVenta] = grupos.map(() => 0);
-
-    grupos.forEach((grupo, gi) => {
-      const compraDiaPorCliente: Record<string, number> = {};
-
-      ventasDia.filter(grupo.match).forEach((v) => {
-        const cli = String(v.cliente);
-        compraDiaPorCliente[cli] = (compraDiaPorCliente[cli] || 0) + (Number(v.bultos_total) || 1);
-      });
-
-      Object.entries(compraDiaPorCliente).forEach(([cli, compraDia]) => {
-        skuAcumPorCliente[gi][cli] = (skuAcumPorCliente[gi][cli] || 0) + compraDia;
-
-        if (!skuClientesYaContados[gi].has(cli) && skuAcumPorCliente[gi][cli] >= grupo.minCompra) {
-          skuClientesYaContados[gi].add(cli);
-          skuClientesPorFechaVenta[fechaVenta][gi] += 1;
-        }
-      });
+  for (const fv of fechasVenta) {
+    const ventasDia = ventasPorFecha[fv] ?? [];
+    const skuNuevos = grupos.map((grupo, i) => {
+      const yaVistosSku = clientesVistosPorSku[i];
+      const clientesHoy = new Set(ventasDia.filter(grupo.match).map((v) => String(v.cliente)));
+      const nuevos = Array.from(clientesHoy).filter((cli) => !yaVistosSku.has(cli)).length;
+      // Agregar al acumulado
+      for (const cli of clientesHoy) yaVistosSku.add(cli);
+      return nuevos;
     });
+    skuPorFechaVenta[fv] = skuNuevos;
   }
 
-  // 6. Construir fila por cada día de snap, cruzando con ventas del día +2 hábiles
+  // 5. Construir fila por cada día de snap, cruzando con ventas del día +2 hábiles
+  const totalDias = fechasSnap.length;
   const filas = fechasSnap.map((fechaSnap, idx) => {
     const snap         = snapsPorFecha[fechaSnap];
     const fechaVenta   = addDiasHabilesStr(fechaSnap, 2);
     const ventasDia    = ventasPorFecha[fechaVenta] ?? [];
     const res          = cccPorFechaVenta[fechaVenta] ?? { clientesMas25k: 0, cccUnicos: 0 };
-    const skuClientes  = skuClientesPorFechaVenta[fechaVenta] ?? grupos.map(() => 0);
+    const skuClientes  = skuPorFechaVenta[fechaVenta] ?? grupos.map(() => 0);
     const nroDia = idx + 1; // ASC → Día 1 es el más antiguo
     return {
       fecha: fechaSnap,        // fecha del snap = día de trabajo real
@@ -642,7 +629,6 @@ const PanelPremio: React.FC<{
   const diasRestantes        = Math.max(periodo.diasHabiles - diasConVentaActual, 0);
   const ventaFaltante        = Math.max(ventaMinPozo - ventaTotal, 0);
   const ventaPorDiaNecesaria = diasRestantes > 0 ? ventaFaltante / diasRestantes : 0;
-  const ventaPromedioDiaActual = diasConVentaActual > 0 ? ventaTotal / diasConVentaActual : 0;
   const yaAlcanzoMinimo      = ventaTotal >= ventaMinPozo;
 
   const [mostrarTabla, setMostrarTabla] = useState(true);
@@ -685,36 +671,40 @@ const PanelPremio: React.FC<{
       </div>
 
 
-      {/* ── TABLA COMPARATIVA: Real actual | Proyección actual | Supuesto mínimo | Proy. con 5 SKUs */}
+      {/* ── TABLA COMPARATIVA: Real actual | Supuesto mínimo | Proyección actual | Proy. con 5 SKUs */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
+            {/* Premio final - fila destacada arriba */}
             <thead>
-              {/* PREMIO FINAL arriba de todo */}
-              <tr className="bg-gray-50 dark:bg-gray-700/30 font-bold border-b border-gray-200 dark:border-gray-700">
-                <th className="px-3 py-3.5 text-left text-gray-700 dark:text-gray-200 border-r border-gray-200 dark:border-gray-700 text-[15px]">Premio final</th>
-                <th className={`px-3 py-3.5 text-center text-[15px] ${premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</th>
-                <th className={`px-3 py-3.5 text-center text-[15px] bg-emerald-50/60 dark:bg-emerald-900/20 ${premioColor(premioProy)}`}>{formatMoney(premioProy)}</th>
-                <th className={`px-3 py-3.5 text-center text-[15px] bg-blue-50/60 dark:bg-blue-900/20 ${premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</th>
-                <th className={`px-3 py-3.5 text-center text-[15px] bg-violet-50/60 dark:bg-violet-900/20 ${premioColor(premioProy5SKUs)}`}>
-                  {formatMoney(premioProy5SKUs)}
-                </th>
+              <tr className="bg-gray-800 dark:bg-gray-900 text-white font-bold border-b-2 border-gray-600">
+                <td className="px-3 py-3 text-sm border-r border-gray-600 text-white">Premio final</td>
+                <td className={`px-3 py-3 text-center text-sm ${premioColor(premioFinal) === "text-gray-400" ? "text-gray-300" : premioColor(premioFinal)}`}>{formatMoney(premioFinal)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-emerald-900/40 ${premioColor(premioProy) === "text-gray-400" ? "text-gray-300" : premioColor(premioProy)}`}>{formatMoney(premioProy)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-blue-900/40 ${premioColor(premioSupuesto) === "text-gray-400" ? "text-gray-300" : premioColor(premioSupuesto)}`}>{formatMoney(premioSupuesto)}</td>
+                <td className={`px-3 py-3 text-center text-sm bg-violet-900/40 ${premioColor(premioProy5SKUs) === "text-gray-400" ? "text-gray-300" : premioColor(premioProy5SKUs)}`}>{formatMoney(premioProy5SKUs)}</td>
               </tr>
+            </thead>
+            <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="px-3 py-2.5 text-left font-semibold text-gray-500 uppercase tracking-wide text-[10px] w-44 border-r border-gray-200 dark:border-gray-700">
                   Indicador
                 </th>
                 {[
-                  { label: "Real actual",       sub: `a hoy · venís vendiendo ${formatMoney(ventaPromedioDiaActual)}/día`, color: "text-gray-700 dark:text-gray-200",   bg: "" },
+                  { label: "Real actual",
+                    sub: diasConVentaActual > 0
+                      ? `vendiendo ${formatMoney(Math.round(ventaTotal / diasConVentaActual))}/día`
+                      : "a hoy",
+                    color: "text-gray-700 dark:text-gray-200", bg: "" },
                   { label: "Proyección actual",
                     sub: yaAlcanzoMinimo
                       ? "✓ ya superó el mínimo"
                       : diasRestantes > 0
-                        ? `necesita ${formatMoney(ventaPorDiaNecesaria)}/día para llegar`
+                        ? `necesita ${formatMoney(Math.round(ventaPorDiaNecesaria))}/día para llegar`
                         : "sin días restantes",
                     color: "text-emerald-700", bg: "bg-emerald-50/40 dark:bg-emerald-900/10" },
-                  { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700",                     bg: "bg-blue-50/40 dark:bg-blue-900/10" },
-                  { label: "Proy. 5 SKUs",      sub: "proyectado + 5/5 SKUs",              color: "text-violet-700",                   bg: "bg-violet-50/40 dark:bg-violet-900/10" },
+                  { label: "Supuesto mínimo",   sub: `venta ${formatMoney(ventaMinPozo)}`, color: "text-blue-700", bg: "bg-blue-50/40 dark:bg-blue-900/10" },
+                  { label: "Proy. 5 SKUs",      sub: "proyectado + 5/5 SKUs",              color: "text-violet-700", bg: "bg-violet-50/40 dark:bg-violet-900/10" },
                 ].map((col) => (
                   <th key={col.label} className={`px-3 py-2.5 text-center font-semibold text-[10px] uppercase tracking-wide border-r last:border-r-0 border-gray-200 dark:border-gray-700 ${col.bg}`}>
                     <span className={col.color}>{col.label}</span>
@@ -729,7 +719,7 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Venta del período</td>
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(ventaTotal)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(ventaProyectada)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
+                <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(pozoProyectado)}</td><td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(ventaMinPozo)}</td>
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <span className="font-semibold text-violet-600">{formatMoney(ventaProy5SKUs)}</span>
                   {ventaProyectada < ventaMinPozo && (
@@ -741,8 +731,11 @@ const PanelPremio: React.FC<{
               <tr className="border-b border-gray-100 dark:border-gray-700/50">
                 <td className="px-3 py-2 text-gray-500 border-r border-gray-200 dark:border-gray-700 font-medium">Pozo</td>
                 <td className="px-3 py-2 text-center font-semibold text-gray-800 dark:text-gray-100">{formatMoney(pozo)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-emerald-600 bg-emerald-50/40 dark:bg-emerald-900/10">{formatMoney(pozoProyectado)}</td>
-                <td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
+                
+                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
+                  <MultBadge mult={mDiscProy} />
+                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
+                </td><td className="px-3 py-2 text-center font-semibold text-blue-600 bg-blue-50/40 dark:bg-blue-900/10">{formatMoney(pozoMinimo)}</td>
                 <td className="px-3 py-2 text-center font-semibold text-violet-600 bg-violet-50/40 dark:bg-violet-900/10">{formatMoney(pozoProy5SKUs)}</td>
               </tr>
               {/* Disciplina */}
@@ -755,14 +748,11 @@ const PanelPremio: React.FC<{
                   <MultBadge mult={mDisc} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctDisciplina.toFixed(0)}% ({diasOk}/{diasBase})</span>
                 </td>
-                <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
-                  <MultBadge mult={mDiscProy} />
-                  <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
-                </td>
                 <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
                   <MultBadge mult={multDisciplina(100)} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
                 </td>
+                
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mDiscProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{proy.disciplinaProyPct.toFixed(0)}%</span>
@@ -781,11 +771,11 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mCobProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{proy.coberturaProyPct.toFixed(0)}%</span>
-                </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                </td><td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
                   <MultBadge mult={multCobertura(100)} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
                 </td>
+                
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mCobProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{proy.coberturaProyPct.toFixed(0)}%</span>
@@ -803,11 +793,11 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mSkusProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{skusLogradosProy}/{grupos.length}</span>
-                </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                </td><td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
                   <MultBadge mult={multSkus(2)} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">2/5</span>
                 </td>
+                
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={multSkus(5)} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">5/5</span>
@@ -826,16 +816,17 @@ const PanelPremio: React.FC<{
                 <td className="px-3 py-2 text-center bg-emerald-50/40 dark:bg-emerald-900/10">
                   <MultBadge mult={mCarteraProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
-                </td>
-                <td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
+                </td><td className="px-3 py-2 text-center bg-blue-50/40 dark:bg-blue-900/10">
                   <MultBadge mult={multCartera(100)} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">100%</span>
                 </td>
+                
                 <td className="px-3 py-2 text-center bg-violet-50/40 dark:bg-violet-900/10">
                   <MultBadge mult={mCarteraProy} />
                   <span className="block text-[10px] text-gray-400 mt-0.5">{pctCarteraProyectada !== null ? `${Math.round(pctCarteraProyectada)}%` : "—"}</span>
                 </td>
               </tr>
+
             </tbody>
           </table>
         </div>
@@ -1133,9 +1124,7 @@ const DetalleFechas: React.FC<{ username: string; ffvv: string }> = ({ username,
 
 const VendedoresResumen: React.FC = () => {
   const { user } = useAuth();
-  const esVistaVendedor = user?.role === "vendedor";
-  const esVistaSupervisor = user?.role === "supervisor";
-  const ffvvUsuarioLogueado = normalizarFFVV(String(user?.FFVV ?? user?.ffvv ?? ""));
+  const esVendedor = user?.role === "vendedor" || user?.role === "test";
 
   const [usuarios,  setUsuarios]  = useState<UsuarioApp[]>([]);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -1147,69 +1136,45 @@ const VendedoresResumen: React.FC = () => {
   const [filtroSupervisor, setFiltroSupervisor] = useState<string>("todos");
   const [sortKey,          setSortKey]          = useState<SortKey>("horasTrabajadas");
   const [sortDesc,         setSortDesc]         = useState(true);
-  const [expandido,        setExpandido]        = useState<string | null>(null);
+  // Si es vendedor, auto-expandir su propio card
+  const [expandido, setExpandido] = useState<string | null>(esVendedor && user?.username ? user.username : null);
 
   useEffect(() => {
-    if (esVistaVendedor) {
-      setLoading(false);
-      return;
-    }
-
     const cargar = async () => {
-      setLoading(true);
-      setError(null);
-      setUsuarios([]);
-      setSnapshots([]);
-
+      setLoading(true); setError(null);
       try {
-        if (esVistaSupervisor && !ffvvUsuarioLogueado) {
-          throw new Error("Tu usuario supervisor no tiene FFVV cargada en usuarios_app. Cargá la columna FFVV para poder filtrar sus vendedores.");
-        }
+        // Si es vendedor, traer solo su propio registro
+        const queryUsuarios = esVendedor && user?.username
+          ? supabase.from("usuarios_app").select("id, username, name, FFVV, supervisor, role").eq("username", user.username)
+          : supabase.from("usuarios_app").select("id, username, name, FFVV, supervisor, role").eq("role", "vendedor");
 
-        const { data: u, error: e1 } = await supabase
-          .from("usuarios_app")
-          .select("id, username, name, FFVV, supervisor, role")
-          .eq("role", "vendedor");
+        const querySnaps = esVendedor && user?.username
+          ? supabase.from("admin_equipo_snapshots")
+              .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
+              .eq("username", user.username).order("created_at", { ascending: false })
+          : supabase.from("admin_equipo_snapshots")
+              .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha")
+              .eq("role", "vendedor").order("created_at", { ascending: false });
+
+        const [{ data: u, error: e1 }, { data: s, error: e3 }] = await Promise.all([queryUsuarios, querySnaps]);
 
         if (e1) throw new Error(`Usuarios: ${e1.message}`);
-
-        const vendedoresBase = ((u as UsuarioApp[]) || []).filter((v) => {
-          if (!esVistaSupervisor) return true;
-          const ffvvVendedor = normalizarFFVV(String(v.FFVV ?? v.ffvv ?? ""));
-          return ffvvVendedor === ffvvUsuarioLogueado;
-        });
-
-        const usernamesPermitidos = vendedoresBase.map((v) => String(v.username)).filter(Boolean);
-
-        let snapsFiltrados: Snapshot[] = [];
-        if (usernamesPermitidos.length > 0) {
-          const { data: s, error: e3 } = await supabase
-            .from("admin_equipo_snapshots")
-            .select("id, username, pdv_planificados, pdv_visitados, pdv_menos_5_min, horas_trabajadas, puntos_gps, primera_marca, ultima_marca, created_at, fecha, snapshot_taken_at")
-            .in("username", usernamesPermitidos)
-            .order("created_at", { ascending: false });
-
-          if (e3) throw new Error(`Snapshots: ${e3.message}`);
-          snapsFiltrados = (s as Snapshot[]) || [];
-        }
-
-        setUsuarios(vendedoresBase);
-        setSnapshots(snapsFiltrados);
+        if (e3) throw new Error(`Snapshots: ${e3.message}`);
+        setUsuarios((u as UsuarioApp[]) || []);
+        setSnapshots((s as Snapshot[]) || []);
       } catch (err: any) {
         setError(err.message || "Error desconocido");
       } finally {
         setLoading(false);
       }
     };
-
     cargar();
-  }, [esVistaVendedor, esVistaSupervisor, ffvvUsuarioLogueado]);
+  }, [esVendedor, user?.username]);
 
   const statsMap = useMemo<Record<string, VendedorStats>>(() => {
     const map: Record<string, VendedorStats> = {};
     for (const u of usuarios) {
-      const ffvvRaw = String(u.FFVV ?? u.ffvv ?? "").trim();
-      map[u.username] = { username: u.username, name: u.name || u.username, ffvv: normalizarFFVV(ffvvRaw), ffvvRaw, supervisor: u.supervisor || "", ultimaFecha: null, horasTrabajadas: 0, pdvPlanificados: 0, pdvVisitados: 0, promHoras: 0, promPdvVisitados: 0, diasConActividad: 0 };
+      map[u.username] = { username: u.username, name: u.name || u.username, ffvv: normalizarFFVV(u.FFVV), ffvvRaw: u.FFVV?.trim() || "", supervisor: u.supervisor || "", ultimaFecha: null, horasTrabajadas: 0, pdvPlanificados: 0, pdvVisitados: 0, promHoras: 0, promPdvVisitados: 0, diasConActividad: 0 };
     }
     const snapsX: Record<string, Snapshot[]> = {};
     for (const snap of snapshots) {
@@ -1265,40 +1230,6 @@ const VendedoresResumen: React.FC = () => {
 
   const periodoCurrent = PERIODOS_DISPONIBLES[PERIODO_ACTUAL_IDX];
 
-  if (esVistaVendedor) {
-    if (!user?.username) {
-      return (
-        <div className="p-6 text-sm text-red-500">
-          No se pudo identificar el usuario vendedor logueado.
-        </div>
-      );
-    }
-
-    const ffvvUsuario = String(user.FFVV ?? user.ffvv ?? "");
-    const nombreUsuario = user.name || user.username;
-
-    return (
-      <div className="h-full overflow-y-auto p-4 sm:p-6 space-y-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-red-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
-              {nombreUsuario?.[0]?.toUpperCase()}
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Mi premio</h2>
-              <p className="text-xs text-gray-400">
-                {nombreUsuario} · ID vendedor {user.username}
-                {ffvvUsuario ? ` · ${ffvvUsuario}` : ""}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <DetalleFechas username={user.username} ffvv={ffvvUsuario} />
-      </div>
-    );
-  }
-
   if (loading) return (
     <div className="flex items-center justify-center h-full min-h-[60vh]">
       <div className="text-center">
@@ -1316,20 +1247,13 @@ const VendedoresResumen: React.FC = () => {
   );
 
   const efTotal = totales.pdvPlanificados > 0 ? Math.round((totales.pdvVisitados/totales.pdvPlanificados)*100) : null;
-  const tituloPagina = esVistaSupervisor ? "Premios de mi FFVV" : "Resumen de Vendedores";
-  const subtituloScope = esVistaSupervisor && user
-    ? `Supervisor ${user.name || user.username} · FFVV ${String(user.FFVV ?? user.ffvv ?? "—")}`
-    : "";
 
   return (
     <div className="h-full overflow-y-auto px-4 py-5 space-y-5">
       <div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Trophy className="w-5 h-5 text-amber-500"/> {tituloPagina}
+          <Trophy className="w-5 h-5 text-amber-500"/> Resumen de Vendedores
         </h2>
-        {subtituloScope && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{subtituloScope}</p>
-        )}
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
           {periodoCurrent.label} · Ventas {formatFecha(periodoCurrent.mesVentas+"-01")}→{formatFecha(periodoCurrent.mesVentas+"-30")} · Actividad {formatFecha(periodoCurrent.snapDesde)}→{formatFecha(periodoCurrent.snapHasta)} · {periodoCurrent.diasHabiles} días hábiles
         </p>
@@ -1358,9 +1282,9 @@ const VendedoresResumen: React.FC = () => {
             className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 w-48"/>
         </div>
         <Filter className="w-4 h-4 text-gray-400"/>
-        <select value={filtroFFVV} onChange={(e)=>setFiltroFFVV(e.target.value)} disabled={esVistaSupervisor}
-          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed">
-          <option value="todos">{esVistaSupervisor ? "Mi FFVV" : "Todas las FFVV"}</option>
+        <select value={filtroFFVV} onChange={(e)=>setFiltroFFVV(e.target.value)}
+          className="border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-800 text-sm focus:outline-none">
+          <option value="todos">Todas las FFVV</option>
           {ffvvOpciones.map((f)=><option key={f.norm} value={f.norm}>{f.raw}</option>)}
         </select>
         <select value={filtroSupervisor} onChange={(e)=>setFiltroSupervisor(e.target.value)}
