@@ -1442,5 +1442,3 @@ const VendedoresResumen: React.FC = () => {
 };
 
 export default VendedoresResumen;
-
-export default VendedoresResumen;
