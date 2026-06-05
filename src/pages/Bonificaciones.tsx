@@ -16,7 +16,8 @@ type Motivo =
   | "Volumen"
   | "Bonificacion Especial"
   | "Pedido Dividido"
-  | "Ruptura/Falta de Frio/Falta de Vacio";
+  | "Ruptura/Falta de Frio/Falta de Vacio"
+  | "Sin Cargo";
 
 interface FormData {
   cliente: string;
@@ -42,7 +43,8 @@ const MOTIVOS: Motivo[] = [
   "Volumen",
   "Bonificacion Especial",
   "Pedido Dividido",
-  "Ruptura/Falta de Frio/Falta de Vacio",
+  "Ruptura/Falta de Frio/Falta de Vacio"
+  "Sin Cargo",
 ];
 
 function getTodayKey() {
