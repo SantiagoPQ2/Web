@@ -267,10 +267,11 @@ function calcularPozoConTramos(venta: number, escalaId: string, tramos: TramoPoz
 
 // ─── Multiplicadores (fijos del PDF) ─────────────────────────────────────────
 
-const multDisciplina = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.82 : p >= 65 ? 0.58 : p >= 50 ? 0.25 : 0;
-const multCobertura  = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.93 : p >= 65 ? 0.74 : p >= 50 ? 0.50 : 0.25;
-const multSkus       = (n: number) => ({ 0: 0.50, 1: 0.70, 2: 1.05, 3: 1.15, 4: 1.33, 5: 1.50 }[Math.min(n, 5)] ?? 0.50);
-const multCartera    = (p: number) => p >= 110 ? 1.15 : p >= 105 ? 1.10 : p >= 100 ? 1.05 : p >= 90 ? 0.95 : 0.60;
+const multDisciplina = (p: number) => p >= 90 ? 1.05 : p >= 80 ? 0.70 : p >= 70 ? 0.50 : p >= 60 ? 0.30 : 0;
+const multCobertura  = (p: number) => p >= 90 ? 1.08 : p >= 80 ? 1.00 : p >= 65 ? 0.80 : p >= 50 ? 0.50 : 0;
+const multSkusPct    = (p: number) => p >= 90 ? 1.50 : p >= 80 ? 1.30 : p >= 70 ? 1.18 : p >= 60 ? 1.10 : p >= 50 ? 0.91 : 0.62;
+const multSkus       = (n: number, total: number = 5) => multSkusPct(total > 0 ? (n / total) * 100 : 0);
+const multCartera    = (p: number) => p >= 110 ? 1.15 : p >= 105 ? 1.10 : p >= 100 ? 1.05 : p >= 95 ? 0.96 : p >= 90 ? 0.88 : 0.60;
 
 // ─── Helpers de formato ───────────────────────────────────────────────────────
 
@@ -568,19 +569,37 @@ function calcularProyeccion(
 }
 
 
-// ─── Resumen proyectado para supervisores ───────────────────────────────────
+// ─── Resumen proyectado y premio para supervisores ───────────────────────────
 
 interface SupervisorPremioResumen {
   username: string;
   name: string;
   ffvv: string;
+  ventaTotal: number;
   disciplinaProyPct: number;
   coberturaProyPct: number;
   skusLogradosProy: number;
   skusTotal: number;
+  skusPctProy: number;
   cccPctProy: number | null;
   cccClientesProy: number;
   cccBase: number;
+}
+
+interface SupervisorPremioCalculado {
+  ventaTotal: number;
+  pctPozo: number;
+  pozoSupervisor: number;
+  disciplinaPct: number;
+  coberturaPct: number;
+  skusPct: number;
+  cccPct: number;
+  multDisciplina: number;
+  multCobertura: number;
+  multSkus: number;
+  multCartera: number;
+  sumaMultiplicadores: number;
+  premioSupervisor: number;
 }
 
 function calcularResumenPremioVendedor(
@@ -592,6 +611,7 @@ function calcularResumenPremioVendedor(
   periodo: Periodo
 ): SupervisorPremioResumen {
   const ventasValidas = ventas.filter(esVentaValida);
+  const ventaTotal = ventasValidas.reduce((a, v) => a + (Number(v.subtotal_final) || 0), 0);
   const dias = buildDiasTabla(ventasValidas, snapshots, vendedor.username, grupos, config.venta_min_cliente);
 
   const skuClientesPeriodo = grupos.map((grupo) => {
@@ -606,6 +626,7 @@ function calcularResumenPremioVendedor(
   const cccUnicosTotal = dias.reduce((a, d) => a + d.cccUnicos, 0);
   const proy = calcularProyeccion(dias, periodo.diasHabiles, skuClientesPeriodo, cccUnicosTotal, config);
   const skusLogradosProy = proy.skuClientesProy.filter((c, i) => c >= grupos[i]?.objClientes).length;
+  const skusPctProy = grupos.length > 0 ? (skusLogradosProy / grupos.length) * 100 : 0;
 
   const diasConVentaActual = dias.filter((d) => d.tieneVenta).length;
   const clientesUnicos = new Set(ventasValidas.map((v) => String(v.cliente))).size;
@@ -620,13 +641,50 @@ function calcularResumenPremioVendedor(
     username: vendedor.username,
     name: vendedor.name,
     ffvv: vendedor.ffvvRaw || vendedor.ffvv,
+    ventaTotal,
     disciplinaProyPct: proy.disciplinaProyPct,
     coberturaProyPct: proy.coberturaProyPct,
     skusLogradosProy,
     skusTotal: grupos.length,
+    skusPctProy,
     cccPctProy,
     cccClientesProy: clientesUnicosProyectados,
     cccBase: config.base_cartera_sana,
+  };
+}
+
+function calcularPremioSupervisor(rows: SupervisorPremioResumen[], ffvvSupervisor: string): SupervisorPremioCalculado {
+  const ventaTotal = rows.reduce((a, r) => a + r.ventaTotal, 0);
+  const pctPozo = isVafood(ffvvSupervisor) ? 0.002 : 0.003;
+  const pozoSupervisor = ventaTotal * pctPozo;
+
+  const disciplinaPct = rows.length > 0 ? rows.reduce((a, r) => a + r.disciplinaProyPct, 0) / rows.length : 0;
+  const coberturaPct = rows.length > 0 ? rows.reduce((a, r) => a + r.coberturaProyPct, 0) / rows.length : 0;
+  const skusPct = rows.length > 0 ? rows.reduce((a, r) => a + r.skusPctProy, 0) / rows.length : 0;
+  const cccBase = rows.reduce((a, r) => a + (Number(r.cccBase) || 0), 0);
+  const cccClientes = rows.reduce((a, r) => a + (Number(r.cccClientesProy) || 0), 0);
+  const cccPct = cccBase > 0 ? (cccClientes / cccBase) * 100 : 0;
+
+  const md = multDisciplina(disciplinaPct);
+  const mc = multCobertura(coberturaPct);
+  const ms = multSkusPct(skusPct);
+  const mccc = multCartera(cccPct);
+  const sumaMultiplicadores = md + mc + ms + mccc;
+
+  return {
+    ventaTotal,
+    pctPozo,
+    pozoSupervisor,
+    disciplinaPct,
+    coberturaPct,
+    skusPct,
+    cccPct,
+    multDisciplina: md,
+    multCobertura: mc,
+    multSkus: ms,
+    multCartera: mccc,
+    sumaMultiplicadores,
+    premioSupervisor: pozoSupervisor * md * mc * ms * mccc,
   };
 }
 
@@ -641,7 +699,8 @@ const ResumenSupervisorProyectado: React.FC<{
   vendedores: VendedorStats[];
   snapshots: Snapshot[];
   periodo: Periodo;
-}> = ({ vendedores, snapshots, periodo }) => {
+  ffvvSupervisor: string;
+}> = ({ vendedores, snapshots, periodo, ffvvSupervisor }) => {
   const [rows, setRows] = useState<SupervisorPremioResumen[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -733,7 +792,7 @@ const ResumenSupervisorProyectado: React.FC<{
   if (loading) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-2 text-sm text-gray-400">
-        <Loader2 className="w-4 h-4 animate-spin" /> Calculando pantallazo de vendedores...
+        <Loader2 className="w-4 h-4 animate-spin" /> Calculando premio del supervisor...
       </div>
     );
   }
@@ -754,67 +813,107 @@ const ResumenSupervisorProyectado: React.FC<{
     );
   }
 
+  const premioSupervisor = calcularPremioSupervisor(rows, ffvvSupervisor);
+  const avgDisc = rows.reduce((a, r) => a + r.disciplinaProyPct, 0) / rows.length;
+  const avgCob = rows.reduce((a, r) => a + r.coberturaProyPct, 0) / rows.length;
+  const avgSkus = rows.reduce((a, r) => a + r.skusPctProy, 0) / rows.length;
+  const totalCccBase = rows.reduce((a, r) => a + r.cccBase, 0);
+  const totalCccClientes = rows.reduce((a, r) => a + r.cccClientesProy, 0);
+
+  const MultBadge: React.FC<{ mult: number }> = ({ mult }) => (
+    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${mult >= 1 ? "bg-emerald-100 text-emerald-700" : mult > 0 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>×{mult.toFixed(2)}</span>
+  );
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
-      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-red-500" /> Pantallazo proyectado de vendedores
-          </h3>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Disciplina, cobertura, SKUs y CCC calculados contra el proyectado mensual de cada vendedor.
-          </p>
-        </div>
-        <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500">
-          {rows.length} vendedores
-        </span>
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { label: "Venta FFVV", value: formatMoney(premioSupervisor.ventaTotal), sub: "Total vendedores" },
+          { label: "Pozo supervisor", value: formatMoney(premioSupervisor.pozoSupervisor), sub: `${(premioSupervisor.pctPozo * 100).toFixed(1)}% sobre venta` },
+          { label: "Suma multiplicadores", value: premioSupervisor.sumaMultiplicadores.toFixed(2), sub: "Disc + Cob + SKUs + CCC" },
+          { label: "Factor final", value: `×${(premioSupervisor.multDisciplina * premioSupervisor.multCobertura * premioSupervisor.multSkus * premioSupervisor.multCartera).toFixed(2)}`, sub: "Multiplicación de factores" },
+          { label: "Premio supervisor", value: formatMoney(premioSupervisor.premioSupervisor), sub: "Pozo × factores", destacado: true },
+        ].map((kpi) => (
+          <div key={kpi.label} className={`rounded-xl border p-3 ${kpi.destacado ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800" : "bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700"}`}>
+            <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400">{kpi.label}</p>
+            <p className={`text-lg font-bold mt-1 ${kpi.destacado ? "text-emerald-700 dark:text-emerald-400" : "text-gray-900 dark:text-gray-100"}`}>{kpi.value}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{kpi.sub}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-gray-50 dark:bg-gray-700/50 text-[10px] uppercase tracking-wide text-gray-500">
-              <th className="px-3 py-2 text-left font-semibold border-b border-gray-200 dark:border-gray-700 min-w-[170px]">Vendedor</th>
-              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Disciplina</th>
-              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Cobertura</th>
-              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">SKUs</th>
-              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">CCC únicos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.username} className="border-b border-gray-100 dark:border-gray-700/60 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                <td className="px-3 py-2.5">
-                  <p className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{r.name}</p>
-                  <p className="text-[10px] text-gray-400">ID {r.username} · {r.ffvv || "—"}</p>
-                </td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.disciplinaProyPct)}`}>
-                    {r.disciplinaProyPct.toFixed(0)}%
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.coberturaProyPct)}`}>
-                    {r.coberturaProyPct.toFixed(0)}%
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${r.skusLogradosProy >= r.skusTotal ? cellOk : r.skusLogradosProy >= Math.ceil(r.skusTotal * 0.6) ? "text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400" : cellBad}`}>
-                    {r.skusLogradosProy}/{r.skusTotal}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-center">
-                  <span className={`inline-flex justify-center min-w-[64px] px-2 py-1 rounded-md font-bold ${pctClass(r.cccPctProy)}`}>
-                    {r.cccPctProy !== null ? `${r.cccPctProy.toFixed(0)}%` : "—"}
-                  </span>
-                  <span className="block text-[10px] text-gray-400 mt-0.5">
-                    {r.cccClientesProy}/{r.cccBase || "—"}
-                  </span>
-                </td>
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-red-500" /> Premio supervisor y pantallazo de vendedores
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Columnas por vendedor, totales de FFVV y multiplicadores del supervisor según los porcentajes del esquema.
+            </p>
+          </div>
+          <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500">
+            {rows.length} vendedores
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-700/50 text-[10px] uppercase tracking-wide text-gray-500">
+                <th className="px-3 py-2 text-left font-semibold border-b border-gray-200 dark:border-gray-700 min-w-[170px]">Vendedor</th>
+                <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Venta</th>
+                <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Disciplina</th>
+                <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Cobertura</th>
+                <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">SKUs</th>
+                <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">CCC únicos</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.username} className="border-b border-gray-100 dark:border-gray-700/60 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                  <td className="px-3 py-2.5">
+                    <p className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{r.name}</p>
+                    <p className="text-[10px] text-gray-400">ID {r.username} · {r.ffvv || "—"}</p>
+                  </td>
+                  <td className="px-3 py-2.5 text-center font-semibold text-gray-700 dark:text-gray-200">{formatMoney(r.ventaTotal)}</td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.disciplinaProyPct)}`}>
+                      {r.disciplinaProyPct.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.coberturaProyPct)}`}>
+                      {r.coberturaProyPct.toFixed(0)}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex justify-center min-w-[72px] px-2 py-1 rounded-md font-bold ${pctClass(r.skusPctProy)}`}>
+                      {r.skusPctProy.toFixed(0)}%
+                    </span>
+                    <span className="block text-[10px] text-gray-400 mt-0.5">{r.skusLogradosProy}/{r.skusTotal}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-flex justify-center min-w-[64px] px-2 py-1 rounded-md font-bold ${pctClass(r.cccPctProy)}`}>
+                      {r.cccPctProy !== null ? `${r.cccPctProy.toFixed(0)}%` : "—"}
+                    </span>
+                    <span className="block text-[10px] text-gray-400 mt-0.5">
+                      {r.cccClientesProy}/{r.cccBase || "—"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-gray-50 dark:bg-gray-700/40 border-t-2 border-gray-200 dark:border-gray-600 font-bold">
+                <td className="px-3 py-3 text-gray-900 dark:text-gray-100">Total / promedio supervisor</td>
+                <td className="px-3 py-3 text-center text-gray-900 dark:text-gray-100">{formatMoney(premioSupervisor.ventaTotal)}</td>
+                <td className="px-3 py-3 text-center"><span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md ${pctClass(avgDisc)}`}>{avgDisc.toFixed(0)}%</span><span className="block mt-1"><MultBadge mult={premioSupervisor.multDisciplina} /></span></td>
+                <td className="px-3 py-3 text-center"><span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md ${pctClass(avgCob)}`}>{avgCob.toFixed(0)}%</span><span className="block mt-1"><MultBadge mult={premioSupervisor.multCobertura} /></span></td>
+                <td className="px-3 py-3 text-center"><span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md ${pctClass(avgSkus)}`}>{avgSkus.toFixed(0)}%</span><span className="block mt-1"><MultBadge mult={premioSupervisor.multSkus} /></span></td>
+                <td className="px-3 py-3 text-center"><span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md ${pctClass(premioSupervisor.cccPct)}`}>{premioSupervisor.cccPct.toFixed(0)}%</span><span className="block text-[10px] text-gray-400 mt-0.5">{totalCccClientes}/{totalCccBase}</span><span className="block mt-1"><MultBadge mult={premioSupervisor.multCartera} /></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1642,6 +1741,7 @@ const VendedoresResumen: React.FC = () => {
           vendedores={listaFiltrada}
           snapshots={snapshots}
           periodo={periodoCurrent}
+          ffvvSupervisor={String(user?.FFVV ?? user?.ffvv ?? "")}
         />
       )}
 
