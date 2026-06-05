@@ -413,11 +413,39 @@ function buildDiasTabla(
   }
 
   // 5. SKUs por día — clientes únicos NUEVOS que llegan al mínimo de compra.
-  //    Antes se mostraban clientes únicos del día; si un mismo cliente compraba el mismo SKU
-  //    en más de un día, se repetía visualmente y la suma diaria no coincidía con el total.
-  //    Ahora cada cliente se acredita una sola vez: el día en que alcanza el mínimo del SKU.
+  //    Importante: el total de la fila "Total" se calcula con el acumulado FINAL del período.
+  //    Por eso, si un cliente llega al mínimo un día pero después una devolución/NC lo deja
+  //    por debajo del mínimo, NO debe aparecer en ningún día. Así la suma diaria coincide
+  //    con el total acumulado final.
   const skuClientesPorFechaVenta: Record<string, number[]> = {};
-  const skuAcumPorCliente = grupos.map(() => ({} as Record<string, number>));
+
+  // 5.a. Primero calculamos el acumulado FINAL por SKU/cliente en todo el período.
+  const skuAcumFinalPorCliente = grupos.map(() => ({} as Record<string, number>));
+
+  for (const fv of fechasVenta) {
+    const ventasDia = ventasPorFecha[fv] ?? [];
+
+    grupos.forEach((grupo, gi) => {
+      ventasDia.filter(grupo.match).forEach((v) => {
+        const cli = String(v.cliente);
+        skuAcumFinalPorCliente[gi][cli] =
+          (skuAcumFinalPorCliente[gi][cli] || 0) + (Number(v.bultos_total) || 1);
+      });
+    });
+  }
+
+  // Clientes que realmente califican al cierre del período.
+  const skuClientesElegiblesFinales = grupos.map((grupo, gi) => {
+    const elegibles = new Set<string>();
+    Object.entries(skuAcumFinalPorCliente[gi]).forEach(([cli, total]) => {
+      if (total >= grupo.minCompra) elegibles.add(cli);
+    });
+    return elegibles;
+  });
+
+  // 5.b. Después recorremos cronológicamente y acreditamos cada cliente una sola vez:
+  //      el día en que alcanza el mínimo, pero solo si también califica en el acumulado final.
+  const skuAcumParcialPorCliente = grupos.map(() => ({} as Record<string, number>));
   const skuClientesYaContados = grupos.map(() => new Set<string>());
 
   for (const fechaSnap of fechasSnap) {
@@ -434,9 +462,14 @@ function buildDiasTabla(
       });
 
       Object.entries(compraDiaPorCliente).forEach(([cli, compraDia]) => {
-        skuAcumPorCliente[gi][cli] = (skuAcumPorCliente[gi][cli] || 0) + compraDia;
+        skuAcumParcialPorCliente[gi][cli] =
+          (skuAcumParcialPorCliente[gi][cli] || 0) + compraDia;
 
-        if (!skuClientesYaContados[gi].has(cli) && skuAcumPorCliente[gi][cli] >= grupo.minCompra) {
+        const calificaAlFinal = skuClientesElegiblesFinales[gi].has(cli);
+        const yaFueContado = skuClientesYaContados[gi].has(cli);
+        const alcanzoMinimo = skuAcumParcialPorCliente[gi][cli] >= grupo.minCompra;
+
+        if (calificaAlFinal && !yaFueContado && alcanzoMinimo) {
           skuClientesYaContados[gi].add(cli);
           skuClientesPorFechaVenta[fechaVenta][gi] += 1;
         }
