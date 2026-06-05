@@ -567,6 +567,259 @@ function calcularProyeccion(
   return { disciplinaProyPct, coberturaProyPct, skuClientesProy, cccUnicosProyTotal };
 }
 
+
+// ─── Resumen proyectado para supervisores ───────────────────────────────────
+
+interface SupervisorPremioResumen {
+  username: string;
+  name: string;
+  ffvv: string;
+  disciplinaProyPct: number;
+  coberturaProyPct: number;
+  skusLogradosProy: number;
+  skusTotal: number;
+  cccPctProy: number | null;
+  cccClientesProy: number;
+  cccBase: number;
+}
+
+function calcularResumenPremioVendedor(
+  vendedor: VendedorStats,
+  ventas: ChessVenta[],
+  snapshots: Snapshot[],
+  config: VariableConfig,
+  grupos: SkuGrupo[],
+  periodo: Periodo
+): SupervisorPremioResumen {
+  const ventasValidas = ventas.filter(esVentaValida);
+  const dias = buildDiasTabla(ventasValidas, snapshots, vendedor.username, grupos, config.venta_min_cliente);
+
+  const skuClientesPeriodo = grupos.map((grupo) => {
+    const porCliente: Record<string, number> = {};
+    ventasValidas.filter(grupo.match).forEach((v) => {
+      const cli = String(v.cliente);
+      porCliente[cli] = (porCliente[cli] || 0) + (Number(v.bultos_total) || 1);
+    });
+    return Object.values(porCliente).filter((c) => c >= grupo.minCompra).length;
+  });
+
+  const cccUnicosTotal = dias.reduce((a, d) => a + d.cccUnicos, 0);
+  const proy = calcularProyeccion(dias, periodo.diasHabiles, skuClientesPeriodo, cccUnicosTotal, config);
+  const skusLogradosProy = proy.skuClientesProy.filter((c, i) => c >= grupos[i]?.objClientes).length;
+
+  const diasConVentaActual = dias.filter((d) => d.tieneVenta).length;
+  const clientesUnicos = new Set(ventasValidas.map((v) => String(v.cliente))).size;
+  const clientesUnicosProyectados = diasConVentaActual > 0
+    ? Math.round(clientesUnicos * periodo.diasHabiles / diasConVentaActual)
+    : clientesUnicos;
+  const cccPctProy = config.base_cartera_sana > 0
+    ? (clientesUnicosProyectados / config.base_cartera_sana) * 100
+    : null;
+
+  return {
+    username: vendedor.username,
+    name: vendedor.name,
+    ffvv: vendedor.ffvvRaw || vendedor.ffvv,
+    disciplinaProyPct: proy.disciplinaProyPct,
+    coberturaProyPct: proy.coberturaProyPct,
+    skusLogradosProy,
+    skusTotal: grupos.length,
+    cccPctProy,
+    cccClientesProy: clientesUnicosProyectados,
+    cccBase: config.base_cartera_sana,
+  };
+}
+
+const pctClass = (pct: number | null) => {
+  if (pct === null) return "text-gray-400 bg-gray-50 dark:bg-gray-700/40";
+  if (pct >= 90) return "text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400";
+  if (pct >= 65) return "text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400";
+  return "text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400";
+};
+
+const ResumenSupervisorProyectado: React.FC<{
+  vendedores: VendedorStats[];
+  snapshots: Snapshot[];
+  periodo: Periodo;
+}> = ({ vendedores, snapshots, periodo }) => {
+  const [rows, setRows] = useState<SupervisorPremioResumen[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    const cargar = async () => {
+      const usernames = vendedores.map((v) => String(v.username)).filter(Boolean);
+      if (usernames.length === 0) {
+        setRows([]);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const CHUNK = 1000;
+        let ventasTodas: ChessVenta[] = [];
+        let desde = 0;
+
+        while (true) {
+          const { data, error: e } = await supabase
+            .from("chess_ventas")
+            .select("id, numero, fecha_comprobante, descripcion_comprobante, cliente, categoria, division, marca, unidad_de_negocio, codigo_articulo, bultos_total, subtotal_final, id_vendedor")
+            .in("id_vendedor", usernames)
+            .gte("fecha_comprobante", `${periodo.mesVentas}-01`)
+            .lte("fecha_comprobante", periodo.ultimoDiaVentas)
+            .order("fecha_comprobante", { ascending: false })
+            .range(desde, desde + CHUNK - 1);
+
+          if (e) throw new Error(`Ventas: ${e.message}`);
+          if (!data || data.length === 0) break;
+          ventasTodas = ventasTodas.concat(data as ChessVenta[]);
+          if (data.length < CHUNK) break;
+          desde += CHUNK;
+        }
+
+        const [{ data: configsData, error: eCfg }, { skuDef }] = await Promise.all([
+          supabase
+            .from("variable_config")
+            .select("*")
+            .in("username", usernames)
+            .eq("periodo", periodo.mesVentas)
+            .eq("activo", true),
+          cargarTablasMaestra(),
+        ]);
+
+        if (eCfg) throw new Error(`Config: ${eCfg.message}`);
+
+        const configPorUsuario: Record<string, VariableConfig> = {};
+        ((configsData || []) as VariableConfig[]).forEach((cfg) => {
+          configPorUsuario[String(cfg.username)] = cfg;
+        });
+
+        const snapshotsPeriodo = snapshots.filter((s) => {
+          const f = String(s.fecha || "").slice(0, 10);
+          return f >= periodo.snapDesde && f <= periodo.snapHasta;
+        });
+
+        const resumen = vendedores.map((v) => {
+          const cfg = configPorUsuario[String(v.username)];
+          if (!cfg) return null;
+
+          const grupos = getSkuGruposFromDef(cfg.ffvv || v.ffvv, skuDef, cfg);
+          if (grupos.length === 0) return null;
+
+          const ventasVendedor = ventasTodas.filter((venta) => String(venta.id_vendedor) === String(v.username));
+          const snapsVendedor = snapshotsPeriodo.filter((snap) => String(snap.username) === String(v.username));
+
+          return calcularResumenPremioVendedor(v, ventasVendedor, snapsVendedor, cfg, grupos, periodo);
+        }).filter(Boolean) as SupervisorPremioResumen[];
+
+        resumen.sort((a, b) => a.name.localeCompare(b.name));
+
+        if (!cancelado) setRows(resumen);
+      } catch (err: any) {
+        if (!cancelado) setError(err.message || "Error al cargar resumen de supervisores");
+      } finally {
+        if (!cancelado) setLoading(false);
+      }
+    };
+
+    cargar();
+    return () => { cancelado = true; };
+  }, [vendedores, snapshots, periodo.mesVentas, periodo.snapDesde, periodo.snapHasta, periodo.ultimoDiaVentas]);
+
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-2 text-sm text-gray-400">
+        <Loader2 className="w-4 h-4 animate-spin" /> Calculando pantallazo de vendedores...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800 p-3 text-sm text-red-600">
+        {error}
+      </div>
+    );
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-700">
+        No hay configuración activa para mostrar el resumen proyectado de estos vendedores en {periodo.label}.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-red-500" /> Pantallazo proyectado de vendedores
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Disciplina, cobertura, SKUs y CCC calculados contra el proyectado mensual de cada vendedor.
+          </p>
+        </div>
+        <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500">
+          {rows.length} vendedores
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-gray-50 dark:bg-gray-700/50 text-[10px] uppercase tracking-wide text-gray-500">
+              <th className="px-3 py-2 text-left font-semibold border-b border-gray-200 dark:border-gray-700 min-w-[170px]">Vendedor</th>
+              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Disciplina</th>
+              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">Cobertura</th>
+              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">SKUs</th>
+              <th className="px-3 py-2 text-center font-semibold border-b border-gray-200 dark:border-gray-700">CCC únicos</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.username} className="border-b border-gray-100 dark:border-gray-700/60 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                <td className="px-3 py-2.5">
+                  <p className="font-semibold text-gray-800 dark:text-gray-100 leading-tight">{r.name}</p>
+                  <p className="text-[10px] text-gray-400">ID {r.username} · {r.ffvv || "—"}</p>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.disciplinaProyPct)}`}>
+                    {r.disciplinaProyPct.toFixed(0)}%
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${pctClass(r.coberturaProyPct)}`}>
+                    {r.coberturaProyPct.toFixed(0)}%
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`inline-flex justify-center min-w-[58px] px-2 py-1 rounded-md font-bold ${r.skusLogradosProy >= r.skusTotal ? cellOk : r.skusLogradosProy >= Math.ceil(r.skusTotal * 0.6) ? "text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400" : cellBad}`}>
+                    {r.skusLogradosProy}/{r.skusTotal}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className={`inline-flex justify-center min-w-[64px] px-2 py-1 rounded-md font-bold ${pctClass(r.cccPctProy)}`}>
+                    {r.cccPctProy !== null ? `${r.cccPctProy.toFixed(0)}%` : "—"}
+                  </span>
+                  <span className="block text-[10px] text-gray-400 mt-0.5">
+                    {r.cccClientesProy}/{r.cccBase || "—"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ─── PanelPremio ──────────────────────────────────────────────────────────────
 
 const PanelPremio: React.FC<{
@@ -1383,6 +1636,14 @@ const VendedoresResumen: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {esVistaSupervisor && (
+        <ResumenSupervisorProyectado
+          vendedores={listaFiltrada}
+          snapshots={snapshots}
+          periodo={periodoCurrent}
+        />
+      )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative">
