@@ -120,25 +120,50 @@ export default function AdminUsuarios() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: u }, { data: p }] = await Promise.all([
-        supabase
-          .from("usuarios_app")
-          .select(
-            "id, username, name, role, mail, active, FFVV, ffvv, supervisor, phone"
-          )
-          .order("name"),
-        supabase.from("usuario_permisos_extra").select("*"),
-      ]);
+      // Cargamos usuarios sin pedir "active" explícitamente
+      // por si la columna todavía no existe en Supabase.
+      // Si ya corriste el migration.sql podés agregar "active" al select.
+      const { data: u, error: uErr } = await supabase
+        .from("usuarios_app")
+        .select("id, username, name, role, mail, FFVV, ffvv, supervisor, phone")
+        .order("name");
+
+      if (uErr) {
+        console.error("Error cargando usuarios_app:", uErr);
+        showToast("Error cargando usuarios: " + uErr.message, false);
+        return;
+      }
+
+      // Intentar cargar permisos extra (tabla puede no existir todavía)
+      const { data: p, error: pErr } = await supabase
+        .from("usuario_permisos_extra")
+        .select("*");
+
+      if (pErr) {
+        // Si la tabla no existe aún, seguimos sin permisos extra
+        console.warn("usuario_permisos_extra no disponible:", pErr.message);
+      }
+
+      // Intentar cargar columna active por separado
+      const { data: activeData } = await supabase
+        .from("usuarios_app")
+        .select("id, active");
+
+      const activeMap: Record<string, boolean> = {};
+      (activeData ?? []).forEach((x: any) => {
+        activeMap[x.id] = x.active !== false;
+      });
 
       setUsuarios(
         (u ?? []).map((x: any) => ({
           ...x,
-          active: x.active !== false,
+          active: activeMap[x.id] ?? true,
         }))
       );
       setPermisos(p ?? []);
-    } catch (e) {
-      showToast("Error cargando datos", false);
+    } catch (e: any) {
+      console.error("Error general en AdminUsuarios:", e);
+      showToast("Error cargando datos: " + (e?.message ?? ""), false);
     } finally {
       setLoading(false);
     }
