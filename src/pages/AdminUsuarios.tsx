@@ -120,13 +120,9 @@ export default function AdminUsuarios() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      // Cargamos usuarios sin pedir "active" explícitamente
-      // por si la columna todavía no existe en Supabase.
-      // Si ya corriste el migration.sql podés agregar "active" al select.
       const { data: u, error: uErr } = await supabase
         .from("usuarios_app")
-        .select("id, username, name, role, mail, FFVV, ffvv, supervisor, phone")
-        .order("name");
+        .select("id, username, name, role, mail, active, FFVV, ffvv, supervisor, phone");
 
       if (uErr) {
         console.error("Error cargando usuarios_app:", uErr);
@@ -134,30 +130,23 @@ export default function AdminUsuarios() {
         return;
       }
 
-      // Intentar cargar permisos extra (tabla puede no existir todavía)
+      // Permisos extra — tabla puede no existir todavía
       const { data: p, error: pErr } = await supabase
         .from("usuario_permisos_extra")
         .select("*");
 
       if (pErr) {
-        // Si la tabla no existe aún, seguimos sin permisos extra
-        console.warn("usuario_permisos_extra no disponible:", pErr.message);
+        console.warn("usuario_permisos_extra no disponible aún:", pErr.message);
       }
 
-      // Intentar cargar columna active por separado
-      const { data: activeData } = await supabase
-        .from("usuarios_app")
-        .select("id, active");
-
-      const activeMap: Record<string, boolean> = {};
-      (activeData ?? []).forEach((x: any) => {
-        activeMap[x.id] = x.active !== false;
-      });
+      const sorted = (u ?? []).sort((a: any, b: any) =>
+        (a.name ?? "").localeCompare(b.name ?? "", "es")
+      );
 
       setUsuarios(
-        (u ?? []).map((x: any) => ({
+        sorted.map((x: any) => ({
           ...x,
-          active: activeMap[x.id] ?? true,
+          active: x.active !== false,
         }))
       );
       setPermisos(p ?? []);
