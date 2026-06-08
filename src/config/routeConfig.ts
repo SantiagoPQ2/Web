@@ -15,6 +15,7 @@ import {
   Users,
   DollarSign,
   Ruler,
+  Shield,
 } from "lucide-react";
 
 import type { ComponentType } from "react";
@@ -278,6 +279,14 @@ export const ROUTES: RouteConfig[] = [
     label: "Panel Admin",
     icon: Wrench,
     description: "Herramientas admin",
+    roles: ["admin"],
+    inMenu: true,
+  },
+  {
+    path: "/admin-usuarios",
+    label: "Gestión de Usuarios",
+    icon: Shield,
+    description: "Administrar usuarios y permisos",
     roles: ["admin"],
     inMenu: true,
   },
