@@ -122,7 +122,7 @@ export default function AdminUsuarios() {
     try {
       const { data: u, error: uErr } = await supabase
         .from("usuarios_app")
-        .select("id, username, name, role, mail, active, FFVV, ffvv, supervisor, phone");
+        .select("id, username, name, role, mail, active, FFVV, supervisor, phone");
 
       if (uErr) {
         console.error("Error cargando usuarios_app:", uErr);
