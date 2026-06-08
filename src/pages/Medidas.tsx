@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Truck, Package, Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../config/supabase";
 
 type Tab = "camioneta" | "sku";
 type TipoSKU = "bulto" | "unidad";
