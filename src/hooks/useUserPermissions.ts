@@ -1,18 +1,15 @@
 // src/hooks/useUserPermissions.ts
-// Carga los permisos extra del usuario logueado desde Supabase
-// y los combina con las rutas base de su rol.
-
 import { useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
 import { ROUTES, getRoutesForRole, type AppRole, type RouteConfig } from "../config/routeConfig";
 
 export function useUserPermissions(userId: string | undefined, role: AppRole | undefined) {
-  const [extraPaths, setExtraPaths] = useState<string[]>([]);
+  const [overrides, setOverrides] = useState<{ path: string; revocado: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!userId || !role) {
-      setExtraPaths([]);
+      setOverrides([]);
       setLoading(false);
       return;
     }
@@ -21,28 +18,38 @@ export function useUserPermissions(userId: string | undefined, role: AppRole | u
 
     supabase
       .from("usuario_permisos_extra")
-      .select("path")
+      .select("path, revocado")
       .eq("user_id", userId)
       .then(({ data }) => {
         if (cancelled) return;
-        setExtraPaths((data ?? []).map((r: any) => r.path));
+        setOverrides((data ?? []).map((r: any) => ({ path: r.path, revocado: r.revocado === true })));
         setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
   }, [userId, role]);
 
-  // Rutas base del rol + rutas extra del usuario
   const allRoutes: RouteConfig[] = (() => {
     if (!role) return [];
     const base = getRoutesForRole(role);
     const basePaths = new Set(base.map((r) => r.path));
 
-    const extras = ROUTES.filter(
-      (r) => extraPaths.includes(r.path) && !basePaths.has(r.path)
-    );
+    // Rutas extra concedidas (revocado=false, no están en base)
+    const extras = ROUTES.filter((r) => {
+      const override = overrides.find((o) => o.path === r.path);
+      return override && !override.revocado && !basePaths.has(r.path);
+    });
 
-    return [...base, ...extras];
+    // Rutas base minus las revocadas
+    const baseFiltered = base.filter((r) => {
+      const override = overrides.find((o) => o.path === r.path);
+      return !override || !override.revocado;
+    });
+
+    return [...baseFiltered, ...extras];
   })();
 
   return { allRoutes, loading };
