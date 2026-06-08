@@ -41,6 +41,7 @@ import CuentaCorriente from "./pages/CuentaCorriente";
 import CuentaCorrienteJefe from "./pages/CuentaCorrienteJefe";
 import AltaClientePage from "./pages/AltaClientePage";
 import AltaClienteListado from "./pages/AltaClienteListado";
+import Medidas from "./pages/Medidas";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -98,6 +99,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/cuenta-corriente-jefe": <CuentaCorrienteJefe />,
   "/alta-cliente": <AltaClientePage />,
   "/alta-cliente-listado": <AltaClienteListado />,
+  "/medidas": <Medidas />,
 };
 
 function ProtectedApp() {
