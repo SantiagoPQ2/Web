@@ -24,6 +24,7 @@ import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import AdminEquipoPage from "./pages/AdminEquipoPage";
+import AdminUsuarios from "./pages/AdminUsuarios";
 import VendedoresResumen from "./pages/VendedoresResumen";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
@@ -45,6 +46,7 @@ import Medidas from "./pages/Medidas";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
+import { useUserPermissions } from "./hooks/useUserPermissions";
 import UpdateBanner from "./components/UpdateBanner";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
@@ -53,7 +55,6 @@ import { registerPushForUser } from "./utils/pushNotifications";
 import { supabase } from "./config/supabase";
 
 import {
-  getRoutesForRole,
   getDefaultPathForRole,
   type AppRole,
 } from "./config/routeConfig";
@@ -82,6 +83,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/chat": <ChatPage />,
   "/admin": <AdminPanel />,
   "/admin-equipo": <AdminEquipoPage />,
+  "/admin-usuarios": <AdminUsuarios />,
   "/vendedores-resumen": <VendedoresResumen />,
   "/planilla-carga": <PlanillaCarga />,
   "/mapa": <Mapa />,
@@ -103,7 +105,7 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
 };
 
 function ProtectedApp() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const hasUpdate = useVersionChecker(60000);
   const location = useLocation();
 
@@ -111,6 +113,13 @@ function ProtectedApp() {
   const [ffvv, setFfvv] = useState<string | null>(null);
   const [loadingTrainingConfig, setLoadingTrainingConfig] = useState(true);
 
+  // Permisos: rutas base del rol + extras de Supabase
+  const { allRoutes: allowedRoutes, loading: loadingPermisos } = useUserPermissions(
+    user?.id,
+    user?.role as AppRole | undefined
+  );
+
+  // Registrar push notifications
   useEffect(() => {
     if (!user?.username) return;
     registerPushForUser(user.username).catch((err) => {
@@ -118,6 +127,7 @@ function ProtectedApp() {
     });
   }, [user?.username]);
 
+  // Cargar FFVV para vendedores (para el gate de capacitación)
   useEffect(() => {
     let isMounted = true;
 
@@ -134,13 +144,19 @@ function ProtectedApp() {
         setLoadingTrainingConfig(true);
         const { data, error } = await supabase
           .from("usuarios_app")
-          .select("FFVV, ffvv")
+          .select("FFVV, ffvv, active")
           .eq("id", user.id)
           .maybeSingle();
 
         if (error) {
-          console.error("Error cargando FFVV del usuario:", error);
+          console.error("Error cargando config del usuario:", error);
           if (isMounted) setFfvv(null);
+          return;
+        }
+
+        // Si el usuario fue desactivado, forzar logout
+        if (data?.active === false) {
+          logout();
           return;
         }
 
@@ -157,18 +173,20 @@ function ProtectedApp() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, logout]);
 
   if (!user) return <Login />;
 
   const role = user.role as AppRole;
   const defaultPath = getDefaultPathForRole(role);
-  const allowedRoutes = getRoutesForRole(role);
 
-  if (role === "vendedor" && loadingTrainingConfig) {
+  // Loading combinado: permisos extra + config de capacitación (vendedor)
+  const isLoading = loadingPermisos || (role === "vendedor" && loadingTrainingConfig);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
-        Cargando capacitación...
+        Cargando...
       </div>
     );
   }
