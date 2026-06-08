@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   Users,
   DollarSign,
+  Ruler,
 } from "lucide-react";
 
 import type { ComponentType } from "react";
@@ -218,6 +219,14 @@ export const ROUTES: RouteConfig[] = [
     icon: MapPin,
     description: "Consultar coordenadas",
     roles: ["jefe-transporte"],
+    inMenu: true,
+  },
+  {
+    path: "/medidas",
+    label: "Medidas",
+    icon: Ruler,
+    description: "Dimensiones de camionetas y SKUs",
+    roles: ["jefe-transporte", "admin"],
     inMenu: true,
   },
 
