@@ -5,11 +5,12 @@ import { useAuth } from "../context/AuthContext";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabase";
 import RouteProgressPopup from "./RouteProgressPopup";
+import { useUserPermissions } from "../hooks/useUserPermissions";
 
 import {
-  getMenuItemsForRole,
   getLabelForPath,
   type AppRole,
+  type RouteConfig,
 } from "../config/routeConfig";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -279,6 +280,8 @@ function useNotifications(username: string | undefined) {
   };
 }
 
+// ─── Subcomponente: NotificationBell ─────────────────────────────────────────
+
 interface NotificationBellProps {
   bellItems: BellItem[];
   sinLeer: number;
@@ -479,13 +482,12 @@ const UserMenu: React.FC<UserMenuProps> = ({ username, hideSettings, onLogout })
 // ─── Subcomponente: Sidebar ───────────────────────────────────────────────────
 
 interface SidebarProps {
-  role: AppRole;
   onClose: () => void;
+  menuItems: RouteConfig[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ role, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onClose, menuItems }) => {
   const location = useLocation();
-  const menuItems = getMenuItemsForRole(role);
 
   return (
     <>
@@ -540,6 +542,22 @@ const Navigation: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const role = user?.role as AppRole | undefined;
+
+  // Permisos con overrides de Supabase — alimenta el menú
+  const { allRoutes } = useUserPermissions(user?.id, role);
+
+  // Construir items del menú respetando inMenu y labels especiales por rol
+  const menuItems = useMemo<RouteConfig[]>(() => {
+    return allRoutes
+      .filter((r) => r.inMenu)
+      .map((r) => {
+        if (r.path === "/vendedores-resumen") {
+          if (role === "vendedor") return { ...r, label: "Mi Premio", description: "Ver mi premio, ventas y objetivos" };
+          if (role === "supervisor") return { ...r, label: "Premios FFVV", description: "Ver premios y objetivos de mi fuerza de venta" };
+        }
+        return r;
+      });
+  }, [allRoutes, role]);
 
   const handleLogout = () => {
     try {
@@ -604,8 +622,8 @@ const Navigation: React.FC = () => {
         </div>
       </header>
 
-      {sidebarOpen && role && (
-        <Sidebar role={role} onClose={() => setSidebarOpen(false)} />
+      {sidebarOpen && (
+        <Sidebar menuItems={menuItems} onClose={() => setSidebarOpen(false)} />
       )}
     </>
   );
