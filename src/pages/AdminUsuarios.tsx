@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
+  Minus,
 } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { ROUTES, type AppRole } from "../config/routeConfig";
@@ -43,9 +44,13 @@ interface PermisoExtra {
   id: string;
   user_id: string;
   path: string;
+  revocado: boolean;
 }
 
 type Tab = "permisos" | "usuarios";
+
+// Estado de un checkbox: true=acceso, false=sin acceso, "base"=acceso por rol (sin override)
+type CheckState = true | false | "base";
 
 const ALL_ROLES: AppRole[] = [
   "vendedor",
@@ -67,18 +72,13 @@ const ROLE_COLORS: Record<AppRole, string> = {
   "administracion-cordoba": "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
 };
 
-// Páginas que mostramos en la grilla (solo inMenu o relevantes)
 const PAGES_FOR_GRID = ROUTES.filter(
   (r) => r.path !== "/b2b/catalogo" && r.path !== "/b2b/carrito" && r.path !== "/b2b/pedidos"
 );
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function roleHasPath(role: AppRole, path: string): boolean {
   return ROUTES.some((r) => r.path === path && r.roles.includes(role));
 }
-
-// ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AdminUsuarios() {
   const [tab, setTab] = useState<Tab>("permisos");
@@ -88,8 +88,9 @@ export default function AdminUsuarios() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   // ── Grilla ─────────────────────────────────────────────────────────────────
+  // pendientes: clave = "userId||path", valor = true | false | null (null = volver al estado base/borrar override)
   const [permisosPendientes, setPermisosPendientes] = useState<
-    Record<string, boolean>
+    Record<string, boolean | null>
   >({});
   const [savingPermisos, setSavingPermisos] = useState(false);
   const [filtroGrilla, setFiltroGrilla] = useState("");
@@ -104,13 +105,10 @@ export default function AdminUsuarios() {
   } | null>(null);
   const [modalPassword, setModalPassword] = useState<Usuario | null>(null);
   const [savingUsuario, setSavingUsuario] = useState(false);
-
-  // ── Form estado ────────────────────────────────────────────────────────────
   const [form, setForm] = useState<Partial<Usuario> & { password?: string }>({});
   const [newPassword, setNewPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
 
-  // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3000);
@@ -130,7 +128,6 @@ export default function AdminUsuarios() {
         return;
       }
 
-      // Permisos extra — tabla puede no existir todavía
       const { data: p, error: pErr } = await supabase
         .from("usuario_permisos_extra")
         .select("*");
@@ -149,7 +146,12 @@ export default function AdminUsuarios() {
           active: x.active !== false,
         }))
       );
-      setPermisos(p ?? []);
+      setPermisos(
+        (p ?? []).map((x: any) => ({
+          ...x,
+          revocado: x.revocado === true,
+        }))
+      );
     } catch (e: any) {
       console.error("Error general en AdminUsuarios:", e);
       showToast("Error cargando datos: " + (e?.message ?? ""), false);
@@ -181,24 +183,73 @@ export default function AdminUsuarios() {
     scrollPage * COLS_PER_PAGE + COLS_PER_PAGE
   );
 
-  // clave única para un permiso en el estado local
   const key = (userId: string, path: string) => `${userId}||${path}`;
 
-  // tiene permiso (base o extra o pendiente)
-  const tienePermiso = (userId: string, role: AppRole, path: string): boolean => {
+  // Devuelve el estado efectivo de un checkbox considerando pendientes
+  // "base" = acceso por rol sin override guardado ni pendiente
+  // true = acceso (extra concedido o base sin revocar)
+  // false = sin acceso (base revocado o extra no concedido)
+  const getEstado = (userId: string, role: AppRole, path: string): CheckState => {
     const k = key(userId, path);
-    if (k in permisosPendientes) return permisosPendientes[k];
-    if (permisos.some((p) => p.user_id === userId && p.path === path)) return true;
-    return false;
+    const esBase = roleHasPath(role, path);
+    const permisoGuardado = permisos.find((p) => p.user_id === userId && p.path === path);
+
+    // Si hay cambio pendiente, ese manda
+    if (k in permisosPendientes) {
+      const pend = permisosPendientes[k];
+      if (pend === null) return esBase ? "base" : false;
+      return pend ? true : false;
+    }
+
+    // Si hay override guardado
+    if (permisoGuardado) {
+      return permisoGuardado.revocado ? false : true;
+    }
+
+    // Sin override: estado base del rol
+    return esBase ? "base" : false;
   };
 
-  const tieneBase = (role: AppRole, path: string) => roleHasPath(role, path);
-
+  // Ciclo al hacer click:
+  // - Si es "base" (acceso por rol, sin override) → revocar (false)
+  // - Si es false y era base → volver a base (null = borrar override)
+  // - Si es false y NO era base → dar acceso extra (true)
+  // - Si es true (acceso extra) → quitar (false)
   const togglePermiso = (userId: string, role: AppRole, path: string) => {
-    if (tieneBase(role, path)) return; // no se puede quitar el base
     const k = key(userId, path);
-    const actual = tienePermiso(userId, role, path);
-    setPermisosPendientes((prev) => ({ ...prev, [k]: !actual }));
+    const esBase = roleHasPath(role, path);
+    const estado = getEstado(userId, role, path);
+    const permisoGuardado = permisos.find((p) => p.user_id === userId && p.path === path);
+
+    if (estado === "base") {
+      // Revocar acceso base
+      setPermisosPendientes((prev) => ({ ...prev, [k]: false }));
+    } else if (estado === false && esBase) {
+      // Tenía base revocado → restaurar (null = borrar override)
+      setPermisosPendientes((prev) => {
+        const next = { ...prev };
+        if (permisoGuardado) {
+          next[k] = null; // marcar para borrar
+        } else {
+          delete next[k]; // nunca se guardó, simplemente sacar del pendiente
+        }
+        return next;
+      });
+    } else if (estado === false && !esBase) {
+      // No tiene acceso y no es base → dar acceso extra
+      setPermisosPendientes((prev) => ({ ...prev, [k]: true }));
+    } else if (estado === true) {
+      // Tiene acceso extra → quitarlo
+      setPermisosPendientes((prev) => {
+        const next = { ...prev };
+        if (permisoGuardado && !permisoGuardado.revocado) {
+          next[k] = null; // marcar para borrar
+        } else {
+          next[k] = false;
+        }
+        return next;
+      });
+    }
   };
 
   const cambiosCount = Object.keys(permisosPendientes).length;
@@ -206,40 +257,50 @@ export default function AdminUsuarios() {
   const guardarPermisos = async () => {
     setSavingPermisos(true);
     try {
-      const toAdd: { user_id: string; path: string }[] = [];
-      const toRemove: string[] = []; // user_id||path
+      const toInsert: { user_id: string; path: string; revocado: boolean }[] = [];
+      const toUpdate: { id: string; revocado: boolean }[] = [];
+      const toDelete: string[] = [];
 
       for (const [k, valor] of Object.entries(permisosPendientes)) {
         const [userId, path] = k.split("||");
-        const existente = permisos.find(
-          (p) => p.user_id === userId && p.path === path
-        );
+        const existente = permisos.find((p) => p.user_id === userId && p.path === path);
 
-        if (valor && !existente) {
-          toAdd.push({ user_id: userId, path });
-        } else if (!valor && existente) {
-          toRemove.push(existente.id);
+        if (valor === null) {
+          // Borrar override existente
+          if (existente) toDelete.push(existente.id);
+        } else if (existente) {
+          // Actualizar override existente
+          toUpdate.push({ id: existente.id, revocado: !valor });
+        } else {
+          // Insertar nuevo override
+          toInsert.push({ user_id: userId, path, revocado: !valor });
         }
       }
 
-      if (toAdd.length > 0) {
-        const { error } = await supabase
-          .from("usuario_permisos_extra")
-          .insert(toAdd);
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("usuario_permisos_extra").insert(toInsert);
         if (error) throw error;
       }
-
-      if (toRemove.length > 0) {
+      for (const upd of toUpdate) {
+        const { error } = await supabase
+          .from("usuario_permisos_extra")
+          .update({ revocado: upd.revocado })
+          .eq("id", upd.id);
+        if (error) throw error;
+      }
+      if (toDelete.length > 0) {
         const { error } = await supabase
           .from("usuario_permisos_extra")
           .delete()
-          .in("id", toRemove);
+          .in("id", toDelete);
         if (error) throw error;
       }
 
       setPermisosPendientes({});
       await cargar();
-      showToast(`Permisos guardados (${toAdd.length} agregados, ${toRemove.length} quitados)`);
+      showToast(
+        `Guardado: ${toInsert.length} nuevos, ${toUpdate.length} actualizados, ${toDelete.length} eliminados`
+      );
     } catch (e: any) {
       showToast("Error guardando permisos: " + (e.message ?? ""), false);
     } finally {
@@ -360,6 +421,61 @@ export default function AdminUsuarios() {
     }
   };
 
+  // ─── Render checkbox ───────────────────────────────────────────────────────
+
+  const renderCheckbox = (userId: string, role: AppRole, path: string) => {
+    const k = key(userId, path);
+    const hayPendiente = k in permisosPendientes;
+    const estado = getEstado(userId, role, path);
+    const esBase = roleHasPath(role, path);
+
+    // Colores y ícono según estado
+    let bgClass = "";
+    let borderClass = "";
+    let icon: React.ReactNode = null;
+    let title = "";
+
+    if (estado === "base") {
+      // Acceso por rol, sin override — gris con check
+      bgClass = "bg-gray-200 dark:bg-gray-600";
+      borderClass = "border border-gray-300 dark:border-gray-500";
+      icon = <Check className="w-3 h-3 text-gray-500 dark:text-gray-300" />;
+      title = "Acceso por rol — click para revocar";
+    } else if (estado === true) {
+      // Acceso extra concedido — verde
+      bgClass = "bg-emerald-500 hover:bg-emerald-600";
+      borderClass = "";
+      icon = <Check className="w-3 h-3 text-white" />;
+      title = "Acceso extra — click para quitar";
+    } else {
+      // Sin acceso (revocado o nunca tuvo) — vacío con borde rojo si era base, gris si no
+      bgClass = esBase
+        ? "bg-red-50 dark:bg-red-900/20 hover:bg-red-100"
+        : "hover:bg-emerald-50 dark:hover:bg-emerald-900/20";
+      borderClass = esBase
+        ? "border-2 border-red-300 dark:border-red-700"
+        : "border-2 border-gray-300 dark:border-gray-500 hover:border-emerald-400";
+      icon = esBase ? <Minus className="w-3 h-3 text-red-400" /> : null;
+      title = esBase
+        ? "Revocado — click para restaurar acceso base"
+        : "Sin acceso — click para dar acceso extra";
+    }
+
+    return (
+      <button
+        onClick={() => togglePermiso(userId, role, path)}
+        className={`
+          w-5 h-5 rounded flex items-center justify-center transition-all
+          ${bgClass} ${borderClass}
+          ${hayPendiente ? "ring-2 ring-amber-400 ring-offset-1" : ""}
+        `}
+        title={title}
+      >
+        {icon}
+      </button>
+    );
+  };
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -380,7 +496,7 @@ export default function AdminUsuarios() {
             Gestión de Usuarios
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            {usuarios.length} usuarios · {permisos.length} permisos extra activos
+            {usuarios.length} usuarios · {permisos.filter(p => !p.revocado).length} permisos extra activos
           </p>
         </div>
         <button
@@ -426,7 +542,7 @@ export default function AdminUsuarios() {
       {/* ── TAB: GRILLA ──────────────────────────────────────────────────────── */}
       {tab === "permisos" && (
         <div>
-          {/* Toolbar grilla */}
+          {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -439,7 +555,11 @@ export default function AdminUsuarios() {
               />
             </div>
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <span>Páginas {scrollPage * COLS_PER_PAGE + 1}–{Math.min((scrollPage + 1) * COLS_PER_PAGE, PAGES_FOR_GRID.length)} de {PAGES_FOR_GRID.length}</span>
+              <span>
+                Páginas {scrollPage * COLS_PER_PAGE + 1}–
+                {Math.min((scrollPage + 1) * COLS_PER_PAGE, PAGES_FOR_GRID.length)} de{" "}
+                {PAGES_FOR_GRID.length}
+              </span>
               <button
                 disabled={scrollPage === 0}
                 onClick={() => setScrollPage((p) => p - 1)}
@@ -482,26 +602,32 @@ export default function AdminUsuarios() {
           </div>
 
           {/* Leyenda */}
-          <div className="flex gap-4 mb-3 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex flex-wrap gap-4 mb-3 text-xs text-gray-500 dark:text-gray-400">
             <span className="flex items-center gap-1.5">
               <span className="w-4 h-4 rounded bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center">
                 <Check className="w-3 h-3 text-gray-400" />
               </span>
-              Acceso por rol (fijo)
+              Acceso por rol
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-4 h-4 rounded bg-emerald-500 flex items-center justify-center">
                 <Check className="w-3 h-3 text-white" />
               </span>
-              Acceso extra (editable)
+              Acceso extra
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded border-2 border-dashed border-amber-400" />
+              <span className="w-4 h-4 rounded bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 flex items-center justify-center">
+                <Minus className="w-3 h-3 text-red-400" />
+              </span>
+              Acceso revocado
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded border-2 border-gray-300 ring-2 ring-amber-400" />
               Cambio pendiente
             </span>
           </div>
 
-          {/* Tabla grilla */}
+          {/* Tabla */}
           <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
             <table className="w-full text-sm border-collapse">
               <thead>
@@ -534,15 +660,20 @@ export default function AdminUsuarios() {
                       hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors
                     `}
                   >
-                    {/* Celda usuario */}
-                    <td className={`sticky left-0 z-10 px-4 py-2.5 border-r border-gray-200 dark:border-gray-700 ${idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/50"}`}>
+                    <td
+                      className={`sticky left-0 z-10 px-4 py-2.5 border-r border-gray-200 dark:border-gray-700 ${
+                        idx % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/50"
+                      }`}
+                    >
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium text-gray-800 dark:text-gray-100 text-sm">
                           {u.name || u.username}
                         </span>
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"}`}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"
+                            }`}
                           >
                             {u.role}
                           </span>
@@ -554,60 +685,13 @@ export default function AdminUsuarios() {
                         </div>
                       </div>
                     </td>
-
-                    {/* Celdas de páginas */}
-                    {visibleCols.map((page) => {
-                      const esBase = tieneBase(u.role, page.path);
-                      const tieneExtra = permisos.some(
-                        (p) => p.user_id === u.id && p.path === page.path
-                      );
-                      const k = key(u.id, page.path);
-                      const hayPendiente = k in permisosPendientes;
-                      const valorActual = tienePermiso(u.id, u.role, page.path);
-
-                      return (
-                        <td
-                          key={page.path}
-                          className="px-2 py-2 text-center"
-                        >
-                          {esBase ? (
-                            // Checkbox base — no editable
-                            <div className="flex justify-center">
-                              <div
-                                className="w-5 h-5 rounded bg-gray-200 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 flex items-center justify-center cursor-not-allowed"
-                                title="Acceso por rol (no editable)"
-                              >
-                                <Check className="w-3 h-3 text-gray-500 dark:text-gray-300" />
-                              </div>
-                            </div>
-                          ) : (
-                            // Checkbox extra — editable
-                            <div className="flex justify-center">
-                              <button
-                                onClick={() => togglePermiso(u.id, u.role, page.path)}
-                                className={`
-                                  w-5 h-5 rounded flex items-center justify-center transition-all
-                                  ${hayPendiente ? "border-2 border-dashed border-amber-400" : ""}
-                                  ${valorActual
-                                    ? "bg-emerald-500 hover:bg-emerald-600"
-                                    : "border-2 border-gray-300 dark:border-gray-500 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                                  }
-                                `}
-                                title={
-                                  valorActual
-                                    ? "Quitar acceso extra"
-                                    : "Dar acceso extra"
-                                }
-                              >
-                                {valorActual && (
-                                  <Check className="w-3 h-3 text-white" />
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
+                    {visibleCols.map((page) => (
+                      <td key={page.path} className="px-2 py-2 text-center">
+                        <div className="flex justify-center">
+                          {renderCheckbox(u.id, u.role, page.path)}
+                        </div>
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -625,7 +709,6 @@ export default function AdminUsuarios() {
       {/* ── TAB: USUARIOS ────────────────────────────────────────────────────── */}
       {tab === "usuarios" && (
         <div>
-          {/* Toolbar */}
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -646,7 +729,6 @@ export default function AdminUsuarios() {
             </button>
           </div>
 
-          {/* Tabla usuarios */}
           <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
             <table className="w-full text-sm">
               <thead>
@@ -670,51 +752,27 @@ export default function AdminUsuarios() {
                       ${!u.active ? "opacity-50" : ""}
                     `}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">
-                      {u.name || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">
-                      {u.username}
-                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{u.name || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">{u.username}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-medium ${
-                          ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"
-                        }`}
-                      >
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-600"}`}>
                         {u.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
-                      {u.mail || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">
-                      {u.FFVV || u.ffvv || "—"}
-                    </td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{u.mail || "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{u.FFVV || "—"}</td>
                     <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
-                          u.active
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                            : "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
-                        }`}
-                      >
-                        {u.active ? (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Activo
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                            Inactivo
-                          </>
-                        )}
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${
+                        u.active
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                          : "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${u.active ? "bg-emerald-500" : "bg-red-500"}`} />
+                        {u.active ? "Activo" : "Inactivo"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
-                        {/* Editar */}
                         <button
                           onClick={() => abrirEditar(u)}
                           className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 dark:text-blue-400 transition-colors"
@@ -722,19 +780,13 @@ export default function AdminUsuarios() {
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
-                        {/* Cambiar contraseña */}
                         <button
-                          onClick={() => {
-                            setModalPassword(u);
-                            setNewPassword("");
-                            setShowPwd(false);
-                          }}
+                          onClick={() => { setModalPassword(u); setNewPassword(""); setShowPwd(false); }}
                           className="p-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-600 dark:text-amber-400 transition-colors"
                           title="Cambiar contraseña"
                         >
                           <Key className="w-4 h-4" />
                         </button>
-                        {/* Activar / desactivar */}
                         <button
                           onClick={() => toggleActivo(u)}
                           className={`p-1.5 rounded-lg transition-colors ${
@@ -755,68 +807,52 @@ export default function AdminUsuarios() {
           </div>
 
           {usuariosFiltrados.length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              No hay usuarios que coincidan
-            </div>
+            <div className="text-center py-12 text-gray-400">No hay usuarios que coincidan</div>
           )}
         </div>
       )}
 
-      {/* ── MODAL: Crear / Editar usuario ───────────────────────────────────── */}
+      {/* ── MODAL: Crear / Editar ───────────────────────────────────────────── */}
       {modalUsuario && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
                 {modalUsuario.modo === "crear" ? "Nuevo usuario" : "Editar usuario"}
               </h2>
-              <button
-                onClick={() => setModalUsuario(null)}
-                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
-              >
+              <button onClick={() => setModalUsuario(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
-              {/* Nombre */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Nombre completo *
-                </label>
-                <input
-                  type="text"
-                  value={form.name ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
-                  placeholder="Juan Pérez"
-                />
-              </div>
+              {[
+                { label: "Nombre completo *", field: "name", placeholder: "Juan Pérez", type: "text" },
+                { label: "Username *", field: "username", placeholder: "juan.perez", type: "text", disabled: modalUsuario.modo === "editar" },
+                { label: "Mail", field: "mail", placeholder: "juan@empresa.com", type: "email" },
+                { label: "FFVV", field: "FFVV", placeholder: "EUSCKOR / VAFOOD...", type: "text" },
+                { label: "Supervisor (username)", field: "supervisor", placeholder: "supervisor.username", type: "text" },
+                { label: "Teléfono", field: "phone", placeholder: "+54 9 11...", type: "text" },
+              ].map(({ label, field, placeholder, type, disabled }) => (
+                <div key={field}>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={(form as any)[field] ?? ""}
+                    disabled={disabled}
+                    onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    placeholder={placeholder}
+                  />
+                  {field === "username" && disabled && (
+                    <p className="text-[10px] text-gray-400 mt-0.5">El username no se puede cambiar</p>
+                  )}
+                </div>
+              ))}
 
-              {/* Username */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Username *
-                </label>
-                <input
-                  type="text"
-                  value={form.username ?? ""}
-                  disabled={modalUsuario.modo === "editar"}
-                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder="juan.perez"
-                />
-                {modalUsuario.modo === "editar" && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">El username no se puede cambiar</p>
-                )}
-              </div>
-
-              {/* Contraseña (solo crear) */}
               {modalUsuario.modo === "crear" && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                    Contraseña *
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Contraseña *</label>
                   <div className="relative">
                     <input
                       type={showPwd ? "text" : "password"}
@@ -825,117 +861,38 @@ export default function AdminUsuarios() {
                       className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
                       placeholder="Mínimo 4 caracteres"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd((v) => !v)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
+                    <button type="button" onClick={() => setShowPwd((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                       {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Rol */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Rol *
-                </label>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Rol *</label>
                 <select
                   value={form.role ?? "vendedor"}
                   onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as AppRole }))}
                   className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
                 >
-                  {ALL_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
+                  {ALL_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
 
-              {/* Mail */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Mail
-                </label>
-                <input
-                  type="email"
-                  value={form.mail ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, mail: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
-                  placeholder="juan@empresa.com"
-                />
-              </div>
-
-              {/* FFVV */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  FFVV
-                </label>
-                <input
-                  type="text"
-                  value={form.FFVV ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, FFVV: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
-                  placeholder="EUSCKOR / VAFOOD..."
-                />
-              </div>
-
-              {/* Supervisor */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Supervisor (username)
-                </label>
-                <input
-                  type="text"
-                  value={form.supervisor ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, supervisor: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
-                  placeholder="supervisor.username"
-                />
-              </div>
-
-              {/* Teléfono */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  Teléfono
-                </label>
-                <input
-                  type="text"
-                  value={form.phone ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
-                  placeholder="+54 9 11..."
-                />
-              </div>
-
-              {/* Activo */}
               <div className="flex items-center justify-between py-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Usuario activo
-                </span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Usuario activo</span>
                 <button
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${
-                    form.active ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"
-                  }`}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${form.active ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}
                 >
-                  <span
-                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                      form.active ? "translate-x-5" : "translate-x-0.5"
-                    }`}
-                  />
+                  <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.active ? "translate-x-5" : "translate-x-0.5"}`} />
                 </button>
               </div>
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setModalUsuario(null)}
-                className="flex-1 px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
+              <button onClick={() => setModalUsuario(null)} className="flex-1 px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                 Cancelar
               </button>
               <button
@@ -943,11 +900,7 @@ export default function AdminUsuarios() {
                 disabled={savingUsuario}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#8B0000] text-white rounded-xl hover:bg-[#6b0000] disabled:opacity-60"
               >
-                {savingUsuario ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
+                {savingUsuario ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {modalUsuario.modo === "crear" ? "Crear usuario" : "Guardar"}
               </button>
             </div>
@@ -955,29 +908,19 @@ export default function AdminUsuarios() {
         </div>
       )}
 
-      {/* ── MODAL: Cambiar contraseña ────────────────────────────────────────── */}
+      {/* ── MODAL: Cambiar contraseña ───────────────────────────────────────── */}
       {modalPassword && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
-                Cambiar contraseña
-              </h2>
-              <button
-                onClick={() => setModalPassword(null)}
-                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400"
-              >
+              <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Cambiar contraseña</h2>
+              <button onClick={() => setModalPassword(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Usuario:{" "}
-              <span className="font-semibold text-gray-800 dark:text-gray-100">
-                {modalPassword.name} ({modalPassword.username})
-              </span>
+              Usuario: <span className="font-semibold text-gray-800 dark:text-gray-100">{modalPassword.name} ({modalPassword.username})</span>
             </p>
-
             <div className="relative">
               <input
                 type={showPwd ? "text" : "password"}
@@ -986,20 +929,12 @@ export default function AdminUsuarios() {
                 className="w-full px-3 py-2 pr-10 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30"
                 placeholder="Nueva contraseña"
               />
-              <button
-                type="button"
-                onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
+              <button type="button" onClick={() => setShowPwd((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                 {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setModalPassword(null)}
-                className="flex-1 px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
+              <button onClick={() => setModalPassword(null)} className="flex-1 px-4 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
                 Cancelar
               </button>
               <button
@@ -1007,11 +942,7 @@ export default function AdminUsuarios() {
                 disabled={savingUsuario}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#8B0000] text-white rounded-xl hover:bg-[#6b0000] disabled:opacity-60"
               >
-                {savingUsuario ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Key className="w-4 h-4" />
-                )}
+                {savingUsuario ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
                 Confirmar
               </button>
             </div>
@@ -1021,16 +952,8 @@ export default function AdminUsuarios() {
 
       {/* ── Toast ────────────────────────────────────────────────────────────── */}
       {toast && (
-        <div
-          className={`fixed bottom-4 right-4 z-[60] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white transition-all ${
-            toast.ok ? "bg-emerald-600" : "bg-red-600"
-          }`}
-        >
-          {toast.ok ? (
-            <CheckCircle2 className="w-4 h-4" />
-          ) : (
-            <AlertTriangle className="w-4 h-4" />
-          )}
+        <div className={`fixed bottom-4 right-4 z-[60] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white transition-all ${toast.ok ? "bg-emerald-600" : "bg-red-600"}`}>
+          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
           {toast.msg}
         </div>
       )}
