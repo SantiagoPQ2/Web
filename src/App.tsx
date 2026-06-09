@@ -19,6 +19,7 @@ import NotasCredito from "./pages/NotasCredito";
 import GpsLogger from "./pages/GpsLogger";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import Informacion from "./pages/Informacion";
 import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
@@ -104,6 +105,8 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/medidas": <Medidas />,
 };
 
+// ─── App protegida (requiere login) ──────────────────────────────────────────
+
 function ProtectedApp() {
   const { user, logout } = useAuth();
   const hasUpdate = useVersionChecker(60000);
@@ -113,7 +116,7 @@ function ProtectedApp() {
   const [ffvv, setFfvv] = useState<string | null>(null);
   const [loadingTrainingConfig, setLoadingTrainingConfig] = useState(true);
 
-  // Permisos: rutas base del rol + extras de Supabase
+  // Permisos: rutas base del rol + extras/revocaciones de Supabase
   const { allRoutes: allowedRoutes, loading: loadingPermisos } = useUserPermissions(
     user?.id,
     user?.role as AppRole | undefined
@@ -144,7 +147,7 @@ function ProtectedApp() {
         setLoadingTrainingConfig(true);
         const { data, error } = await supabase
           .from("usuarios_app")
-          .select("FFVV, ffvv, active")
+          .select("FFVV, active")
           .eq("id", user.id)
           .maybeSingle();
 
@@ -154,13 +157,7 @@ function ProtectedApp() {
           return;
         }
 
-        // Si el usuario fue desactivado, forzar logout
-        if (data?.active === false) {
-          logout();
-          return;
-        }
-
-        if (isMounted) setFfvv(data?.FFVV ?? data?.ffvv ?? null);
+        if (isMounted) setFfvv(data?.FFVV ?? null);
       } catch (err) {
         console.error("Error inesperado cargando FFVV:", err);
         if (isMounted) setFfvv(null);
@@ -170,17 +167,16 @@ function ProtectedApp() {
     }
 
     loadTrainingConfig();
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [user, logout]);
 
+  // Sin login → mostrar Login
   if (!user) return <Login />;
 
   const role = user.role as AppRole;
   const defaultPath = getDefaultPathForRole(role);
 
-  // Loading combinado: permisos extra + config de capacitación (vendedor)
+  // Loading combinado
   const isLoading = loadingPermisos || (role === "vendedor" && loadingTrainingConfig);
 
   if (isLoading) {
@@ -246,11 +242,18 @@ function ProtectedApp() {
   return appLayout;
 }
 
+// ─── App root — rutas públicas fuera del guard de login ──────────────────────
+
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <ProtectedApp />
+        <Routes>
+          {/* Ruta pública: accesible sin login */}
+          <Route path="/reset-password" element={<ResetPassword />} />
+          {/* Todo lo demás pasa por ProtectedApp */}
+          <Route path="*" element={<ProtectedApp />} />
+        </Routes>
       </Router>
     </AuthProvider>
   );
