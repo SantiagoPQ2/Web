@@ -1,46 +1,74 @@
 import { useEffect, useState } from "react";
+import { Eye, EyeOff, Save, LogOut, Moon, Sun, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
+type Toast = { msg: string; ok: boolean } | null;
+
 export default function Settings() {
   const { user, logout } = useAuth();
+
   const [profile, setProfile] = useState({ name: "", age: "", phone: "", mail: "" });
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [savingPwd, setSavingPwd] = useState(false);
 
-  // 🔹 Cargar perfil desde Supabase
+  const [darkMode, setDarkMode] = useState(false);
+  const [toast, setToast] = useState<Toast>(null);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // ── Cargar perfil ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const loadProfile = async () => {
+    const load = async () => {
       if (!user) return;
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("usuarios_app")
         .select("name, age, phone, mail")
         .eq("id", user.id)
-        .single();
-
-      if (error) {
-        console.error("❌ Error cargando perfil:", error.message);
-        return;
-      }
+        .maybeSingle();
 
       if (data) {
         setProfile({
-          name: data.name || "",
-          age: data.age?.toString() || "",
-          phone: data.phone || "",
-          mail: data.mail || "",
+          name: data.name ?? "",
+          age: data.age?.toString() ?? "",
+          phone: data.phone ?? "",
+          mail: data.mail ?? "",
         });
       }
+      setLoadingProfile(false);
     };
-
-    loadProfile();
+    load();
   }, [user]);
 
-  // 🔹 Guardar perfil actualizado
+  // ── Dark mode ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const enabled = saved === "dark" || (!saved && prefersDark);
+    setDarkMode(enabled);
+    document.documentElement.classList.toggle("dark", enabled);
+  }, []);
+
+  const toggleDarkMode = () => {
+    const next = !darkMode;
+    setDarkMode(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
+  };
+
+  // ── Guardar perfil ─────────────────────────────────────────────────────────
   const saveProfile = async () => {
     if (!user) return;
-
+    setSavingProfile(true);
     const { error } = await supabase
       .from("usuarios_app")
       .update({
@@ -51,151 +79,193 @@ export default function Settings() {
       })
       .eq("id", user.id);
 
-    if (error) {
-      alert("❌ Error al guardar perfil: " + error.message);
-    } else {
-      alert("✅ Perfil actualizado correctamente");
-    }
+    if (error) showToast("Error al guardar perfil", false);
+    else showToast("Perfil actualizado");
+    setSavingProfile(false);
   };
 
-  // 🔹 Cambiar contraseña
+  // ── Cambiar contraseña ─────────────────────────────────────────────────────
   const changePassword = async () => {
     if (!user) return;
-    if (!newPassword || !confirmPassword) {
-      alert("⚠️ Completa ambos campos de contraseña");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      alert("⚠️ Las contraseñas no coinciden");
-      return;
-    }
 
+    if (!newPassword) { showToast("Ingresá la nueva contraseña", false); return; }
+    if (newPassword.length < 6) { showToast("Mínimo 6 caracteres", false); return; }
+    if (newPassword !== confirmPassword) { showToast("Las contraseñas no coinciden", false); return; }
+
+    setSavingPwd(true);
     const { error } = await supabase
       .from("usuarios_app")
       .update({ password: newPassword })
       .eq("id", user.id);
 
-    if (error) {
-      alert("❌ Error al cambiar contraseña: " + error.message);
-    } else {
-      alert("✅ Contraseña actualizada correctamente");
+    if (error) showToast("Error al cambiar contraseña", false);
+    else {
+      showToast("Contraseña actualizada");
       setNewPassword("");
       setConfirmPassword("");
     }
+    setSavingPwd(false);
   };
 
-  // 🔹 Cerrar sesión
   const handleLogout = () => {
     logout();
-    window.location.href = "/"; // Redirige al login
+    window.location.href = "/";
   };
 
-  // 🌙 Modo oscuro - guarda en localStorage y cambia el HTML
-  useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const inputClass = "w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#8B0000]/30 focus:border-[#8B0000] transition";
+  const labelClass = "block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1";
 
-    const enabled = saved === "dark" || (!saved && prefersDark);
-    setDarkMode(enabled);
-    document.documentElement.classList.toggle("dark", enabled);
-  }, []);
-
-  const toggleDarkMode = () => {
-    const newValue = !darkMode;
-    setDarkMode(newValue);
-    document.documentElement.classList.toggle("dark", newValue);
-    localStorage.setItem("theme", newValue ? "dark" : "light");
-  };
+  if (loadingProfile) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <Loader2 className="w-6 h-6 animate-spin text-[#8B0000]" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-lg mx-auto p-6 rounded shadow space-y-4 mt-6 bg-white dark:bg-gray-800 dark:text-gray-100 transition-colors">
-      <h2 className="text-xl font-bold flex items-center gap-2">
-        ⚙️ Configuración de Usuario
-      </h2>
+    <div className="max-w-lg mx-auto p-4 md:p-6 space-y-5">
 
-      {/* Info básica */}
-      <input
-        placeholder="Nombre"
-        value={profile.name}
-        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
-      <input
-        placeholder="Edad"
-        value={profile.age}
-        onChange={(e) => setProfile({ ...profile, age: e.target.value })}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
-      <input
-        placeholder="Teléfono"
-        value={profile.phone}
-        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
-      <input
-        placeholder="Correo electrónico"
-        type="email"
-        value={profile.mail}
-        onChange={(e) => setProfile({ ...profile, mail: e.target.value })}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
+      {/* ── Perfil ──────────────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full bg-[#8B0000] text-white flex items-center justify-center font-bold text-lg">
+            {user?.username?.[0]?.toUpperCase()}
+          </div>
+          <div>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">{user?.name || user?.username}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{user?.role}</p>
+          </div>
+        </div>
 
-      <button
-        onClick={saveProfile}
-        className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded w-full transition-colors"
-      >
-        Guardar perfil
-      </button>
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4">Datos personales</h2>
 
-      <hr className="my-4 border-gray-300 dark:border-gray-600" />
+        <div className="space-y-3">
+          {[
+            { label: "Nombre", field: "name", placeholder: "Tu nombre", type: "text" },
+            { label: "Edad", field: "age", placeholder: "Tu edad", type: "number" },
+            { label: "Teléfono", field: "phone", placeholder: "+54 9 11...", type: "tel" },
+            { label: "Correo electrónico", field: "mail", placeholder: "tu@correo.com", type: "email" },
+          ].map(({ label, field, placeholder, type }) => (
+            <div key={field}>
+              <label className={labelClass}>{label}</label>
+              <input
+                type={type}
+                placeholder={placeholder}
+                value={(profile as any)[field]}
+                onChange={(e) => setProfile({ ...profile, [field]: e.target.value })}
+                className={inputClass}
+              />
+            </div>
+          ))}
+        </div>
 
-      {/* Cambio de contraseña */}
-      <h3 className="text-lg font-semibold">🔑 Cambiar contraseña</h3>
-      <input
-        type="password"
-        placeholder="Nueva contraseña"
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
-      <input
-        type="password"
-        placeholder="Confirmar nueva contraseña"
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-        className="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"
-      />
-
-      <button
-        onClick={changePassword}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded w-full transition-colors"
-      >
-        Cambiar contraseña
-      </button>
-
-      {/* 🌙 Modo oscuro */}
-      <div className="flex items-center justify-between mt-4 p-3 border rounded dark:border-gray-600">
-        <span className="font-medium">🌙 Modo oscuro</span>
         <button
-          onClick={toggleDarkMode}
-          className={`relative inline-flex h-6 w-12 items-center rounded-full transition ${
-            darkMode ? "bg-green-500" : "bg-gray-400"
-          }`}
+          onClick={saveProfile}
+          disabled={savingProfile}
+          className="w-full flex items-center justify-center gap-2 mt-4 bg-[#8B0000] hover:bg-[#6b0000] text-white py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-60"
         >
-          <span
-            className={`inline-block h-5 w-5 transform bg-white rounded-full transition ${
-              darkMode ? "translate-x-6" : "translate-x-1"
-            }`}
-          />
+          {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Guardar perfil
         </button>
       </div>
 
+      {/* ── Contraseña ──────────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4">Cambiar contraseña</h2>
+
+        <div className="space-y-3">
+          <div>
+            <label className={labelClass}>Nueva contraseña</label>
+            <div className="relative">
+              <input
+                type={showNew ? "text" : "password"}
+                placeholder="Mínimo 6 caracteres"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={`${inputClass} pr-10`}
+              />
+              <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition" tabIndex={-1}>
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Confirmar contraseña</label>
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"}
+                placeholder="Repetí la contraseña"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={`w-full px-3 py-2.5 pr-10 text-sm border rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 transition ${
+                  confirmPassword && confirmPassword !== newPassword
+                    ? "border-red-300 focus:ring-red-300/30"
+                    : confirmPassword && confirmPassword === newPassword
+                    ? "border-emerald-300 focus:ring-emerald-300/30"
+                    : "border-gray-200 dark:border-gray-600 focus:ring-[#8B0000]/30 focus:border-[#8B0000]"
+                }`}
+              />
+              <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition" tabIndex={-1}>
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {confirmPassword && confirmPassword === newPassword && (
+              <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Las contraseñas coinciden
+              </p>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={changePassword}
+          disabled={savingPwd}
+          className="w-full flex items-center justify-center gap-2 mt-4 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-60"
+        >
+          {savingPwd ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Cambiar contraseña
+        </button>
+      </div>
+
+      {/* ── Preferencias ────────────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
+        <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4">Preferencias</h2>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {darkMode ? <Moon className="w-5 h-5 text-indigo-400" /> : <Sun className="w-5 h-5 text-amber-500" />}
+            <div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Modo oscuro</p>
+              <p className="text-xs text-gray-400">{darkMode ? "Activado" : "Desactivado"}</p>
+            </div>
+          </div>
+          <button
+            onClick={toggleDarkMode}
+            className={`relative w-12 h-6 rounded-full transition-colors ${darkMode ? "bg-indigo-500" : "bg-gray-300"}`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${darkMode ? "translate-x-6" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Cerrar sesión ────────────────────────────────────────────────────── */}
       <button
         onClick={handleLogout}
-        className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded w-full mt-2 transition-colors"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:border-red-800 dark:text-red-400 transition"
       >
+        <LogOut className="w-4 h-4" />
         Cerrar sesión
       </button>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white ${toast.ok ? "bg-emerald-600" : "bg-red-600"}`}>
+          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
