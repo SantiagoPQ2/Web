@@ -319,6 +319,14 @@ export const ROUTES: RouteConfig[] = [
     inMenu: false,
   },
 
+  // ── Rutas públicas (sin login) ──────────────────────────────────────────────
+  {
+    path: "/reset-password",
+    label: "Restablecer Contraseña",
+    roles: [],
+    inMenu: false,
+  },
+
   // ── Comunes ─────────────────────────────────────────────────────────────────
   {
     path: "/chat",
