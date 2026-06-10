@@ -4,6 +4,7 @@ import React, {
   useState,
   useLayoutEffect,
   useMemo,
+  useCallback,
 } from "react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -19,6 +20,7 @@ import {
   Send,
   Check,
   CheckCheck,
+  ChevronDown,
 } from "lucide-react";
 
 interface Mensaje {
@@ -39,14 +41,14 @@ interface Props {
 
 const MAX_MB = 15;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 const formatDuration = (seconds: number) => {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
-
-// ── Helpers de fecha ─────────────────────────────────────────────────────────
 
 const getDayKey = (dateStr: string) => {
   const d = new Date(dateStr);
@@ -56,17 +58,14 @@ const getDayKey = (dateStr: string) => {
 const formatDayLabel = (dateStr: string) => {
   const d = new Date(dateStr);
   const now = new Date();
-
   const dayKey = getDayKey(dateStr);
   const todayKey = getDayKey(now.toISOString());
-
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   const yesterdayKey = getDayKey(yesterday.toISOString());
 
   if (dayKey === todayKey) return "Hoy";
   if (dayKey === yesterdayKey) return "Ayer";
-
   return d.toLocaleDateString("es-AR", {
     weekday: "long",
     day: "numeric",
@@ -75,7 +74,7 @@ const formatDayLabel = (dateStr: string) => {
   });
 };
 
-// ── Componente doble tilde ────────────────────────────────────────────────────
+// ── MsgStatus (doble tilde) ───────────────────────────────────────────────────
 
 const MsgStatus: React.FC<{ leido: boolean | null | undefined }> = ({ leido }) => {
   if (leido) {
@@ -207,6 +206,14 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [composerHeight, setComposerHeight] = useState(88);
 
+  // Nombre real del destino
+  const [destinoName, setDestinoName] = useState<string | null>(null);
+
+  // Botón flotante scroll
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [newMsgCount, setNewMsgCount] = useState(0);
+  const isAtBottomRef = useRef(true);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -219,13 +226,35 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     []
   );
 
+  // ── Cargar nombre real del destino ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!destino) return;
+    let mounted = true;
+    supabase
+      .from("usuarios_app")
+      .select("name")
+      .eq("username", destino)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (mounted && data?.name?.trim()) {
+          setDestinoName(data.name.trim());
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [destino]);
+
+  // ── Scroll ──────────────────────────────────────────────────────────────────
+
   const medirComposer = () => {
     if (composerRef.current) {
       setComposerHeight(composerRef.current.offsetHeight || 88);
     }
   };
 
-  const scrollToBottom = (smooth = false) => {
+  const scrollToBottom = useCallback((smooth = false) => {
     const el = scrollRef.current;
     if (!el) return;
 
@@ -235,7 +264,24 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         behavior: smooth ? "smooth" : "auto",
       });
     });
-  };
+    setShowScrollBtn(false);
+    setNewMsgCount(0);
+    isAtBottomRef.current = true;
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distFromBottom < 80;
+    isAtBottomRef.current = atBottom;
+    if (atBottom) {
+      setShowScrollBtn(false);
+      setNewMsgCount(0);
+    } else {
+      setShowScrollBtn(true);
+    }
+  }, []);
 
   useLayoutEffect(() => {
     medirComposer();
@@ -280,6 +326,8 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       }
     };
   }, [audioPreviewUrl]);
+
+  // ── Carga y realtime ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!user || !destino) return;
@@ -362,7 +410,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
               .eq("id", nuevo.id);
           }
 
-          setTimeout(() => scrollToBottom(true), 60);
+          // Si el usuario está scrolleado arriba, mostrar botón con contador
+          if (!isAtBottomRef.current && nuevo.remitente_username === destino) {
+            setNewMsgCount((c) => c + 1);
+            setShowScrollBtn(true);
+          } else {
+            setTimeout(() => scrollToBottom(true), 60);
+          }
         }
       )
       .on(
@@ -401,31 +455,45 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [user, destino]);
 
+  // ── Archivos ────────────────────────────────────────────────────────────────
+
   const onPickFile = (f?: File | null) => {
-    if (!f) return;
+    if (!f) return setArchivo(null);
+
     if (f.size > MAX_MB * 1024 * 1024) {
-      alert(`El archivo supera los ${MAX_MB} MB permitidos.`);
+      alert(`El archivo supera ${MAX_MB} MB.`);
       return;
     }
+
     setArchivo(f);
-    setAudioBlob(null);
-    limpiarAudioPreview();
   };
 
   const quitarAdjunto = () => setArchivo(null);
 
+  // ── Audio ────────────────────────────────────────────────────────────────────
+
   const limpiarAudioPreview = () => {
-    if (audioPreviewUrl) URL.revokeObjectURL(audioPreviewUrl);
-    setAudioPreviewUrl(null);
-    setAudioPreviewDuration(0);
     setAudioBlob(null);
+    setAudioPreviewDuration(0);
+
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl);
+      setAudioPreviewUrl(null);
+    }
+  };
+
+  const stopMicStream = () => {
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      setMicStream(null);
+    }
   };
 
   const iniciarGrabacion = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setMicStream(stream);
+      limpiarAudioPreview();
 
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       const chunks: BlobPart[] = [];
 
@@ -436,179 +504,172 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: "audio/webm" });
         setAudioBlob(blob);
+
         const url = URL.createObjectURL(blob);
         setAudioPreviewUrl(url);
 
-        const tmpAudio = new Audio(url);
-        tmpAudio.addEventListener("loadedmetadata", () => {
-          if (Number.isFinite(tmpAudio.duration)) {
-            setAudioPreviewDuration(tmpAudio.duration);
-          }
-        });
-
-        stream.getTracks().forEach((t) => t.stop());
-        setMicStream(null);
+        const tempAudio = new Audio(url);
+        tempAudio.onloadedmetadata = () => {
+          setAudioPreviewDuration(tempAudio.duration || 0);
+        };
       };
 
-      recorder.start();
+      setMicStream(stream);
       setMediaRecorder(recorder);
-      setGrabando(true);
       setRecordSeconds(0);
+      setGrabando(true);
+
+      recorder.start();
+
+      if (recordTimerRef.current) {
+        window.clearInterval(recordTimerRef.current);
+      }
 
       recordTimerRef.current = window.setInterval(() => {
-        setRecordSeconds((s) => s + 1);
+        setRecordSeconds((prev) => prev + 1);
       }, 1000);
-    } catch (err) {
-      console.error("No se pudo acceder al micrófono:", err);
+    } catch {
       alert("No se pudo acceder al micrófono.");
     }
   };
 
-  const detenerGrabacion = () => {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+  const finalizarGrabacion = () => {
+    mediaRecorder?.stop();
     setGrabando(false);
+    stopMicStream();
+
     if (recordTimerRef.current) {
       window.clearInterval(recordTimerRef.current);
       recordTimerRef.current = null;
     }
   };
 
-  const cancelarGrabacion = () => {
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
-    micStream?.getTracks().forEach((t) => t.stop());
-    setMicStream(null);
-    setGrabando(false);
-    setAudioBlob(null);
-    if (recordTimerRef.current) {
-      window.clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
-    }
-    setRecordSeconds(0);
-  };
-
-  const enviarMensaje = async () => {
-    if (subiendo) return;
-
-    const texto = nuevoMensaje.trim();
-    if (!texto && !archivo && !audioBlob) return;
-    if (!user) return;
-
-    setSubiendo(true);
-
-    let imagen_url: string | null = null;
-    let audio_url: string | null = null;
-
-    const pair =
-      user.username < destino
-        ? `${user.username}__${destino}`
-        : `${destino}__${user.username}`;
-
-    if (archivo) {
-      const safeName = archivo.name.replace(/[^\w.\-]/g, "_");
-      const filePath = `${pair}/${Date.now()}-${safeName}`;
-
-      const { error } = await supabase.storage
-        .from("chat_uploads")
-        .upload(filePath, archivo, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: archivo.type || "application/octet-stream",
-        });
-
-      if (error) {
-        console.error("Upload image error:", error);
-        alert("No se pudo enviar la imagen.");
-        setSubiendo(false);
-        return;
-      }
-
-      const { data: pub } = supabase.storage
-        .from("chat_uploads")
-        .getPublicUrl(filePath);
-
-      imagen_url = pub.publicUrl;
-    }
-
-    if (audioBlob) {
-      const audioPath = `${pair}/${Date.now()}.webm`;
-
-      const { error } = await supabase.storage
-        .from("chat_uploads")
-        .upload(audioPath, audioBlob, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: "audio/webm",
-        });
-
-      if (error) {
-        console.error("Upload audio error:", error);
-        alert("No se pudo enviar el audio.");
-        setSubiendo(false);
-        return;
-      }
-
-      const { data: pub } = supabase.storage
-        .from("chat_uploads")
-        .getPublicUrl(audioPath);
-
-      audio_url = pub.publicUrl;
-    }
-
-    const contenido: string | null = texto || null;
-
-    const { data, error } = await supabase
-      .from("mensajes")
-      .insert([
-        {
-          remitente_username: user.username,
-          destinatario_username: destino,
-          contenido,
-          imagen_url,
-          audio_url,
-          leido: false,
-        },
-      ])
-      .select("*")
-      .single();
-
-    if (error) {
-      console.error("Insert error:", error);
-      alert("No se pudo enviar el mensaje.");
-      setSubiendo(false);
+  const toggleGrabacion = async () => {
+    if (grabando) {
+      finalizarGrabacion();
       return;
     }
 
-    if (data) {
-      setMensajes((prev) =>
-        prev.some((m) => m.id === data.id) ? prev : [...prev, data as Mensaje]
+    await iniciarGrabacion();
+  };
+
+  // ── Enviar mensaje ──────────────────────────────────────────────────────────
+
+  const enviarMensaje = async () => {
+    if (!user) return;
+
+    const texto = nuevoMensaje.trim();
+    if (!texto && !archivo && !audioBlob) return;
+
+    try {
+      setSubiendo(true);
+
+      let imagen_url: string | null = null;
+      let audio_url: string | null = null;
+
+      const pair =
+        user.username < destino
+          ? `${user.username}__${destino}`
+          : `${destino}__${user.username}`;
+
+      if (archivo) {
+        const safeName = archivo.name.replace(/[^\w.\-]/g, "_");
+        const filePath = `${pair}/${Date.now()}-${safeName}`;
+
+        const { error } = await supabase.storage
+          .from("chat_uploads")
+          .upload(filePath, archivo, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: archivo.type || "application/octet-stream",
+          });
+
+        if (error) {
+          console.error("Upload image error:", error);
+          alert("No se pudo enviar la imagen.");
+          return;
+        }
+
+        const { data: pub } = supabase.storage
+          .from("chat_uploads")
+          .getPublicUrl(filePath);
+
+        imagen_url = pub.publicUrl;
+      }
+
+      if (audioBlob) {
+        const audioPath = `${pair}/${Date.now()}.webm`;
+
+        const { error } = await supabase.storage
+          .from("chat_uploads")
+          .upload(audioPath, audioBlob, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: "audio/webm",
+          });
+
+        if (error) {
+          console.error("Upload audio error:", error);
+          alert("No se pudo enviar el audio.");
+          return;
+        }
+
+        const { data: pub } = supabase.storage
+          .from("chat_uploads")
+          .getPublicUrl(audioPath);
+
+        audio_url = pub.publicUrl;
+      }
+
+      const { data, error } = await supabase
+        .from("mensajes")
+        .insert([
+          {
+            remitente_username: user.username,
+            destinatario_username: destino,
+            contenido: texto || null,
+            imagen_url,
+            audio_url,
+            leido: false,
+          },
+        ])
+        .select("*")
+        .single();
+
+      if (error) {
+        console.error("Insert error:", error);
+        alert("No se pudo enviar el mensaje.");
+        return;
+      }
+
+      if (data) {
+        setMensajes((prev) =>
+          prev.some((m) => m.id === data.id) ? prev : [...prev, data as Mensaje]
+        );
+      }
+
+      setNuevoMensaje("");
+      setArchivo(null);
+      limpiarAudioPreview();
+      setRecordSeconds(0);
+
+      setTimeout(() => {
+        medirComposer();
+        scrollToBottom(true);
+        inputRef.current?.focus();
+      }, 40);
+
+      document.dispatchEvent(
+        new CustomEvent("chat:message-sent", { detail: { to: destino } })
       );
+    } finally {
+      setSubiendo(false);
     }
-
-    setNuevoMensaje("");
-    setArchivo(null);
-    limpiarAudioPreview();
-    setRecordSeconds(0);
-
-    setTimeout(() => {
-      medirComposer();
-      scrollToBottom(true);
-      inputRef.current?.focus();
-    }, 40);
-
-    document.dispatchEvent(
-      new CustomEvent("chat:message-sent", { detail: { to: destino } })
-    );
-
-    setSubiendo(false);
   };
 
   const mostrarBotonEnviar = !!nuevoMensaje.trim() || !!archivo || !!audioBlob;
 
-  // ── Agrupar mensajes con separadores de fecha ─────────────────────────────
+  // ── Separadores de fecha ──────────────────────────────────────────────────
 
   type MsgItem =
     | { type: "separator"; key: string; label: string }
@@ -634,13 +695,26 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     return result;
   }, [mensajes]);
 
+  // ── Header ────────────────────────────────────────────────────────────────
+
+  const headerName =
+    destinoName && destinoName.toLowerCase() !== destino.toLowerCase()
+      ? destinoName
+      : destino;
+  const headerSub =
+    destinoName && destinoName.toLowerCase() !== destino.toLowerCase()
+      ? destino
+      : null;
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div
       className="flex h-full min-h-0 flex-col"
       style={{ background: roomBg }}
     >
-      {/* Header */}
-      <div className="chat-header shrink-0 border-b border-gray-200 bg-white/95 px-3 py-3 shadow-sm">
+      {/* ── Header ── */}
+      <div className="chat-header shrink-0 border-b border-gray-200 bg-white/95 px-3 py-2.5 shadow-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={volverSidebar}
@@ -649,21 +723,27 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             <ArrowLeft size={20} />
           </button>
 
-          <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-700 font-semibold shrink-0">
-            {(destino[0] || "?").toUpperCase()}
+          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-bold shrink-0 text-sm">
+            {(headerName[0] || "?").toUpperCase()}
           </div>
 
           <div className="min-w-0">
-            <h2 className="font-semibold text-gray-800 text-sm truncate">
-              {destino}
+            <h2 className="font-semibold text-gray-900 text-sm leading-tight truncate">
+              {headerName}
             </h2>
+            {headerSub && (
+              <p className="text-[11px] text-gray-400 leading-tight truncate mt-0.5">
+                {headerSub}
+              </p>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Scroll area */}
+      {/* ── Scroll area ── */}
       <div
         ref={scrollRef}
+        onScroll={handleScroll}
         className="chat-scroll-area flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4"
         style={{ paddingBottom: `${composerHeight + 16}px` }}
       >
@@ -674,15 +754,13 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
         ) : (
           <div className="space-y-1">
             {items.map((item) => {
-              // ── Separador de fecha ──────────────────────────────────────
+
+              // ── Separador de fecha ──
               if (item.type === "separator") {
                 return (
-                  <div
-                    key={item.key}
-                    className="flex items-center gap-3 py-3"
-                  >
+                  <div key={item.key} className="flex items-center gap-3 py-3">
                     <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-[11px] text-gray-400 font-medium px-2 py-0.5 bg-gray-100 rounded-full whitespace-nowrap capitalize">
+                    <span className="text-[11px] text-gray-400 font-medium px-2.5 py-1 bg-white/80 rounded-full whitespace-nowrap capitalize shadow-sm border border-gray-100">
                       {item.label}
                     </span>
                     <div className="flex-1 h-px bg-gray-200" />
@@ -690,7 +768,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                 );
               }
 
-              // ── Burbuja de mensaje ──────────────────────────────────────
+              // ── Burbuja de mensaje ──
               const m = item.msg;
               const soyYo = m.remitente_username === (user?.username ?? "");
 
@@ -735,7 +813,6 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
                           minute: "2-digit",
                         })}
                       </p>
-                      {/* Doble tilde solo en mensajes propios */}
                       {soyYo && <MsgStatus leido={m.leido} />}
                     </div>
                   </div>
@@ -744,120 +821,170 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             })}
           </div>
         )}
+
+        {/* ── Botón flotante "bajar al último" ── */}
+        {showScrollBtn && (
+          <div className="sticky bottom-2 flex justify-end pr-1 pointer-events-none">
+            <button
+              onClick={() => scrollToBottom(true)}
+              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-red-600 transition-all relative"
+            >
+              <ChevronDown size={20} />
+              {newMsgCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
+                  {newMsgCount > 9 ? "9+" : newMsgCount}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Composer */}
+      {/* ── Composer ── */}
       <div
         ref={composerRef}
-        className="chat-composer chat-keyboard-safe shrink-0 border-t border-gray-200 bg-white px-2 py-2 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
+        className="chat-composer chat-keyboard-safe shrink-0 border-t border-gray-200 bg-white px-3 py-2 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
       >
+        {/* Preview imagen adjunta */}
         {archivo && (
-          <div className="mb-2 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+          <div className="mb-2 flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
             <span className="truncate text-gray-700">{archivo.name}</span>
             <button
               onClick={quitarAdjunto}
-              className="ml-3 inline-flex items-center text-gray-500 hover:text-red-600"
+              className="ml-2 shrink-0 text-gray-500 hover:text-red-600"
             >
-              <X size={16} className="mr-1" />
+              <X size={16} />
+              Quitar
             </button>
           </div>
         )}
 
-        {audioPreviewUrl && (
-          <div className="mb-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500">Vista previa del audio</span>
+        {/* Grabando */}
+        {grabando && (
+          <div className="mb-2 flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-red-700">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span className="font-medium">Grabando audio</span>
+              <span className="tabular-nums">{formatDuration(recordSeconds)}</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={finalizarGrabacion}
+              className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+            >
+              <Square size={14} />
+              Finalizar
+            </button>
+          </div>
+        )}
+
+        {/* Preview audio listo */}
+        {!grabando && audioBlob && audioPreviewUrl && (
+          <div className="mb-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-700">
+                  Audio listo para enviar
+                </p>
+                <div className="mt-2">
+                  <AudioBubble src={audioPreviewUrl} soyYo={false} />
+                </div>
+              </div>
+
               <button
+                type="button"
                 onClick={limpiarAudioPreview}
-                className="text-gray-400 hover:text-red-600"
+                className="shrink-0 rounded-full p-2 text-gray-500 hover:bg-white hover:text-red-600"
+                title="Descartar audio"
               >
-                <X size={14} />
+                <X size={16} />
               </button>
             </div>
-            <AudioBubble src={audioPreviewUrl} soyYo={false} />
-          </div>
-        )}
 
-        {grabando ? (
-          <div className="flex items-center gap-2 px-1 py-1">
-            <button
-              onClick={cancelarGrabacion}
-              className="text-gray-400 hover:text-red-600 p-1"
-            >
-              <X size={20} />
-            </button>
-            <div className="flex-1 flex items-center gap-2 bg-red-50 rounded-xl px-3 py-2">
-              <div className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />
-              <span className="text-sm text-red-600 font-medium">
-                {formatDuration(recordSeconds)}
-              </span>
-            </div>
-            <button
-              onClick={detenerGrabacion}
-              className="bg-red-600 hover:bg-red-700 text-white p-2.5 rounded-full shadow"
-            >
-              <Square size={16} />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 px-1">
-            <label className="cursor-pointer text-gray-400 hover:text-red-600 p-1.5 rounded-full hover:bg-gray-100">
-              <Paperclip size={20} />
-              <input
-                type="file"
-                className="hidden"
-                accept="image/*,video/*,application/pdf"
-                onChange={(e) => onPickFile(e.target.files?.[0])}
-              />
-            </label>
-
-            <label className="cursor-pointer text-gray-400 hover:text-red-600 p-1.5 rounded-full hover:bg-gray-100">
-              <Camera size={20} />
-              <input
-                type="file"
-                className="hidden"
-                accept="image/*"
-                capture="environment"
-                onChange={(e) => onPickFile(e.target.files?.[0])}
-              />
-            </label>
-
-            <input
-              ref={inputRef}
-              className="chat-input flex-1 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none"
-              placeholder="Escribe un mensaje…"
-              value={nuevoMensaje}
-              onChange={(e) => setNuevoMensaje(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  enviarMensaje();
-                }
-              }}
-            />
-
-            {mostrarBotonEnviar ? (
+            <div className="mt-3 flex justify-end">
               <button
+                type="button"
                 onClick={enviarMensaje}
                 disabled={subiendo}
-                className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white p-2.5 rounded-full shadow shrink-0"
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white ${
+                  subiendo
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-red-500 hover:bg-red-600"
+                }`}
               >
-                {subiendo ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <Send size={18} />
-                )}
+                <Send size={16} />
+                {subiendo ? "Enviando..." : "Enviar audio"}
               </button>
-            ) : (
-              <button
-                onClick={iniciarGrabacion}
-                className="text-gray-400 hover:text-red-600 p-2.5 rounded-full hover:bg-gray-100 shrink-0"
-              >
-                <Mic size={20} />
-              </button>
-            )}
+            </div>
           </div>
         )}
+
+        {/* Barra de input */}
+        <div className="flex items-center gap-2">
+          <label
+            className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
+            title="Adjuntar imagen"
+          >
+            <Paperclip size={18} />
+            <input
+              type="file"
+              accept="image/*,.png,.jpg,.jpeg,.webp,.heic"
+              className="hidden"
+              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+            />
+          </label>
+
+          <label
+            className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
+            title="Sacar foto"
+          >
+            <Camera size={18} />
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+            />
+          </label>
+
+          {!mostrarBotonEnviar && !grabando && !audioBlob && (
+            <button
+              onClick={toggleGrabacion}
+              className="p-2 rounded-full shrink-0 text-gray-500 hover:text-red-500"
+              title="Grabar audio"
+            >
+              <Mic size={18} />
+            </button>
+          )}
+
+          <input
+            ref={inputRef}
+            type="text"
+            className="chat-input min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500"
+            placeholder={grabando ? "Grabando audio..." : "Escribí un mensaje..."}
+            value={nuevoMensaje}
+            disabled={grabando}
+            onChange={(e) => setNuevoMensaje(e.target.value)}
+            onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+            onKeyDown={(e) => e.key === "Enter" && !subiendo && enviarMensaje()}
+          />
+
+          {mostrarBotonEnviar && !grabando && (
+            <button
+              disabled={subiendo}
+              onClick={enviarMensaje}
+              className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-white ${
+                subiendo
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-red-500 hover:bg-red-600"
+              }`}
+            >
+              {subiendo ? "Enviando..." : "Enviar"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
