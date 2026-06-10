@@ -77,9 +77,14 @@ const PosibleRechazos: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const obtenerNombreVisibleRemitente = async () => {
+  /**
+   * Devuelve un objeto con { username, name } del remitente.
+   * Para transportes: username="Transporte 86", name="Rosso Melani"
+   * → se usa para armar "El Transporte 86 (Rosso Melani) informa..."
+   */
+  const obtenerDatosRemitente = async (): Promise<{ username: string; name: string | null }> => {
     const username = user?.username?.trim();
-    if (!username) return "Alguien";
+    if (!username) return { username: "Alguien", name: null };
 
     try {
       const { data, error } = await supabase
@@ -90,15 +95,30 @@ const PosibleRechazos: React.FC = () => {
 
       if (error) {
         console.error("Error leyendo usuarios_app:", error);
-        return username;
+        return { username, name: null };
       }
 
       const row = data as UsuarioAppRow | null;
-      return row?.name?.trim() || username;
+      return {
+        username,
+        name: row?.name?.trim() || null,
+      };
     } catch (error) {
-      console.error("Error obteniendo nombre visible del remitente:", error);
-      return username;
+      console.error("Error obteniendo datos del remitente:", error);
+      return { username, name: null };
     }
+  };
+
+  /**
+   * Construye el nombre visible del remitente:
+   * - Si tiene name y es distinto del username → "Transporte 86 (Rosso Melani)"
+   * - Si solo tiene username → "Transporte 86"
+   */
+  const construirNombreVisible = (username: string, name: string | null): string => {
+    if (name && name.toLowerCase() !== username.toLowerCase()) {
+      return `${username} (${name})`;
+    }
+    return username;
   };
 
   const enviarPushNotification = async (
@@ -183,12 +203,18 @@ const PosibleRechazos: React.FC = () => {
       }
 
       const remitenteUsername = user?.username?.trim() || "";
-      const remitenteVisible = await obtenerNombreVisibleRemitente();
 
       if (!remitenteUsername) {
         console.warn("No hay username del usuario que carga el posible rechazo");
         return;
       }
+
+      // Obtener datos completos del remitente
+      const datosRemitente = await obtenerDatosRemitente();
+      const remitenteVisible = construirNombreVisible(
+        datosRemitente.username,
+        datosRemitente.name
+      );
 
       const textoMonto = monto.toLocaleString("es-AR", {
         minimumFractionDigits: 0,
@@ -304,9 +330,9 @@ const PosibleRechazos: React.FC = () => {
             }`}
           >
             {message.type === "success" ? (
-              <CheckCircle className="h-5 w-5 text-green-600 mr-2" />
+              <CheckCircle className="h-5 w-5 text-green-600 mr-2 shrink-0" />
             ) : (
-              <AlertCircle className="h-5 w-5 text-red-600 mr-2" />
+              <AlertCircle className="h-5 w-5 text-red-600 mr-2 shrink-0" />
             )}
             <span
               className={
@@ -319,26 +345,28 @@ const PosibleRechazos: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Número de cliente */}
           <div>
             <label
               htmlFor="numero_cliente"
-              className="flex items-center text-sm font-medium text-gray-700 mb-2"
+              className="flex items-center text-sm font-medium text-gray-700 mb-1.5"
             >
               <Hash className="h-4 w-4 mr-1" />
-              Número de cliente <span className="text-red-500 ml-1">*</span>
+              Número de cliente <span className="text-red-500 ml-0.5">*</span>
             </label>
             <input
-              id="numero_cliente"
               type="text"
+              id="numero_cliente"
+              inputMode="numeric"
               value={formData.numero_cliente}
               onChange={(e) => handleChange("numero_cliente", e.target.value)}
-              placeholder="Ej: 12345"
-              disabled={loading}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
                 errors.numero_cliente
                   ? "border-red-300 bg-red-50"
                   : "border-gray-300"
               }`}
+              placeholder="Ej: 301699"
+              disabled={loading}
             />
             {errors.numero_cliente && (
               <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -348,30 +376,29 @@ const PosibleRechazos: React.FC = () => {
             )}
           </div>
 
+          {/* Monto aproximado */}
           <div>
             <label
               htmlFor="monto_aproximado"
-              className="flex items-center text-sm font-medium text-gray-700 mb-2"
+              className="flex items-center text-sm font-medium text-gray-700 mb-1.5"
             >
               <DollarSign className="h-4 w-4 mr-1" />
-              Monto aproximado <span className="text-red-500 ml-1">*</span>
+              Monto aproximado <span className="text-red-500 ml-0.5">*</span>
             </label>
             <input
-              id="monto_aproximado"
               type="number"
-              min="0"
-              step="0.01"
+              id="monto_aproximado"
+              inputMode="decimal"
               value={formData.monto_aproximado}
-              onChange={(e) =>
-                handleChange("monto_aproximado", e.target.value)
-              }
-              placeholder="Ej: 150000"
-              disabled={loading}
+              onChange={(e) => handleChange("monto_aproximado", e.target.value)}
               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors ${
                 errors.monto_aproximado
                   ? "border-red-300 bg-red-50"
                   : "border-gray-300"
               }`}
+              placeholder="Ej: 30000"
+              min="1"
+              disabled={loading}
             />
             {errors.monto_aproximado && (
               <p className="mt-1 text-sm text-red-600 flex items-center">
