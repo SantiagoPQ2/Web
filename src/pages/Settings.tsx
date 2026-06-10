@@ -1,10 +1,252 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Eye, EyeOff, Save, LogOut, Moon, Sun, CheckCircle2, AlertCircle, Loader2, Camera, X, ZoomIn } from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
 type Toast = { msg: string; ok: boolean } | null;
-const MAX_AVATAR_MB = 5;
+
+// ── ImageCropper ──────────────────────────────────────────────────────────────
+// Cropper circular puro con Canvas, sin dependencias externas.
+// El usuario arrastra para mover la imagen y usa el slider para hacer zoom.
+
+interface CropperProps {
+  imageSrc: string;
+  onConfirm: (blob: Blob) => void;
+  onCancel: () => void;
+}
+
+const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [processing, setProcessing] = useState(false);
+
+  // Tamaño del canvas de preview (cuadrado)
+  const CANVAS_SIZE = 320;
+  const CIRCLE_R = CANVAS_SIZE / 2 - 4;
+
+  // Cargar imagen
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      imgRef.current = img;
+      // Centrar imagen inicialmente con zoom que la llena el círculo
+      const minDim = Math.min(img.naturalWidth, img.naturalHeight);
+      const initialZoom = (CIRCLE_R * 2) / minDim;
+      setZoom(initialZoom);
+      setOffset({ x: 0, y: 0 });
+      setImgLoaded(true);
+    };
+    img.src = imageSrc;
+  }, [imageSrc]);
+
+  // Redibujar canvas
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!canvas || !img || !imgLoaded) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const cx = CANVAS_SIZE / 2;
+    const cy = CANVAS_SIZE / 2;
+
+    // Fondo
+    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // Imagen transformada
+    const scaledW = img.naturalWidth * zoom;
+    const scaledH = img.naturalHeight * zoom;
+    const drawX = cx - scaledW / 2 + offset.x;
+    const drawY = cy - scaledH / 2 + offset.y;
+
+    ctx.save();
+    ctx.drawImage(img, drawX, drawY, scaledW, scaledH);
+    ctx.restore();
+
+    // Overlay oscuro fuera del círculo
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.beginPath();
+    ctx.rect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.arc(cx, cy, CIRCLE_R, 0, Math.PI * 2, true); // cut-out
+    ctx.fill("evenodd");
+    ctx.restore();
+
+    // Borde del círculo
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, CIRCLE_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }, [zoom, offset, imgLoaded]);
+
+  useEffect(() => { draw(); }, [draw]);
+
+  // ── Drag mouse ──
+  const onMouseDown = (e: React.MouseEvent) => {
+    setDragging(true);
+    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragging) return;
+    setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  };
+  const onMouseUp = () => setDragging(false);
+
+  // ── Drag touch ──
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    setDragging(true);
+    setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y });
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!dragging) return;
+    const t = e.touches[0];
+    setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
+  };
+  const onTouchEnd = () => setDragging(false);
+
+  // ── Confirmar → exportar círculo recortado ──
+  const handleConfirm = async () => {
+    const img = imgRef.current;
+    if (!img) return;
+    setProcessing(true);
+
+    try {
+      const OUTPUT_SIZE = 512; // resolución final del avatar
+      const offscreen = document.createElement("canvas");
+      offscreen.width = OUTPUT_SIZE;
+      offscreen.height = OUTPUT_SIZE;
+      const ctx = offscreen.getContext("2d");
+      if (!ctx) return;
+
+      const scale = OUTPUT_SIZE / CANVAS_SIZE;
+      const cx = CANVAS_SIZE / 2;
+      const cy = CANVAS_SIZE / 2;
+
+      // Clip circular
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, 0, Math.PI * 2);
+      ctx.clip();
+
+      const scaledW = img.naturalWidth * zoom;
+      const scaledH = img.naturalHeight * zoom;
+      const drawX = cx - scaledW / 2 + offset.x;
+      const drawY = cy - scaledH / 2 + offset.y;
+
+      ctx.drawImage(
+        img,
+        drawX * scale,
+        drawY * scale,
+        scaledW * scale,
+        scaledH * scale
+      );
+      ctx.restore();
+
+      offscreen.toBlob(
+        (blob) => {
+          if (blob) onConfirm(blob);
+          setProcessing(false);
+        },
+        "image/jpeg",
+        0.92
+      );
+    } catch (err) {
+      console.error("Error exportando crop:", err);
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-800 text-base">Ajustar foto</h3>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Canvas */}
+        <div
+          ref={containerRef}
+          className="flex items-center justify-center bg-gray-900 py-4 select-none"
+          style={{ cursor: dragging ? "grabbing" : "grab" }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            className="rounded-lg"
+            style={{ touchAction: "none" }}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          />
+        </div>
+
+        {/* Zoom slider */}
+        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400 shrink-0">−</span>
+            <input
+              type="range"
+              min={0.1}
+              max={4}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="flex-1 accent-[#8B0000]"
+            />
+            <span className="text-xs text-gray-400 shrink-0">+</span>
+          </div>
+          <p className="text-[11px] text-center text-gray-400 mt-1">
+            Arrastrá para mover · Deslizá para hacer zoom
+          </p>
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-3 px-5 py-4">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!imgLoaded || processing}
+            className="flex-1 py-2.5 rounded-xl bg-[#8B0000] hover:bg-[#6b0000] text-white text-sm font-semibold transition disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {processing && <Loader2 size={15} className="animate-spin" />}
+            {processing ? "Procesando..." : "Usar esta foto"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Settings ──────────────────────────────────────────────────────────────────
 
 export default function Settings() {
   const { user, logout, updateAvatar } = useAuth();
@@ -16,6 +258,9 @@ export default function Settings() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Cropper
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newPassword, setNewPassword] = useState("");
@@ -73,40 +318,62 @@ export default function Settings() {
     localStorage.setItem("theme", next ? "dark" : "light");
   };
 
-  // ── Upload avatar ──────────────────────────────────────────────────────────
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ── Seleccionar archivo → abrir cropper ────────────────────────────────────
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    if (file.size > MAX_AVATAR_MB * 1024 * 1024) {
-      showToast(`La imagen no puede superar los ${MAX_AVATAR_MB} MB`, false);
-      return;
-    }
+    // Sin límite de tamaño — se acepta cualquier imagen
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (ev.target?.result) {
+        setCropSrc(ev.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
 
+    // Reset input para permitir subir la misma foto de nuevo
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // ── Confirmar crop → subir a Supabase ─────────────────────────────────────
+  const handleCropConfirm = async (blob: Blob) => {
+    if (!user) return;
+    setCropSrc(null);
     setUploadingAvatar(true);
+
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const filePath = `${user.id}/avatar.${ext}`;
+      const filePath = `${user.id}/avatar.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, file, { cacheControl: "3600", upsert: true, contentType: file.type });
+        .upload(filePath, blob, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: "image/jpeg",
+        });
 
       if (uploadError) throw uploadError;
 
-      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      const { data: pub } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
       const urlFinal = `${pub.publicUrl}?t=${Date.now()}`;
 
-      await supabase.from("usuarios_app").update({ avatar_url: urlFinal }).eq("id", user.id);
+      await supabase
+        .from("usuarios_app")
+        .update({ avatar_url: urlFinal })
+        .eq("id", user.id);
 
       setAvatarUrl(urlFinal);
       updateAvatar(urlFinal);
       showToast("Foto actualizada correctamente");
     } catch (err: any) {
+      console.error("Error subiendo avatar:", err);
       showToast("No se pudo subir la foto", false);
     } finally {
       setUploadingAvatar(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -189,7 +456,7 @@ export default function Settings() {
         </h2>
 
         <div className="flex items-center gap-5">
-          {/* Avatar grande clickeable para ampliar */}
+          {/* Avatar grande — click para ampliar si tiene foto */}
           <div className="relative shrink-0 group">
             <button
               onClick={() => avatarUrl && setLightboxOpen(true)}
@@ -204,24 +471,33 @@ export default function Settings() {
                 </div>
               )}
             </button>
+
             {avatarUrl && (
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition pointer-events-none flex items-center justify-center">
                 <ZoomIn size={22} className="text-white opacity-0 group-hover:opacity-100 transition" />
               </div>
             )}
+
             {/* Botón cámara */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
               className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-[#8B0000] text-white flex items-center justify-center shadow-md hover:bg-[#6b0000] transition disabled:opacity-60"
             >
-              {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+              {uploadingAvatar
+                ? <Loader2 size={14} className="animate-spin" />
+                : <Camera size={14} />
+              }
             </button>
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{user?.name || user?.username}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate">@{user?.username} · {user?.role}</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">
+              {user?.name || user?.username}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate">
+              @{user?.username} · {user?.role}
+            </p>
             <div className="flex flex-col gap-1.5">
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -231,7 +507,10 @@ export default function Settings() {
                 {uploadingAvatar ? "Subiendo..." : avatarUrl ? "Cambiar foto" : "Subir foto"}
               </button>
               {avatarUrl && !uploadingAvatar && (
-                <button onClick={handleRemoveAvatar} className="text-sm font-medium text-gray-400 hover:text-red-500 text-left transition">
+                <button
+                  onClick={handleRemoveAvatar}
+                  className="text-sm font-medium text-gray-400 hover:text-red-500 text-left transition"
+                >
                   Eliminar foto
                 </button>
               )}
@@ -239,13 +518,34 @@ export default function Settings() {
           </div>
         </div>
 
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
       </div>
+
+      {/* ── Cropper modal ───────────────────────────────────────────────────── */}
+      {cropSrc && (
+        <ImageCropper
+          imageSrc={cropSrc}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropSrc(null)}
+        />
+      )}
 
       {/* ── Lightbox ────────────────────────────────────────────────────────── */}
       {lightboxOpen && avatarUrl && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxOpen(false)}>
-          <button className="absolute top-4 right-4 text-white/80 hover:text-white transition" onClick={() => setLightboxOpen(false)}>
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightboxOpen(false)}
+          >
             <X size={30} />
           </button>
           <img
