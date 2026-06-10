@@ -7,6 +7,7 @@ type ChatListItem = {
   username: string;
   name: string | null;
   role?: string | null;
+  avatar_url?: string | null;
   lastMessage: string;
   lastAt: string | null;
   unread: number;
@@ -18,40 +19,35 @@ interface Props {
   selectedUser: string | null;
 }
 
-// ── Helpers de fecha ──────────────────────────────────────────────────────────
-
+// ── Fecha inteligente ─────────────────────────────────────────────────────────
 const formatSidebarDate = (dateStr: string): string => {
   const d = new Date(dateStr);
   const now = new Date();
-
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfYesterday = new Date(startOfToday);
   startOfYesterday.setDate(startOfToday.getDate() - 1);
   const startOfWeek = new Date(startOfToday);
   startOfWeek.setDate(startOfToday.getDate() - 6);
 
-  if (d >= startOfToday) {
+  if (d >= startOfToday)
     return d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
-  }
-  if (d >= startOfYesterday) {
-    return "Ayer";
-  }
-  if (d >= startOfWeek) {
+  if (d >= startOfYesterday) return "Ayer";
+  if (d >= startOfWeek)
     return d.toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "");
-  }
-  return d.toLocaleDateString("es-AR", { day: "numeric", month: "short" }).replace(".", "");
+  return d
+    .toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+    .replace(".", "");
 };
 
 // ── Badge de rol ──────────────────────────────────────────────────────────────
-
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  vendedor:             { label: "Vendedor",    color: "bg-blue-100 text-blue-700" },
-  supervisor:           { label: "Supervisor",  color: "bg-purple-100 text-purple-700" },
-  logistica:            { label: "Transporte",  color: "bg-amber-100 text-amber-700" },
-  "jefe-transporte":    { label: "Jefe Transp", color: "bg-orange-100 text-orange-700" },
-  admin:                { label: "Admin",       color: "bg-red-100 text-red-700" },
+  vendedor:                 { label: "Vendedor",       color: "bg-blue-100 text-blue-700" },
+  supervisor:               { label: "Supervisor",     color: "bg-purple-100 text-purple-700" },
+  logistica:                { label: "Transporte",     color: "bg-amber-100 text-amber-700" },
+  "jefe-transporte":        { label: "Jefe Transp",    color: "bg-orange-100 text-orange-700" },
+  admin:                    { label: "Admin",           color: "bg-red-100 text-red-700" },
   "administracion-cordoba": { label: "Administración", color: "bg-teal-100 text-teal-700" },
-  test:                 { label: "Test",        color: "bg-gray-100 text-gray-500" },
+  test:                     { label: "Test",           color: "bg-gray-100 text-gray-500" },
 };
 
 const RoleBadge: React.FC<{ role?: string | null }> = ({ role }) => {
@@ -65,8 +61,7 @@ const RoleBadge: React.FC<{ role?: string | null }> = ({ role }) => {
   );
 };
 
-// ── Componente principal ──────────────────────────────────────────────────────
-
+// ── ChatSidebar ───────────────────────────────────────────────────────────────
 const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
   const { user } = useAuth();
   const [items, setItems] = useState<ChatListItem[]>([]);
@@ -97,7 +92,9 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
         (payload) => {
           const m: any = payload.new;
           const isMine = m.remitente_username === user.username;
-          const other = isMine ? m.destinatario_username : m.remitente_username;
+          const other = isMine
+            ? m.destinatario_username
+            : m.remitente_username;
 
           setItems((prev) => {
             const idx = prev.findIndex((u) => u.username === other);
@@ -156,7 +153,7 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
 
     const { data: usersData, error: uErr } = await supabase
       .from("usuarios_app")
-      .select("username, name, role")
+      .select("username, name, role, avatar_url")
       .neq("username", user.username);
 
     if (uErr || !usersData) return;
@@ -176,6 +173,7 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
         username: u.username,
         name: u.name,
         role: u.role,
+        avatar_url: u.avatar_url ?? null,
         lastMessage: "",
         lastAt: null as string | null,
         unread: 0,
@@ -199,6 +197,7 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
         username: u.username,
         name: u.name,
         role: u.role,
+        avatar_url: u.avatar_url ?? null,
         lastMessage: "",
         lastAt: null,
         unread: 0,
@@ -208,7 +207,9 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
 
     for (const m of msgs) {
       const isMine = m.remitente_username === user.username;
-      const other = isMine ? m.destinatario_username : m.remitente_username;
+      const other = isMine
+        ? m.destinatario_username
+        : m.remitente_username;
 
       if (!map.has(other)) continue;
 
@@ -262,19 +263,15 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
     );
   }, [items, query]);
 
-  // Separar en "Con mensajes" y "Sin mensajes"
-  const { conMensajes, sinMensajes } = useMemo(() => {
-    return {
-      conMensajes: filtered.filter((it) => it.lastAt),
-      sinMensajes: filtered.filter((it) => !it.lastAt),
-    };
-  }, [filtered]);
+  // Separar conversaciones activas de las sin mensajes
+  const { conMensajes, sinMensajes } = useMemo(() => ({
+    conMensajes: filtered.filter((it) => it.lastAt),
+    sinMensajes: filtered.filter((it) => !it.lastAt),
+  }), [filtered]);
 
   const renderItem = (it: ChatListItem) => {
     const active = selectedUser === it.username;
     const initial = (it.name?.[0] || it.username[0] || "?").toUpperCase();
-
-    // Preview con prefijo "Vos: " si el último mensaje lo envié yo
     const previewText = it.lastIsMine
       ? `Vos: ${it.lastMessage}`
       : it.lastMessage || "Sin mensajes";
@@ -283,34 +280,38 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
       <button
         key={it.username}
         onClick={() => onSelectUser(it.username)}
-        className={`w-full text-left px-4 py-3 border-b border-gray-100 flex items-center gap-3 transition-colors ${
+        className={`w-full text-left px-4 py-3 border-b border-gray-100 flex items-center gap-3 transition ${
           active ? "bg-red-50 border-l-2 border-l-red-500" : "hover:bg-gray-50"
         }`}
       >
         {/* Avatar */}
-        <div
-          className={`h-12 w-12 rounded-full flex items-center justify-center font-semibold shrink-0 text-sm ${
-            active ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-700"
-          }`}
-        >
-          {initial}
-        </div>
+        {it.avatar_url ? (
+          <div className={`h-12 w-12 rounded-full overflow-hidden border-2 shrink-0 ${active ? "border-red-300" : "border-gray-200"}`}>
+            <img
+              src={it.avatar_url}
+              alt={it.name || it.username}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className={`h-12 w-12 rounded-full flex items-center justify-center text-sm font-semibold shrink-0 ${active ? "bg-red-100 text-red-700" : "bg-gray-200 text-gray-700"}`}>
+            {initial}
+          </div>
+        )}
 
         <div className="min-w-0 flex-1">
-          {/* Fila 1: nombre + fecha */}
+          {/* Fila 1: nombre + badge rol + fecha */}
           <div className="flex items-center gap-1.5">
-            <p
-              className={`font-semibold text-sm truncate ${
-                it.unread > 0 ? "text-gray-900" : "text-gray-800"
-              }`}
-            >
+            <p className={`font-semibold text-sm truncate ${it.unread > 0 ? "text-gray-900" : "text-gray-900"}`}>
               {it.name || it.username}
             </p>
+
             <RoleBadge role={it.role} />
+
             {it.lastAt && (
               <span
                 className={`ml-auto text-[11px] shrink-0 ${
-                  it.unread > 0 ? "text-red-600 font-semibold" : "text-gray-400"
+                  it.unread > 0 ? "text-red-600 font-semibold" : "text-gray-500"
                 }`}
               >
                 {formatSidebarDate(it.lastAt)}
@@ -319,17 +320,17 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
           </div>
 
           {/* Fila 2: preview + badge no leídos */}
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-1">
             <p
-              className={`text-xs truncate leading-snug ${
-                it.unread > 0 ? "text-gray-800 font-medium" : "text-gray-400"
+              className={`text-xs truncate ${
+                it.unread > 0 ? "text-gray-800 font-medium" : "text-gray-500"
               }`}
             >
               {previewText}
             </p>
 
             {it.unread > 0 && (
-              <span className="ml-auto bg-red-600 text-white rounded-full min-w-[20px] h-5 px-1.5 text-[11px] flex items-center justify-center font-bold shrink-0">
+              <span className="ml-auto bg-red-600 text-white rounded-full min-w-[20px] h-5 px-1.5 text-[11px] flex items-center justify-center font-semibold shrink-0">
                 {it.unread > 99 ? "99+" : it.unread}
               </span>
             )}
@@ -354,15 +355,14 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
           {query && (
             <button
               onClick={() => setQuery("")}
-              className="text-gray-400 hover:text-gray-600 shrink-0"
+              className="text-gray-400 hover:text-gray-600 shrink-0 text-xs"
             >
-              <span className="text-xs">✕</span>
+              ✕
             </button>
           )}
         </div>
       </div>
 
-      {/* Lista */}
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 && (
           <div className="p-6 text-center text-sm text-gray-400">
@@ -371,11 +371,7 @@ const ChatSidebar: React.FC<Props> = ({ onSelectUser, selectedUser }) => {
         )}
 
         {/* Conversaciones activas */}
-        {conMensajes.length > 0 && (
-          <>
-            {conMensajes.map(renderItem)}
-          </>
-        )}
+        {conMensajes.map(renderItem)}
 
         {/* Separador si hay ambos grupos */}
         {conMensajes.length > 0 && sinMensajes.length > 0 && (
