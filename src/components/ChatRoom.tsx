@@ -25,6 +25,7 @@ import {
   User,
   Briefcase,
   ChevronRight,
+  Mail,
 } from "lucide-react";
 
 interface Mensaje {
@@ -44,6 +45,7 @@ interface ContactInfo {
   phone: string | null;
   role: string | null;
   FFVV: string | null;
+  mail: string | null;
   avatar_url: string | null;
 }
 
@@ -223,7 +225,7 @@ const ContactDrawer: React.FC<{
     <>
       {/* Overlay */}
       <div
-        className={`fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 ${
+        className={`fixed inset-x-0 bottom-0 top-16 z-30 bg-black/30 transition-opacity duration-300 ${
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         onClick={onClose}
@@ -231,12 +233,12 @@ const ContactDrawer: React.FC<{
 
       {/* Drawer desde la derecha */}
       <div
-        className={`fixed top-0 right-0 h-full w-80 max-w-full bg-white shadow-2xl z-40 flex flex-col transition-transform duration-300 ease-in-out ${
+        className={`fixed top-16 right-0 bottom-0 w-80 max-w-full bg-white shadow-2xl z-40 flex flex-col transition-transform duration-300 ease-in-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Header rojo con foto */}
-        <div className="bg-[#8B0000] pt-10 pb-6 px-5 flex flex-col items-center gap-3 relative">
+        <div className="bg-[#8B0000] pt-6 pb-6 px-5 flex flex-col items-center gap-3 relative">
           <button
             onClick={onClose}
             className="absolute top-4 left-4 text-white/80 hover:text-white"
@@ -285,6 +287,18 @@ const ContactDrawer: React.FC<{
             </div>
           )}
 
+          {info?.mail && (
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+              <div className="h-9 w-9 rounded-full bg-sky-100 flex items-center justify-center shrink-0">
+                <Mail size={16} className="text-sky-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-400 font-medium">Correo</p>
+                <p className="text-sm font-semibold text-gray-800 truncate">{info.mail}</p>
+              </div>
+            </div>
+          )}
+
           {info?.role && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
               <div className="h-9 w-9 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
@@ -311,7 +325,7 @@ const ContactDrawer: React.FC<{
             </div>
           )}
 
-          {!info?.phone && !info?.role && !info?.FFVV && (
+          {!info?.phone && !info?.mail && !info?.role && !info?.FFVV && (
             <p className="text-sm text-gray-400 text-center py-6">
               Sin información adicional
             </p>
@@ -391,7 +405,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     let mounted = true;
     supabase
       .from("usuarios_app")
-      .select("username, name, phone, role, FFVV, avatar_url")
+      .select("username, name, phone, role, FFVV, mail, avatar_url")
       .eq("username", destino)
       .maybeSingle()
       .then(({ data }) => {
@@ -402,6 +416,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
             phone: data.phone?.trim() || null,
             role: data.role || null,
             FFVV: data.FFVV?.trim() || null,
+            mail: data.mail?.trim() || null,
             avatar_url: data.avatar_url || null,
           });
         }
