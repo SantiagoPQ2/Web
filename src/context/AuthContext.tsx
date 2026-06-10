@@ -10,12 +10,14 @@ type User = {
   FFVV?: string
   ffvv?: string
   supervisor?: string
+  avatar_url?: string | null
 } | null
 
 type AuthContextType = {
   user: User
   login: (username: string, password: string) => Promise<boolean>
   logout: () => void
+  updateAvatar: (url: string | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -24,7 +26,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>(null)
 
   useEffect(() => {
-    // Recuperar sesión de localStorage
     const stored = localStorage.getItem("user")
     if (stored) setUser(JSON.parse(stored))
   }, [])
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       FFVV: data.FFVV,
       ffvv: data.ffvv,
       supervisor: data.supervisor,
+      avatar_url: data.avatar_url ?? null,
     }
 
     setUser(u)
@@ -60,8 +62,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("user")
   }
 
+  const updateAvatar = (url: string | null) => {
+    setUser((prev) => {
+      if (!prev) return prev
+      const updated = { ...prev, avatar_url: url }
+      localStorage.setItem("user", JSON.stringify(updated))
+      return updated
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateAvatar }}>
       {children}
     </AuthContext.Provider>
   )
