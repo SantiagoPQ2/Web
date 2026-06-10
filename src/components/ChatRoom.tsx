@@ -12,8 +12,8 @@ import {
   Paperclip,
   Camera,
   ArrowLeft,
-  Mic,
   X,
+  Mic,
   Pause,
   Play,
   Square,
@@ -21,6 +21,10 @@ import {
   Check,
   CheckCheck,
   ChevronDown,
+  Phone,
+  User,
+  Briefcase,
+  ChevronRight,
 } from "lucide-react";
 
 interface Mensaje {
@@ -32,6 +36,15 @@ interface Mensaje {
   audio_url?: string | null;
   created_at: string;
   leido?: boolean | null;
+}
+
+interface ContactInfo {
+  username: string;
+  name: string | null;
+  phone: string | null;
+  role: string | null;
+  FFVV: string | null;
+  avatar_url: string | null;
 }
 
 interface Props {
@@ -72,6 +85,16 @@ const formatDayLabel = (dateStr: string) => {
     month: "long",
     year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
   });
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  vendedor: "Vendedor",
+  supervisor: "Supervisor",
+  logistica: "Transporte",
+  "jefe-transporte": "Jefe de Transporte",
+  admin: "Admin",
+  "administracion-cordoba": "Administración",
+  test: "Test",
 };
 
 // ── MsgStatus (doble tilde) ───────────────────────────────────────────────────
@@ -186,6 +209,140 @@ const AudioBubble: React.FC<{
   );
 };
 
+// ── ContactDrawer ─────────────────────────────────────────────────────────────
+
+const ContactDrawer: React.FC<{
+  info: ContactInfo | null;
+  open: boolean;
+  onClose: () => void;
+}> = ({ info, open, onClose }) => {
+  const [lightbox, setLightbox] = useState(false);
+  const initial = (info?.name?.[0] || info?.username?.[0] || "?").toUpperCase();
+
+  return (
+    <>
+      {/* Overlay */}
+      <div
+        className={`fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 ${
+          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={onClose}
+      />
+
+      {/* Drawer desde la derecha */}
+      <div
+        className={`fixed top-0 right-0 h-full w-80 max-w-full bg-white shadow-2xl z-40 flex flex-col transition-transform duration-300 ease-in-out ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        {/* Header rojo con foto */}
+        <div className="bg-[#8B0000] pt-10 pb-6 px-5 flex flex-col items-center gap-3 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 left-4 text-white/80 hover:text-white"
+          >
+            <ChevronRight size={22} />
+          </button>
+
+          {/* Avatar grande clickeable */}
+          <button
+            onClick={() => info?.avatar_url && setLightbox(true)}
+            className="h-24 w-24 rounded-full overflow-hidden border-2 border-white/40 shadow-lg focus:outline-none"
+            disabled={!info?.avatar_url}
+          >
+            {info?.avatar_url ? (
+              <img
+                src={info.avatar_url}
+                alt={info.name || info?.username}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="h-full w-full bg-white/20 flex items-center justify-center text-white text-3xl font-bold">
+                {initial}
+              </div>
+            )}
+          </button>
+
+          <div className="text-center">
+            <p className="text-white font-bold text-lg leading-tight">
+              {info?.name || info?.username}
+            </p>
+            <p className="text-white/70 text-sm mt-0.5">@{info?.username}</p>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {info?.phone && (
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+              <div className="h-9 w-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                <Phone size={16} className="text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">Teléfono</p>
+                <p className="text-sm font-semibold text-gray-800">{info.phone}</p>
+              </div>
+            </div>
+          )}
+
+          {info?.role && (
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+              <div className="h-9 w-9 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                <User size={16} className="text-purple-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">Rol</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {ROLE_LABELS[info.role] || info.role}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {info?.FFVV && (
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+              <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <Briefcase size={16} className="text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-400 font-medium">Fuerza de Venta</p>
+                <p className="text-sm font-semibold text-gray-800">{info.FFVV}</p>
+              </div>
+            </div>
+          )}
+
+          {!info?.phone && !info?.role && !info?.FFVV && (
+            <p className="text-sm text-gray-400 text-center py-6">
+              Sin información adicional
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Lightbox foto */}
+      {lightbox && info?.avatar_url && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightbox(false)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightbox(false)}
+          >
+            <X size={28} />
+          </button>
+          <img
+            src={info.avatar_url}
+            alt={info.name || info.username}
+            className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
+  );
+};
+
 // ── ChatRoom ──────────────────────────────────────────────────────────────────
 
 const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
@@ -206,10 +363,11 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [composerHeight, setComposerHeight] = useState(88);
 
-  // Nombre real del destino
-  const [destinoName, setDestinoName] = useState<string | null>(null);
+  // Info contacto y drawer
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Botón flotante scroll
+  // Botón scroll al fondo
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newMsgCount, setNewMsgCount] = useState(0);
   const isAtBottomRef = useRef(true);
@@ -226,19 +384,26 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     []
   );
 
-  // ── Cargar nombre real del destino ──────────────────────────────────────────
+  // ── Cargar info del contacto ──────────────────────────────────────────────
 
   useEffect(() => {
     if (!destino) return;
     let mounted = true;
     supabase
       .from("usuarios_app")
-      .select("name")
+      .select("username, name, phone, role, FFVV, avatar_url")
       .eq("username", destino)
       .maybeSingle()
       .then(({ data }) => {
-        if (mounted && data?.name?.trim()) {
-          setDestinoName(data.name.trim());
+        if (mounted && data) {
+          setContactInfo({
+            username: data.username,
+            name: data.name?.trim() || null,
+            phone: data.phone?.trim() || null,
+            role: data.role || null,
+            FFVV: data.FFVV?.trim() || null,
+            avatar_url: data.avatar_url || null,
+          });
         }
       });
     return () => {
@@ -246,7 +411,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [destino]);
 
-  // ── Scroll ──────────────────────────────────────────────────────────────────
+  // ── Scroll ────────────────────────────────────────────────────────────────
 
   const medirComposer = () => {
     if (composerRef.current) {
@@ -327,7 +492,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [audioPreviewUrl]);
 
-  // ── Carga y realtime ────────────────────────────────────────────────────────
+  // ── Carga y realtime ──────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!user || !destino) return;
@@ -455,7 +620,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     };
   }, [user, destino]);
 
-  // ── Archivos ────────────────────────────────────────────────────────────────
+  // ── Archivos ──────────────────────────────────────────────────────────────
 
   const onPickFile = (f?: File | null) => {
     if (!f) return setArchivo(null);
@@ -470,7 +635,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
 
   const quitarAdjunto = () => setArchivo(null);
 
-  // ── Audio ────────────────────────────────────────────────────────────────────
+  // ── Audio ─────────────────────────────────────────────────────────────────
 
   const limpiarAudioPreview = () => {
     setAudioBlob(null);
@@ -553,7 +718,7 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
     await iniciarGrabacion();
   };
 
-  // ── Enviar mensaje ──────────────────────────────────────────────────────────
+  // ── Enviar ────────────────────────────────────────────────────────────────
 
   const enviarMensaje = async () => {
     if (!user) return;
@@ -698,295 +863,323 @@ const ChatRoom: React.FC<Props> = ({ destino, volverSidebar }) => {
   // ── Header ────────────────────────────────────────────────────────────────
 
   const headerName =
-    destinoName && destinoName.toLowerCase() !== destino.toLowerCase()
-      ? destinoName
+    contactInfo?.name &&
+    contactInfo.name.toLowerCase() !== destino.toLowerCase()
+      ? contactInfo.name
       : destino;
+
   const headerSub =
-    destinoName && destinoName.toLowerCase() !== destino.toLowerCase()
+    contactInfo?.name &&
+    contactInfo.name.toLowerCase() !== destino.toLowerCase()
       ? destino
       : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="flex h-full min-h-0 flex-col"
-      style={{ background: roomBg }}
-    >
-      {/* ── Header ── */}
-      <div className="chat-header shrink-0 border-b border-gray-200 bg-white/95 px-3 py-2.5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={volverSidebar}
-            className="md:hidden text-gray-500 hover:text-red-500 shrink-0"
-          >
-            <ArrowLeft size={20} />
-          </button>
+    <>
+      <div
+        className="flex h-full min-h-0 flex-col"
+        style={{ background: roomBg }}
+      >
+        {/* ── Header clickeable ── */}
+        <div className="chat-header shrink-0 border-b border-gray-200 bg-white/95 px-3 py-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={volverSidebar}
+              className="md:hidden text-gray-500 hover:text-red-500 shrink-0"
+            >
+              <ArrowLeft size={20} />
+            </button>
 
-          <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-bold shrink-0 text-sm">
-            {(headerName[0] || "?").toUpperCase()}
-          </div>
+            {/* Avatar + nombre → abre drawer al hacer click */}
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-3 min-w-0 flex-1 text-left hover:opacity-80 transition"
+            >
+              <div className="h-10 w-10 rounded-full overflow-hidden border border-gray-200 shrink-0 bg-red-100 flex items-center justify-center text-red-700 font-bold text-sm">
+                {contactInfo?.avatar_url ? (
+                  <img
+                    src={contactInfo.avatar_url}
+                    alt={headerName}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  (headerName[0] || "?").toUpperCase()
+                )}
+              </div>
 
-          <div className="min-w-0">
-            <h2 className="font-semibold text-gray-900 text-sm leading-tight truncate">
-              {headerName}
-            </h2>
-            {headerSub && (
-              <p className="text-[11px] text-gray-400 leading-tight truncate mt-0.5">
-                {headerSub}
-              </p>
-            )}
+              <div className="min-w-0">
+                <h2 className="font-semibold text-gray-800 text-sm truncate">
+                  {headerName}
+                </h2>
+                {headerSub && (
+                  <p className="text-[11px] text-gray-400 leading-tight truncate mt-0.5">
+                    {headerSub}
+                  </p>
+                )}
+              </div>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ── Scroll area ── */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="chat-scroll-area flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4"
-        style={{ paddingBottom: `${composerHeight + 16}px` }}
-      >
-        {mensajes.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-gray-400 text-sm">
-            No hay mensajes aún
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {items.map((item) => {
+        {/* ── Scroll area ── */}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="chat-scroll-area flex-1 min-h-0 overflow-y-auto px-3 py-3 md:px-4 md:py-4"
+          style={{
+            paddingBottom: `${composerHeight + 16}px`,
+          }}
+        >
+          {mensajes.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+              No hay mensajes aún
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {items.map((item) => {
 
-              // ── Separador de fecha ──
-              if (item.type === "separator") {
+                // ── Separador de fecha ──
+                if (item.type === "separator") {
+                  return (
+                    <div key={item.key} className="flex items-center gap-3 py-3">
+                      <div className="flex-1 h-px bg-gray-200" />
+                      <span className="text-[11px] text-gray-400 font-medium px-2.5 py-1 bg-white/80 rounded-full whitespace-nowrap capitalize shadow-sm border border-gray-100">
+                        {item.label}
+                      </span>
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                  );
+                }
+
+                // ── Burbuja de mensaje ──
+                const m = item.msg;
+                const soyYo = m.remitente_username === (user?.username ?? "");
+
                 return (
-                  <div key={item.key} className="flex items-center gap-3 py-3">
-                    <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-[11px] text-gray-400 font-medium px-2.5 py-1 bg-white/80 rounded-full whitespace-nowrap capitalize shadow-sm border border-gray-100">
-                      {item.label}
-                    </span>
-                    <div className="flex-1 h-px bg-gray-200" />
-                  </div>
-                );
-              }
-
-              // ── Burbuja de mensaje ──
-              const m = item.msg;
-              const soyYo = m.remitente_username === (user?.username ?? "");
-
-              return (
-                <div
-                  key={item.key}
-                  className={`flex ${soyYo ? "justify-end" : "justify-start"}`}
-                >
                   <div
-                    className={`chat-bubble max-w-[82%] md:max-w-[68%] rounded-2xl px-3 py-2.5 shadow-sm break-words ${
-                      soyYo
-                        ? "bg-[#dc2626] text-white rounded-br-md"
-                        : "bg-white text-gray-800 rounded-bl-md"
-                    }`}
+                    key={item.key}
+                    className={`flex ${soyYo ? "justify-end" : "justify-start"}`}
                   >
-                    {m.imagen_url && (
-                      <img
-                        src={m.imagen_url}
-                        alt="adjunto"
-                        className="rounded-xl mb-2 w-auto max-w-[180px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[300px] max-h-[320px] object-cover cursor-pointer"
-                        onClick={() => window.open(m.imagen_url!, "_blank")}
-                        onLoad={() => scrollToBottom(true)}
-                      />
-                    )}
+                    <div
+                      className={`chat-bubble max-w-[82%] md:max-w-[68%] rounded-2xl px-3 py-2.5 shadow-sm break-words ${
+                        soyYo
+                          ? "bg-[#dc2626] text-white rounded-br-md"
+                          : "bg-white text-gray-800 rounded-bl-md"
+                      }`}
+                    >
+                      {m.imagen_url && (
+                        <img
+                          src={m.imagen_url}
+                          alt="adjunto"
+                          className="rounded-xl mb-2 w-auto max-w-[180px] sm:max-w-[220px] md:max-w-[260px] lg:max-w-[300px] max-h-[320px] object-cover cursor-pointer"
+                          onClick={() => window.open(m.imagen_url!, "_blank")}
+                          onLoad={() => scrollToBottom(true)}
+                        />
+                      )}
 
-                    {m.audio_url && <AudioBubble src={m.audio_url} soyYo={soyYo} />}
+                      {m.audio_url && <AudioBubble src={m.audio_url} soyYo={soyYo} />}
 
-                    {m.contenido && (
-                      <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
-                        {m.contenido}
-                      </p>
-                    )}
+                      {m.contenido && (
+                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
+                          {m.contenido}
+                        </p>
+                      )}
 
-                    <div className="mt-1 flex items-center justify-end gap-1">
-                      <p
-                        className={`text-[10px] ${
-                          soyYo ? "text-red-100" : "text-gray-400"
-                        }`}
-                      >
-                        {new Date(m.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                      {soyYo && <MsgStatus leido={m.leido} />}
+                      <div className="mt-1 flex items-center justify-end gap-1">
+                        <p
+                          className={`text-[10px] ${
+                            soyYo ? "text-red-100" : "text-gray-400"
+                          }`}
+                        >
+                          {new Date(m.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                        {soyYo && <MsgStatus leido={m.leido} />}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Botón flotante "bajar al último" ── */}
-        {showScrollBtn && (
-          <div className="sticky bottom-2 flex justify-end pr-1 pointer-events-none">
-            <button
-              onClick={() => scrollToBottom(true)}
-              className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-red-600 transition-all relative"
-            >
-              <ChevronDown size={20} />
-              {newMsgCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
-                  {newMsgCount > 9 ? "9+" : newMsgCount}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Composer ── */}
-      <div
-        ref={composerRef}
-        className="chat-composer chat-keyboard-safe shrink-0 border-t border-gray-200 bg-white px-3 py-2 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
-      >
-        {/* Preview imagen adjunta */}
-        {archivo && (
-          <div className="mb-2 flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
-            <span className="truncate text-gray-700">{archivo.name}</span>
-            <button
-              onClick={quitarAdjunto}
-              className="ml-2 shrink-0 text-gray-500 hover:text-red-600"
-            >
-              <X size={16} />
-              Quitar
-            </button>
-          </div>
-        )}
-
-        {/* Grabando */}
-        {grabando && (
-          <div className="mb-2 flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-3 py-2">
-            <div className="flex items-center gap-2 text-sm text-red-700">
-              <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-              <span className="font-medium">Grabando audio</span>
-              <span className="tabular-nums">{formatDuration(recordSeconds)}</span>
+                );
+              })}
             </div>
+          )}
 
-            <button
-              type="button"
-              onClick={finalizarGrabacion}
-              className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
-            >
-              <Square size={14} />
-              Finalizar
-            </button>
-          </div>
-        )}
+          {/* Botón flotante scroll al fondo */}
+          {showScrollBtn && (
+            <div className="sticky bottom-2 flex justify-end pr-1 pointer-events-none">
+              <button
+                onClick={() => scrollToBottom(true)}
+                className="pointer-events-auto flex items-center justify-center w-10 h-10 rounded-full bg-white shadow-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-red-600 transition-all relative"
+              >
+                <ChevronDown size={20} />
+                {newMsgCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
+                    {newMsgCount > 9 ? "9+" : newMsgCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Preview audio listo */}
-        {!grabando && audioBlob && audioPreviewUrl && (
-          <div className="mb-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-700">
-                  Audio listo para enviar
-                </p>
-                <div className="mt-2">
-                  <AudioBubble src={audioPreviewUrl} soyYo={false} />
-                </div>
+        {/* ── Composer ── */}
+        <div
+          ref={composerRef}
+          className="chat-composer chat-keyboard-safe shrink-0 border-t border-gray-200 bg-white px-3 py-2 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]"
+        >
+          {/* Preview imagen adjunta */}
+          {archivo && (
+            <div className="mb-2 flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <span className="truncate text-gray-700">{archivo.name}</span>
+              <button
+                onClick={quitarAdjunto}
+                className="ml-2 shrink-0 text-gray-500 hover:text-red-600 flex items-center gap-1"
+              >
+                <X size={16} />
+                Quitar
+              </button>
+            </div>
+          )}
+
+          {/* Grabando */}
+          {grabando && (
+            <div className="mb-2 flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-red-700">
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="font-medium">Grabando audio</span>
+                <span className="tabular-nums">{formatDuration(recordSeconds)}</span>
               </div>
 
               <button
                 type="button"
-                onClick={limpiarAudioPreview}
-                className="shrink-0 rounded-full p-2 text-gray-500 hover:bg-white hover:text-red-600"
-                title="Descartar audio"
+                onClick={finalizarGrabacion}
+                className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
               >
-                <X size={16} />
+                <Square size={14} />
+                Finalizar
               </button>
             </div>
+          )}
 
-            <div className="mt-3 flex justify-end">
+          {/* Preview audio listo */}
+          {!grabando && audioBlob && audioPreviewUrl && (
+            <div className="mb-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-700">
+                    Audio listo para enviar
+                  </p>
+                  <div className="mt-2">
+                    <AudioBubble src={audioPreviewUrl} soyYo={false} />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={limpiarAudioPreview}
+                  className="shrink-0 rounded-full p-2 text-gray-500 hover:bg-white hover:text-red-600"
+                  title="Descartar audio"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={enviarMensaje}
+                  disabled={subiendo}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white ${
+                    subiendo
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-red-500 hover:bg-red-600"
+                  }`}
+                >
+                  <Send size={16} />
+                  {subiendo ? "Enviando..." : "Enviar audio"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Barra de input */}
+          <div className="flex items-center gap-2">
+            <label
+              className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
+              title="Adjuntar imagen"
+            >
+              <Paperclip size={18} />
+              <input
+                type="file"
+                accept="image/*,.png,.jpg,.jpeg,.webp,.heic"
+                className="hidden"
+                onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+              />
+            </label>
+
+            <label
+              className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
+              title="Sacar foto"
+            >
+              <Camera size={18} />
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+              />
+            </label>
+
+            {!mostrarBotonEnviar && !grabando && !audioBlob && (
               <button
-                type="button"
-                onClick={enviarMensaje}
+                onClick={toggleGrabacion}
+                className="p-2 rounded-full shrink-0 text-gray-500 hover:text-red-500"
+                title="Grabar audio"
+              >
+                <Mic size={18} />
+              </button>
+            )}
+
+            <input
+              ref={inputRef}
+              type="text"
+              className="chat-input min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500"
+              placeholder={grabando ? "Grabando audio..." : "Escribí un mensaje..."}
+              value={nuevoMensaje}
+              disabled={grabando}
+              onChange={(e) => setNuevoMensaje(e.target.value)}
+              onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+              onKeyDown={(e) => e.key === "Enter" && !subiendo && enviarMensaje()}
+            />
+
+            {mostrarBotonEnviar && !grabando && (
+              <button
                 disabled={subiendo}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-white ${
+                onClick={enviarMensaje}
+                className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-white ${
                   subiendo
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-red-500 hover:bg-red-600"
                 }`}
               >
-                <Send size={16} />
-                {subiendo ? "Enviando..." : "Enviar audio"}
+                {subiendo ? "Enviando..." : "Enviar"}
               </button>
-            </div>
+            )}
           </div>
-        )}
-
-        {/* Barra de input */}
-        <div className="flex items-center gap-2">
-          <label
-            className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
-            title="Adjuntar imagen"
-          >
-            <Paperclip size={18} />
-            <input
-              type="file"
-              accept="image/*,.png,.jpg,.jpeg,.webp,.heic"
-              className="hidden"
-              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
-            />
-          </label>
-
-          <label
-            className="p-2 text-gray-500 hover:text-red-500 cursor-pointer shrink-0"
-            title="Sacar foto"
-          >
-            <Camera size={18} />
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
-            />
-          </label>
-
-          {!mostrarBotonEnviar && !grabando && !audioBlob && (
-            <button
-              onClick={toggleGrabacion}
-              className="p-2 rounded-full shrink-0 text-gray-500 hover:text-red-500"
-              title="Grabar audio"
-            >
-              <Mic size={18} />
-            </button>
-          )}
-
-          <input
-            ref={inputRef}
-            type="text"
-            className="chat-input min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-red-500"
-            placeholder={grabando ? "Grabando audio..." : "Escribí un mensaje..."}
-            value={nuevoMensaje}
-            disabled={grabando}
-            onChange={(e) => setNuevoMensaje(e.target.value)}
-            onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-            onKeyDown={(e) => e.key === "Enter" && !subiendo && enviarMensaje()}
-          />
-
-          {mostrarBotonEnviar && !grabando && (
-            <button
-              disabled={subiendo}
-              onClick={enviarMensaje}
-              className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-white ${
-                subiendo
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-red-500 hover:bg-red-600"
-              }`}
-            >
-              {subiendo ? "Enviando..." : "Enviar"}
-            </button>
-          )}
         </div>
       </div>
-    </div>
+
+      {/* ── Drawer info contacto ── */}
+      <ContactDrawer
+        info={contactInfo}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      />
+    </>
   );
 };
 
