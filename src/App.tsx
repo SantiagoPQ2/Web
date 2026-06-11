@@ -42,6 +42,7 @@ import CuentaCorrienteJefe from "./pages/CuentaCorrienteJefe";
 import AltaClientePage from "./pages/AltaClientePage";
 import AltaClienteListado from "./pages/AltaClienteListado";
 import Medidas from "./pages/Medidas";
+import ResetPassword from "./pages/ResetPassword";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
@@ -186,7 +187,11 @@ function ProtectedApp() {
     return () => { isMounted = false; };
   }, [user]);
 
-  if (!user) return <Login />;
+  if (!user) {
+    // Permitir acceso a reset-password sin login
+    if (location.pathname === "/reset-password") return <ResetPassword />;
+    return <Login />;
+  }
 
   const role = user.role as AppRole;
   const defaultPath = getDefaultPathForRole(role);
