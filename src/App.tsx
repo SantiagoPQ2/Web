@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   useLocation,
+  useNavigate,
   Navigate,
 } from "react-router-dom";
 
@@ -118,6 +119,7 @@ const isProfileComplete = (profile: {
 // ── Banner de perfil incompleto ───────────────────────────────────────────────
 const SettingsBlocker: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Permitir navegar libremente dentro de /settings
   if (location.pathname === "/settings") return null;
@@ -139,12 +141,12 @@ const SettingsBlocker: React.FC = () => {
           Una vez que completes tus datos, la app vuelve a la normalidad
           automáticamente.
         </p>
-        <a
-          href="/settings"
+        <button
+          onClick={() => navigate("/settings")}
           className="block w-full bg-[#8B0000] hover:bg-[#6b0000] text-white py-3 rounded-xl text-sm font-semibold transition"
         >
           Ir a Configuración
-        </a>
+        </button>
       </div>
     </div>
   );
