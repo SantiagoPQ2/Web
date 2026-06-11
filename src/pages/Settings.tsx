@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Eye, EyeOff, Save, LogOut, Moon, Sun, CheckCircle2, AlertCircle, Loader2, Camera, X, ZoomIn } from "lucide-react";
+import {
+  Eye, EyeOff, Save, LogOut, Moon, Sun,
+  CheckCircle2, AlertCircle, Loader2, Camera, X, ZoomIn,
+} from "lucide-react";
 import { supabase } from "../config/supabase";
 import { useAuth } from "../context/AuthContext";
 
 type Toast = { msg: string; ok: boolean } | null;
 
 // ── ImageCropper ──────────────────────────────────────────────────────────────
-// Cropper circular puro con Canvas, sin dependencias externas.
-// El usuario arrastra para mover la imagen y usa el slider para hacer zoom.
+// Cropper circular con Canvas nativo. Sin dependencias externas.
+// Soporta: elegir archivo O sacar foto con cámara en tiempo real.
 
 interface CropperProps {
   imageSrc: string;
@@ -15,10 +18,13 @@ interface CropperProps {
   onCancel: () => void;
 }
 
+const CANVAS_SIZE = 300;
+const CIRCLE_R = CANVAS_SIZE / 2 - 6;
+const OUTPUT_SIZE = 512;
+
 const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -27,144 +33,95 @@ const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel })
   const [imgLoaded, setImgLoaded] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // Tamaño del canvas de preview (cuadrado)
-  const CANVAS_SIZE = 320;
-  const CIRCLE_R = CANVAS_SIZE / 2 - 4;
-
-  // Cargar imagen
+  // Cargar imagen y centrar
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       imgRef.current = img;
-      // Centrar imagen inicialmente con zoom que la llena el círculo
       const minDim = Math.min(img.naturalWidth, img.naturalHeight);
-      const initialZoom = (CIRCLE_R * 2) / minDim;
-      setZoom(initialZoom);
+      setZoom((CIRCLE_R * 2) / minDim);
       setOffset({ x: 0, y: 0 });
       setImgLoaded(true);
     };
     img.src = imageSrc;
   }, [imageSrc]);
 
-  // Redibujar canvas
+  // Redibujar
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const img = imgRef.current;
     if (!canvas || !img || !imgLoaded) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const cx = CANVAS_SIZE / 2;
     const cy = CANVAS_SIZE / 2;
 
-    // Fondo
     ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
     ctx.fillStyle = "#111";
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    // Imagen transformada
     const scaledW = img.naturalWidth * zoom;
     const scaledH = img.naturalHeight * zoom;
-    const drawX = cx - scaledW / 2 + offset.x;
-    const drawY = cy - scaledH / 2 + offset.y;
+    ctx.drawImage(img, cx - scaledW / 2 + offset.x, cy - scaledH / 2 + offset.y, scaledW, scaledH);
 
-    ctx.save();
-    ctx.drawImage(img, drawX, drawY, scaledW, scaledH);
-    ctx.restore();
-
-    // Overlay oscuro fuera del círculo
-    ctx.save();
+    // Overlay fuera del círculo
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.beginPath();
     ctx.rect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    ctx.arc(cx, cy, CIRCLE_R, 0, Math.PI * 2, true); // cut-out
+    ctx.arc(cx, cy, CIRCLE_R, 0, Math.PI * 2, true);
     ctx.fill("evenodd");
-    ctx.restore();
 
-    // Borde del círculo
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    // Borde
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx, cy, CIRCLE_R, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.restore();
   }, [zoom, offset, imgLoaded]);
 
   useEffect(() => { draw(); }, [draw]);
 
-  // ── Drag mouse ──
-  const onMouseDown = (e: React.MouseEvent) => {
-    setDragging(true);
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
-    setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-  };
+  // Drag mouse
+  const onMouseDown = (e: React.MouseEvent) => { setDragging(true); setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y }); };
+  const onMouseMove = (e: React.MouseEvent) => { if (dragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); };
   const onMouseUp = () => setDragging(false);
 
-  // ── Drag touch ──
-  const onTouchStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    setDragging(true);
-    setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y });
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!dragging) return;
-    const t = e.touches[0];
-    setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y });
-  };
+  // Drag touch
+  const onTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; setDragging(true); setDragStart({ x: t.clientX - offset.x, y: t.clientY - offset.y }); };
+  const onTouchMove = (e: React.TouchEvent) => { if (dragging) { const t = e.touches[0]; setOffset({ x: t.clientX - dragStart.x, y: t.clientY - dragStart.y }); } };
   const onTouchEnd = () => setDragging(false);
 
-  // ── Confirmar → exportar círculo recortado ──
+  // Confirmar → exportar JPEG circular
   const handleConfirm = async () => {
     const img = imgRef.current;
     if (!img) return;
     setProcessing(true);
-
     try {
-      const OUTPUT_SIZE = 512; // resolución final del avatar
-      const offscreen = document.createElement("canvas");
-      offscreen.width = OUTPUT_SIZE;
-      offscreen.height = OUTPUT_SIZE;
-      const ctx = offscreen.getContext("2d");
+      const off = document.createElement("canvas");
+      off.width = OUTPUT_SIZE;
+      off.height = OUTPUT_SIZE;
+      const ctx = off.getContext("2d");
       if (!ctx) return;
 
       const scale = OUTPUT_SIZE / CANVAS_SIZE;
       const cx = CANVAS_SIZE / 2;
       const cy = CANVAS_SIZE / 2;
 
-      // Clip circular
-      ctx.save();
       ctx.beginPath();
       ctx.arc(OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, 0, Math.PI * 2);
       ctx.clip();
 
-      const scaledW = img.naturalWidth * zoom;
-      const scaledH = img.naturalHeight * zoom;
-      const drawX = cx - scaledW / 2 + offset.x;
-      const drawY = cy - scaledH / 2 + offset.y;
-
       ctx.drawImage(
         img,
-        drawX * scale,
-        drawY * scale,
-        scaledW * scale,
-        scaledH * scale
+        (cx - (img.naturalWidth * zoom) / 2 + offset.x) * scale,
+        (cy - (img.naturalHeight * zoom) / 2 + offset.y) * scale,
+        img.naturalWidth * zoom * scale,
+        img.naturalHeight * zoom * scale
       );
-      ctx.restore();
 
-      offscreen.toBlob(
-        (blob) => {
-          if (blob) onConfirm(blob);
-          setProcessing(false);
-        },
-        "image/jpeg",
-        0.92
-      );
+      off.toBlob((blob) => { if (blob) onConfirm(blob); setProcessing(false); }, "image/jpeg", 0.92);
     } catch (err) {
       console.error("Error exportando crop:", err);
       setProcessing(false);
@@ -173,21 +130,14 @@ const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel })
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-800 text-base">Ajustar foto</h3>
-          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
-            <X size={20} />
-          </button>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h3 className="font-bold text-gray-800 dark:text-gray-100 text-base">Ajustar foto</h3>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         {/* Canvas */}
-        <div
-          ref={containerRef}
-          className="flex items-center justify-center bg-gray-900 py-4 select-none"
-          style={{ cursor: dragging ? "grabbing" : "grab" }}
-        >
+        <div className="flex items-center justify-center bg-gray-900 py-4 select-none" style={{ cursor: dragging ? "grabbing" : "grab" }}>
           <canvas
             ref={canvasRef}
             width={CANVAS_SIZE}
@@ -205,31 +155,18 @@ const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel })
         </div>
 
         {/* Zoom slider */}
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
+        <div className="px-5 py-3 bg-gray-50 dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 shrink-0">−</span>
-            <input
-              type="range"
-              min={0.1}
-              max={4}
-              step={0.01}
-              value={zoom}
-              onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="flex-1 accent-[#8B0000]"
-            />
-            <span className="text-xs text-gray-400 shrink-0">+</span>
+            <span className="text-xs text-gray-400 shrink-0 w-3">−</span>
+            <input type="range" min={0.1} max={4} step={0.01} value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))} className="flex-1 accent-[#8B0000]" />
+            <span className="text-xs text-gray-400 shrink-0 w-3">+</span>
           </div>
-          <p className="text-[11px] text-center text-gray-400 mt-1">
-            Arrastrá para mover · Deslizá para hacer zoom
-          </p>
+          <p className="text-[11px] text-center text-gray-400 mt-1">Arrastrá para mover · Deslizá para hacer zoom</p>
         </div>
 
         {/* Botones */}
         <div className="flex gap-3 px-5 py-4">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
-          >
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
             Cancelar
           </button>
           <button
@@ -246,6 +183,136 @@ const ImageCropper: React.FC<CropperProps> = ({ imageSrc, onConfirm, onCancel })
   );
 };
 
+// ── CameraCapture ─────────────────────────────────────────────────────────────
+// Modal para sacar foto en tiempo real con la cámara del dispositivo.
+
+interface CameraCaptureProps {
+  onCapture: (dataUrl: string) => void;
+  onCancel: () => void;
+}
+
+const CameraCapture: React.FC<CameraCaptureProps> = ({ onCapture, onCancel }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+
+  const startCamera = useCallback(async (mode: "user" | "environment") => {
+    // Detener stream anterior si existe
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setReady(false);
+    setError(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => setReady(true);
+      }
+    } catch {
+      setError("No se pudo acceder a la cámara. Verificá los permisos.");
+    }
+  }, []);
+
+  useEffect(() => {
+    startCamera(facingMode);
+    return () => { streamRef.current?.getTracks().forEach((t) => t.stop()); };
+  }, [facingMode]);
+
+  const handleCapture = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    onCapture(canvas.toDataURL("image/jpeg", 0.95));
+  };
+
+  const handleClose = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    onCancel();
+  };
+
+  const toggleCamera = () => {
+    setFacingMode((prev) => (prev === "user" ? "environment" : "user"));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/95">
+      <div className="w-full sm:max-w-sm sm:rounded-2xl overflow-hidden bg-black flex flex-col">
+        {/* Video */}
+        <div className="relative bg-black flex items-center justify-center" style={{ minHeight: 320 }}>
+          {!ready && !error && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 size={32} className="animate-spin text-white/60" />
+            </div>
+          )}
+          {error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <span className="text-4xl">📷</span>
+              <p className="text-white/80 text-sm">{error}</p>
+            </div>
+          )}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full object-cover"
+            style={{ maxHeight: 480, opacity: ready ? 1 : 0 }}
+          />
+
+          {/* Overlay circular guía */}
+          {ready && (
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background: "radial-gradient(circle 120px at 50% 50%, transparent 120px, rgba(0,0,0,0.5) 121px)",
+              }}
+            />
+          )}
+
+          {/* Botón cerrar */}
+          <button
+            onClick={handleClose}
+            className="absolute top-4 left-4 h-9 w-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70"
+          >
+            <X size={18} />
+          </button>
+
+          {/* Botón girar cámara */}
+          <button
+            onClick={toggleCamera}
+            className="absolute top-4 right-4 h-9 w-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 text-lg"
+            title="Girar cámara"
+          >
+            🔄
+          </button>
+        </div>
+
+        {/* Botón disparador */}
+        <div className="flex items-center justify-center py-6 bg-black">
+          <button
+            onClick={handleCapture}
+            disabled={!ready}
+            className="h-16 w-16 rounded-full border-4 border-white bg-white/20 hover:bg-white/30 disabled:opacity-40 transition flex items-center justify-center"
+          >
+            <div className="h-12 w-12 rounded-full bg-white" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export default function Settings() {
@@ -255,14 +322,15 @@ export default function Settings() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
 
+  // Foto
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-
-  // Cropper
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Contraseña
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -274,7 +342,7 @@ export default function Settings() {
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3500);
   };
 
   // ── Cargar perfil ──────────────────────────────────────────────────────────
@@ -322,21 +390,20 @@ export default function Settings() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-
-    // Sin límite de tamaño — se acepta cualquier imagen
+    // Sin límite de tamaño
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (ev.target?.result) {
-        setCropSrc(ev.target.result as string);
-      }
-    };
+    reader.onload = (ev) => { if (ev.target?.result) setCropSrc(ev.target.result as string); };
     reader.readAsDataURL(file);
-
-    // Reset input para permitir subir la misma foto de nuevo
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ── Confirmar crop → subir a Supabase ─────────────────────────────────────
+  // ── Captura de cámara → abrir cropper ─────────────────────────────────────
+  const handleCameraCapture = (dataUrl: string) => {
+    setShowCamera(false);
+    setCropSrc(dataUrl);
+  };
+
+  // ── Confirmar crop → subir ─────────────────────────────────────────────────
   const handleCropConfirm = async (blob: Blob) => {
     if (!user) return;
     setCropSrc(null);
@@ -347,24 +414,14 @@ export default function Settings() {
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(filePath, blob, {
-          cacheControl: "3600",
-          upsert: true,
-          contentType: "image/jpeg",
-        });
+        .upload(filePath, blob, { cacheControl: "3600", upsert: true, contentType: "image/jpeg" });
 
       if (uploadError) throw uploadError;
 
-      const { data: pub } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(filePath);
-
+      const { data: pub } = supabase.storage.from("avatars").getPublicUrl(filePath);
       const urlFinal = `${pub.publicUrl}?t=${Date.now()}`;
 
-      await supabase
-        .from("usuarios_app")
-        .update({ avatar_url: urlFinal })
-        .eq("id", user.id);
+      await supabase.from("usuarios_app").update({ avatar_url: urlFinal }).eq("id", user.id);
 
       setAvatarUrl(urlFinal);
       updateAvatar(urlFinal);
@@ -398,12 +455,7 @@ export default function Settings() {
     setSavingProfile(true);
     const { error } = await supabase
       .from("usuarios_app")
-      .update({
-        name: profile.name,
-        age: profile.age ? parseInt(profile.age) : null,
-        phone: profile.phone,
-        mail: profile.mail,
-      })
+      .update({ name: profile.name, age: profile.age ? parseInt(profile.age) : null, phone: profile.phone, mail: profile.mail })
       .eq("id", user.id);
     if (error) showToast("Error al guardar perfil", false);
     else showToast("Perfil actualizado");
@@ -418,16 +470,9 @@ export default function Settings() {
     if (newPassword !== confirmPassword) { showToast("Las contraseñas no coinciden", false); return; }
 
     setSavingPwd(true);
-    const { error } = await supabase
-      .from("usuarios_app")
-      .update({ password: newPassword })
-      .eq("id", user.id);
+    const { error } = await supabase.from("usuarios_app").update({ password: newPassword }).eq("id", user.id);
     if (error) showToast("Error al cambiar contraseña", false);
-    else {
-      showToast("Contraseña actualizada");
-      setNewPassword("");
-      setConfirmPassword("");
-    }
+    else { showToast("Contraseña actualizada"); setNewPassword(""); setConfirmPassword(""); }
     setSavingPwd(false);
   };
 
@@ -456,7 +501,7 @@ export default function Settings() {
         </h2>
 
         <div className="flex items-center gap-5">
-          {/* Avatar grande — click para ampliar si tiene foto */}
+          {/* Avatar clickeable */}
           <div className="relative shrink-0 group">
             <button
               onClick={() => avatarUrl && setLightboxOpen(true)}
@@ -471,46 +516,47 @@ export default function Settings() {
                 </div>
               )}
             </button>
-
             {avatarUrl && (
               <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/20 transition pointer-events-none flex items-center justify-center">
                 <ZoomIn size={22} className="text-white opacity-0 group-hover:opacity-100 transition" />
               </div>
             )}
-
-            {/* Botón cámara */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
               className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-[#8B0000] text-white flex items-center justify-center shadow-md hover:bg-[#6b0000] transition disabled:opacity-60"
             >
-              {uploadingAvatar
-                ? <Loader2 size={14} className="animate-spin" />
-                : <Camera size={14} />
-              }
+              {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
             </button>
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">
-              {user?.name || user?.username}
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate">
-              @{user?.username} · {user?.role}
-            </p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100 truncate">{user?.name || user?.username}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 truncate">@{user?.username} · {user?.role}</p>
+
             <div className="flex flex-col gap-1.5">
+              {/* Elegir de galería */}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingAvatar}
                 className="text-sm font-medium text-[#8B0000] hover:text-[#6b0000] disabled:opacity-50 text-left transition"
               >
-                {uploadingAvatar ? "Subiendo..." : avatarUrl ? "Cambiar foto" : "Subir foto"}
+                {uploadingAvatar ? "Subiendo..." : avatarUrl ? "Cambiar foto" : "Elegir de galería"}
               </button>
-              {avatarUrl && !uploadingAvatar && (
+
+              {/* Sacar foto */}
+              {!uploadingAvatar && (
                 <button
-                  onClick={handleRemoveAvatar}
-                  className="text-sm font-medium text-gray-400 hover:text-red-500 text-left transition"
+                  onClick={() => setShowCamera(true)}
+                  className="text-sm font-medium text-[#8B0000] hover:text-[#6b0000] text-left transition"
                 >
+                  Sacar foto ahora
+                </button>
+              )}
+
+              {/* Eliminar */}
+              {avatarUrl && !uploadingAvatar && (
+                <button onClick={handleRemoveAvatar} className="text-sm font-medium text-gray-400 hover:text-red-500 text-left transition">
                   Eliminar foto
                 </button>
               )}
@@ -518,16 +564,17 @@ export default function Settings() {
           </div>
         </div>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
       </div>
 
-      {/* ── Cropper modal ───────────────────────────────────────────────────── */}
+      {/* ── Modales ─────────────────────────────────────────────────────────── */}
+      {showCamera && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onCancel={() => setShowCamera(false)}
+        />
+      )}
+
       {cropSrc && (
         <ImageCropper
           imageSrc={cropSrc}
@@ -536,24 +583,12 @@ export default function Settings() {
         />
       )}
 
-      {/* ── Lightbox ────────────────────────────────────────────────────────── */}
       {lightboxOpen && avatarUrl && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/80 hover:text-white"
-            onClick={() => setLightboxOpen(false)}
-          >
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 p-4" onClick={() => setLightboxOpen(false)}>
+          <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={() => setLightboxOpen(false)}>
             <X size={30} />
           </button>
-          <img
-            src={avatarUrl}
-            alt="Foto de perfil"
-            className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <img src={avatarUrl} alt="Foto de perfil" className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
@@ -561,10 +596,7 @@ export default function Settings() {
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 rounded-full bg-[#8B0000] text-white flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden">
-            {avatarUrl
-              ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-              : initial
-            }
+            {avatarUrl ? <img src={avatarUrl} alt="" className="w-full h-full object-cover" /> : initial}
           </div>
           <div>
             <p className="font-semibold text-gray-800 dark:text-gray-100">{user?.name || user?.username}</p>
@@ -576,10 +608,10 @@ export default function Settings() {
 
         <div className="space-y-3">
           {[
-            { label: "Nombre", field: "name", placeholder: "Tu nombre", type: "text" },
+            { label: "Nombre *", field: "name", placeholder: "Tu nombre", type: "text" },
             { label: "Edad", field: "age", placeholder: "Tu edad", type: "number" },
-            { label: "Teléfono", field: "phone", placeholder: "+54 9 11...", type: "tel" },
-            { label: "Correo electrónico", field: "mail", placeholder: "tu@correo.com", type: "email" },
+            { label: "Teléfono *", field: "phone", placeholder: "+54 9 11...", type: "tel" },
+            { label: "Correo electrónico *", field: "mail", placeholder: "tu@correo.com", type: "email" },
           ].map(({ label, field, placeholder, type }) => (
             <div key={field}>
               <label className={labelClass}>{label}</label>
@@ -593,6 +625,8 @@ export default function Settings() {
             </div>
           ))}
         </div>
+
+        <p className="text-[11px] text-gray-400 mt-3">* Campos obligatorios</p>
 
         <button
           onClick={saveProfile}
@@ -612,13 +646,7 @@ export default function Settings() {
           <div>
             <label className={labelClass}>Nueva contraseña</label>
             <div className="relative">
-              <input
-                type={showNew ? "text" : "password"}
-                placeholder="Mínimo 6 caracteres"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className={`${inputClass} pr-10`}
-              />
+              <input type={showNew ? "text" : "password"} placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`${inputClass} pr-10`} />
               <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition" tabIndex={-1}>
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -634,11 +662,9 @@ export default function Settings() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={`w-full px-3 py-2.5 pr-10 text-sm border rounded-xl bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 transition ${
-                  confirmPassword && confirmPassword !== newPassword
-                    ? "border-red-300 focus:ring-red-300/30"
-                    : confirmPassword && confirmPassword === newPassword
-                    ? "border-emerald-300 focus:ring-emerald-300/30"
-                    : "border-gray-200 dark:border-gray-600 focus:ring-[#8B0000]/30 focus:border-[#8B0000]"
+                  confirmPassword && confirmPassword !== newPassword ? "border-red-300 focus:ring-red-300/30"
+                  : confirmPassword && confirmPassword === newPassword ? "border-emerald-300 focus:ring-emerald-300/30"
+                  : "border-gray-200 dark:border-gray-600 focus:ring-[#8B0000]/30 focus:border-[#8B0000]"
                 }`}
               />
               <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition" tabIndex={-1}>
