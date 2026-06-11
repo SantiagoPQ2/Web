@@ -4,7 +4,6 @@ import {
   Routes,
   Route,
   useLocation,
-  useNavigate,
   Navigate,
 } from "react-router-dom";
 
@@ -116,42 +115,6 @@ const isProfileComplete = (profile: {
   );
 };
 
-// ── Banner de perfil incompleto ───────────────────────────────────────────────
-const SettingsBlocker: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  // Permitir navegar libremente dentro de /settings
-  if (location.pathname === "/settings") return null;
-
-  return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
-        <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
-          <span className="text-3xl">👤</span>
-        </div>
-        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
-          Completá tu perfil
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-          Para acceder a la aplicación necesitás completar tu nombre, teléfono y
-          correo electrónico en la configuración.
-        </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Una vez que completes tus datos, la app vuelve a la normalidad
-          automáticamente.
-        </p>
-        <button
-          onClick={() => navigate("/settings")}
-          className="block w-full bg-[#8B0000] hover:bg-[#6b0000] text-white py-3 rounded-xl text-sm font-semibold transition"
-        >
-          Ir a Configuración
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // ── Hook: chequea si el perfil está completo ──────────────────────────────────
 function useProfileCheck() {
   const { user } = useAuth();
@@ -239,27 +202,46 @@ function ProtectedApp() {
 
   const showChatBot = location.pathname.startsWith("/b2b");
 
+  // Si el perfil está incompleto (y terminó de cargar), redirigir a /settings
+  const mustCompleteProfile = profileComplete === false;
+
   const appLayout = (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 transition-colors duration-300 overflow-hidden">
       <Navigation />
       <main className="flex-1 overflow-hidden">
         <Routes>
-          {allowedRoutes.map((route) => {
-            const element = PAGE_COMPONENTS[route.path];
-            if (!element) return null;
-            return (
-              <Route key={route.path} path={route.path} element={element} />
-            );
-          })}
-          <Route path="*" element={<Navigate to={defaultPath} replace />} />
+          {/* Siempre permitir /settings */}
+          <Route
+            path="/settings"
+            element={PAGE_COMPONENTS["/settings"]}
+          />
+
+          {mustCompleteProfile ? (
+            /* Perfil incompleto: toda otra ruta → /settings con aviso */
+            <Route
+              path="*"
+              element={<Navigate to="/settings" replace state={{ profileIncomplete: true }} />}
+            />
+          ) : (
+            /* Perfil completo: rutas normales */
+            <>
+              {allowedRoutes
+                .filter((r) => r.path !== "/settings")
+                .map((route) => {
+                  const element = PAGE_COMPONENTS[route.path];
+                  if (!element) return null;
+                  return (
+                    <Route key={route.path} path={route.path} element={element} />
+                  );
+                })}
+              <Route path="*" element={<Navigate to={defaultPath} replace />} />
+            </>
+          )}
         </Routes>
       </main>
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
       {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
-
-      {/* Bloqueador si el perfil está incompleto (no admin, no null=cargando) */}
-      {profileComplete === false && <SettingsBlocker />}
     </div>
   );
 
