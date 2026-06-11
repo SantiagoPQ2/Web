@@ -19,13 +19,11 @@ import NotasCredito from "./pages/NotasCredito";
 import GpsLogger from "./pages/GpsLogger";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
-import ResetPassword from "./pages/ResetPassword";
 import Informacion from "./pages/Informacion";
 import SupervisorPage from "./pages/SupervisorPage";
 import ChatPage from "./pages/ChatPage";
 import AdminPanel from "./pages/AdminPanel";
 import AdminEquipoPage from "./pages/AdminEquipoPage";
-import AdminUsuarios from "./pages/AdminUsuarios";
 import VendedoresResumen from "./pages/VendedoresResumen";
 import PlanillaCarga from "./pages/PlanillaCarga";
 import Mapa from "./pages/Mapa";
@@ -47,7 +45,6 @@ import Medidas from "./pages/Medidas";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useVersionChecker } from "./hooks/useVersionChecker";
-import { useUserPermissions } from "./hooks/useUserPermissions";
 import UpdateBanner from "./components/UpdateBanner";
 import ChatBubble from "./components/ChatBubble";
 import ChatBot from "./components/ChatBot";
@@ -56,6 +53,7 @@ import { registerPushForUser } from "./utils/pushNotifications";
 import { supabase } from "./config/supabase";
 
 import {
+  getRoutesForRole,
   getDefaultPathForRole,
   type AppRole,
 } from "./config/routeConfig";
@@ -84,7 +82,6 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/chat": <ChatPage />,
   "/admin": <AdminPanel />,
   "/admin-equipo": <AdminEquipoPage />,
-  "/admin-usuarios": <AdminUsuarios />,
   "/vendedores-resumen": <VendedoresResumen />,
   "/planilla-carga": <PlanillaCarga />,
   "/mapa": <Mapa />,
@@ -105,59 +102,113 @@ const PAGE_COMPONENTS: Record<string, React.ReactElement> = {
   "/medidas": <Medidas />,
 };
 
-// ─── App protegida (requiere login) ──────────────────────────────────────────
+// ── Campos requeridos para considerar el perfil completo ──────────────────────
+const isProfileComplete = (profile: {
+  name?: string | null;
+  phone?: string | null;
+  mail?: string | null;
+}): boolean => {
+  return !!(
+    profile.name?.trim() &&
+    profile.phone?.trim() &&
+    profile.mail?.trim()
+  );
+};
 
-function ProtectedApp() {
-  const { user, logout } = useAuth();
-  const hasUpdate = useVersionChecker(60000);
+// ── Banner de perfil incompleto ───────────────────────────────────────────────
+const SettingsBlocker: React.FC = () => {
   const location = useLocation();
 
+  // Permitir navegar libremente dentro de /settings
+  if (location.pathname === "/settings") return null;
+
+  return (
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
+          <span className="text-3xl">👤</span>
+        </div>
+        <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
+          Completá tu perfil
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+          Para acceder a la aplicación necesitás completar tu nombre, teléfono y
+          correo electrónico en la configuración.
+        </p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Una vez que completes tus datos, la app vuelve a la normalidad
+          automáticamente.
+        </p>
+        <a
+          href="/settings"
+          className="block w-full bg-[#8B0000] hover:bg-[#6b0000] text-white py-3 rounded-xl text-sm font-semibold transition"
+        >
+          Ir a Configuración
+        </a>
+      </div>
+    </div>
+  );
+};
+
+// ── Hook: chequea si el perfil está completo ──────────────────────────────────
+function useProfileCheck() {
+  const { user } = useAuth();
+  const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) { setProfileComplete(null); return; }
+
+    // Admin siempre pasa
+    if (user.role === "admin") { setProfileComplete(true); return; }
+
+    let mounted = true;
+
+    supabase
+      .from("usuarios_app")
+      .select("name, phone, mail")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!mounted) return;
+        if (!data) { setProfileComplete(false); return; }
+        setProfileComplete(isProfileComplete(data));
+      });
+
+    return () => { mounted = false; };
+  }, [user]);
+
+  return profileComplete;
+}
+
+// ── App principal ─────────────────────────────────────────────────────────────
+function ProtectedApp() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const { hasUpdate } = useVersionChecker();
   const [openChat, setOpenChat] = useState(false);
   const [ffvv, setFfvv] = useState<string | null>(null);
   const [loadingTrainingConfig, setLoadingTrainingConfig] = useState(true);
 
-  // Permisos: rutas base del rol + extras/revocaciones de Supabase
-  const { allRoutes: allowedRoutes, loading: loadingPermisos } = useUserPermissions(
-    user?.id,
-    user?.role as AppRole | undefined
-  );
+  const profileComplete = useProfileCheck();
 
-  // Registrar push notifications
   useEffect(() => {
-    if (!user?.username) return;
-    registerPushForUser(user.username).catch((err) => {
-      console.error("No se pudo registrar push:", err);
-    });
-  }, [user?.username]);
+    if (!user) return;
+    registerPushForUser(user.username).catch(() => {});
+  }, [user]);
 
-  // Cargar FFVV para vendedores (para el gate de capacitación)
   useEffect(() => {
+    if (!user) return;
     let isMounted = true;
 
     async function loadTrainingConfig() {
-      if (!user || user.role !== "vendedor") {
-        if (isMounted) {
-          setFfvv(null);
-          setLoadingTrainingConfig(false);
-        }
-        return;
-      }
-
       try {
-        setLoadingTrainingConfig(true);
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from("usuarios_app")
-          .select("FFVV, active")
-          .eq("id", user.id)
+          .select("ffvv")
+          .eq("id", user!.id)
           .maybeSingle();
 
-        if (error) {
-          console.error("Error cargando config del usuario:", error);
-          if (isMounted) setFfvv(null);
-          return;
-        }
-
-        if (isMounted) setFfvv(data?.FFVV ?? null);
+        if (isMounted) setFfvv(data?.ffvv ?? null);
       } catch (err) {
         console.error("Error inesperado cargando FFVV:", err);
         if (isMounted) setFfvv(null);
@@ -168,21 +219,18 @@ function ProtectedApp() {
 
     loadTrainingConfig();
     return () => { isMounted = false; };
-  }, [user, logout]);
+  }, [user]);
 
-  // Sin login → mostrar Login
   if (!user) return <Login />;
 
   const role = user.role as AppRole;
   const defaultPath = getDefaultPathForRole(role);
+  const allowedRoutes = getRoutesForRole(role);
 
-  // Loading combinado
-  const isLoading = loadingPermisos || (role === "vendedor" && loadingTrainingConfig);
-
-  if (isLoading) {
+  if (role === "vendedor" && loadingTrainingConfig) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100">
-        Cargando...
+        Cargando capacitación...
       </div>
     );
   }
@@ -207,6 +255,9 @@ function ProtectedApp() {
       {hasUpdate && <UpdateBanner onReload={() => window.location.reload()} />}
       {showChatBot && !openChat && <ChatBubble onOpen={() => setOpenChat(true)} />}
       {showChatBot && openChat && <ChatBot onClose={() => setOpenChat(false)} />}
+
+      {/* Bloqueador si el perfil está incompleto (no admin, no null=cargando) */}
+      {profileComplete === false && <SettingsBlocker />}
     </div>
   );
 
@@ -242,18 +293,11 @@ function ProtectedApp() {
   return appLayout;
 }
 
-// ─── App root — rutas públicas fuera del guard de login ──────────────────────
-
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          {/* Ruta pública: accesible sin login */}
-          <Route path="/reset-password" element={<ResetPassword />} />
-          {/* Todo lo demás pasa por ProtectedApp */}
-          <Route path="*" element={<ProtectedApp />} />
-        </Routes>
+        <ProtectedApp />
       </Router>
     </AuthProvider>
   );
